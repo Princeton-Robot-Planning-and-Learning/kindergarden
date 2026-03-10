@@ -23,7 +23,7 @@ MIMICLABS_SCENES_DIR = ASSETS_DIR / "mimiclabs_scenes"
 
 # Google Drive URL for MimicLabs assets
 ASSETS_URL = (
-    "https://drive.google.com/file/d/1YPJWR8rtPR0NLp9W2G-qYDUH6F7uXU2l/view?usp=sharing"
+    "https://drive.google.com/file/d/1k0dsJXFrqzlR1nPy8zo0vu9BnnezfkAm/view?usp=sharing"
 )
 
 

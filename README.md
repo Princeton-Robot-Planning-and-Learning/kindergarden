@@ -124,17 +124,36 @@ KinDER does not provide any models for TAMP. Users are welcome to engineer their
 2. Tested on MacOS Monterey and Ubuntu 22.04 (but we aim to support most platforms)
 
 ### :wrench: Installation
-We strongly recommend [uv](https://docs.astral.sh/uv/getting-started/installation/). The steps below assume that you have `uv` installed. If you do not, just remove `uv` from the commands and the installation should still work.
 
-Then, choose one of the following based on you need:
-- `uv pip install -r optional_prpl_requirements/core.txt && uv pip install -e .` - Installs only core dependencies (matplotlib, numpy, relational_structs, prpl_utils)
-- `uv pip install -r prpl_requirements.txt && uv pip install -e .uv pip install -e ".[all]"` - Installs everything (excluding develop)
-- `uv pip install -r optional_prpl_requirements/kinematic2d.txt && uv pip install -e ".[kinematic2d]"` - Installs only core + kinematic2d dependencies (no pybullet)
-- `uv pip install -r optional_prpl_requirements/dynamic2d.txt && uv pip install -e ".[dynamic2d]"` - Installs only core + dynamic2d dependencies
-- `uv pip install -e ".[tidybot]"` - Installs only core + tidybot dependencies
-- `uv pip install -r optional_prpl_requirements/kinematic3d.txt && uv pip install -e ".[kinematic3d]"` - Installs only core + kinematic3d dependencies
-- `uv pip install -r prpl_requirements.txt && uv pip install -e ".[develop]"` - Installs all + development tools
-- Compositionally install the dependencies like `[kinematic2d,kinematic3d]`
+#### From PyPI
+
+```bash
+pip install kindergarden          # core only
+pip install kindergarden[all]     # all environment dependencies
+pip install kindergarden[dynamic2d]     # only dynamic2d environments
+pip install kindergarden[kinematic2d]   # only kinematic2d environments
+pip install kindergarden[kinematic3d]   # only kinematic3d environments
+pip install kindergarden[tidybot]       # only tidybot environments
+```
+
+You can also combine extras: `pip install kindergarden[kinematic2d,kinematic3d]`
+
+#### From Source
+
+We strongly recommend [uv](https://docs.astral.sh/uv/getting-started/installation/).
+
+```bash
+git clone https://github.com/Princeton-Robot-Planning-and-Learning/kindergarden.git
+cd kindergarden
+uv pip install -e ".[develop]"   # all dependencies + dev tools
+```
+
+Or install only what you need:
+```bash
+uv pip install -e .              # core only
+uv pip install -e ".[all]"      # all environment dependencies
+uv pip install -e ".[dynamic2d]" # only dynamic2d environments
+```
 
 ### :microscope: Check Installation
 Run `./run_ci_checks.sh`. It should complete with all green successes.

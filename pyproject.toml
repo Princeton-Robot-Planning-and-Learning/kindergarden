@@ -3,11 +3,17 @@ requires = ["setuptools", "setuptools-scm"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "kinder"
-version = "0.1.0"
+name = "kindergarden"
+version = "0.0.2"
 description = "A robotics benchmark for physical reasoning."
+license = {text = "MIT"}
 readme = "README.md"
 requires-python = ">=3.10,<3.13"
+classifiers = [
+   "Programming Language :: Python :: 3",
+   "License :: OSI Approved :: MIT License",
+   "Operating System :: OS Independent",
+]
 dependencies = [
    "gymnasium",
    "matplotlib",
@@ -15,8 +21,8 @@ dependencies = [
    "Pillow",
    "shapely>=2.1.2",
    "scipy>=1.14.0",
-   "relational_structs@git+https://github.com/Princeton-Robot-Planning-and-Learning/prpl-mono.git@4be2cbf4ec361ea4e5c35d2338b5f06e69c70e46#subdirectory=relational-structs",
-   "prpl_utils@git+https://github.com/Princeton-Robot-Planning-and-Learning/prpl-mono.git@4be2cbf4ec361ea4e5c35d2338b5f06e69c70e46#subdirectory=prpl-utils",
+   "relational_structs>=0.0.1",
+   "prpl_utils>=0.0.1",
 ]
 
 [project.optional-dependencies]
@@ -26,16 +32,16 @@ all = [
    "mujoco==3.2.4",
    "opencv-python>=4.9.0",
    "pybullet>=3.2.5",
-   "tomsgeoms2d@git+https://github.com/Princeton-Robot-Planning-and-Learning/prpl-mono.git@4be2cbf4ec361ea4e5c35d2338b5f06e69c70e46#subdirectory=toms-geoms-2d",
-   "pybullet_helpers@git+https://github.com/Princeton-Robot-Planning-and-Learning/prpl-mono.git@4be2cbf4ec361ea4e5c35d2338b5f06e69c70e46#subdirectory=pybullet-helpers",
+   "tomsgeoms2d>=0.0.1",
+   "pybullet_helpers>=0.0.1",
 ]
 dynamic2d = [
    "pygame>=2.5.2",
    "pymunk==7.1.0",
-   "tomsgeoms2d@git+https://github.com/Princeton-Robot-Planning-and-Learning/prpl-mono.git@4be2cbf4ec361ea4e5c35d2338b5f06e69c70e46#subdirectory=toms-geoms-2d",
+   "tomsgeoms2d>=0.0.1",
 ]
 kinematic2d = [
-   "tomsgeoms2d@git+https://github.com/Princeton-Robot-Planning-and-Learning/prpl-mono.git@4be2cbf4ec361ea4e5c35d2338b5f06e69c70e46#subdirectory=toms-geoms-2d",
+   "tomsgeoms2d>=0.0.1",
 ]
 tidybot = [
    "mujoco==3.2.4",
@@ -44,7 +50,7 @@ tidybot = [
 ]
 kinematic3d = [
    "pybullet>=3.2.5",
-   "pybullet_helpers@git+https://github.com/Princeton-Robot-Planning-and-Learning/prpl-mono.git@4be2cbf4ec361ea4e5c35d2338b5f06e69c70e46#subdirectory=pybullet-helpers",
+   "pybullet_helpers>=0.0.1",
 ]
 develop = [
    "pygame>=2.5.2",
@@ -52,8 +58,8 @@ develop = [
    "mujoco==3.2.4",
    "opencv-python>=4.9.0",
    "pybullet>=3.2.5",
-   "tomsgeoms2d@git+https://github.com/Princeton-Robot-Planning-and-Learning/prpl-mono.git@4be2cbf4ec361ea4e5c35d2338b5f06e69c70e46#subdirectory=toms-geoms-2d",
-   "pybullet_helpers@git+https://github.com/Princeton-Robot-Planning-and-Learning/prpl-mono.git@4be2cbf4ec361ea4e5c35d2338b5f06e69c70e46#subdirectory=pybullet-helpers",
+   "tomsgeoms2d>=0.0.1",
+   "pybullet_helpers>=0.0.1",
    "black[jupyter]",
    "docformatter",
    "isort",

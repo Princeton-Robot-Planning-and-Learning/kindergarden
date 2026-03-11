@@ -1,0 +1,9 @@
+recursive-include src *.py *.typed
+recursive-include src/kinder/envs *.xml *.obj *.mtl *.stl *.urdf *.png *.jpg *.jpeg *.json
+include pyproject.toml README.md LICENSE
+prune demos
+prune docs
+prune tests
+prune notebooks
+prune scripts
+prune pylint_plugins

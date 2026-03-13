@@ -34,7 +34,7 @@ all = [
    "opencv-python>=4.9.0",
    "pybullet-arm64>=3.2.8",
    "tomsgeoms2d>=0.0.1",
-   "pybullet_helpers>=0.0.1",
+   "pybullet_helpers>=0.1.0",
 ]
 dynamic2d = [
    "pygame>=2.5.2",
@@ -51,7 +51,7 @@ dynamic3d = [
 ]
 kinematic3d = [
    "pybullet-arm64>=3.2.8",
-   "pybullet_helpers>=0.0.1",
+   "pybullet_helpers>=0.1.0",
 ]
 develop = [
    "pygame>=2.5.2",
@@ -60,7 +60,7 @@ develop = [
    "opencv-python>=4.9.0",
    "pybullet-arm64>=3.2.8",
    "tomsgeoms2d>=0.0.1",
-   "pybullet_helpers>=0.0.1",
+   "pybullet_helpers>=0.1.0",
    "black[jupyter]",
    "docformatter",
    "isort",

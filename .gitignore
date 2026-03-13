@@ -2,6 +2,7 @@
 .python-version
 MUJOCO_LOG.TXT
 **/auto_*.xml
+**/.tmp/
 uv.lock
 logs
 llm_cache.db

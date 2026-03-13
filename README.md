@@ -8,7 +8,7 @@ See [https://prpl.group/kinder-site/](https://prpl.group/kinder-site/) for docum
 
 ### Requirements
 1. Python >=3.10, <3.13
-2. Tested on MacOS Monterey and Ubuntu 22.04 (but we aim to support most platforms)
+2. Tested on MacOS 13-15 and Ubuntu 22.04 (but we aim to support most platforms)
 
 ## Installation
 

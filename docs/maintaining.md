@@ -54,6 +54,14 @@ uv build
 uv publish dist/*
 ```
 
+### 4. Create a GitHub release
+
+After publishing to PyPI, create a matching GitHub release so the repo stays in sync:
+
+```bash
+gh release create v0.0.X --title "v0.0.X" --generate-notes
+```
+
 ### Version numbering
 
 Use `0.0.x` for early development. Bump the patch version for each release.

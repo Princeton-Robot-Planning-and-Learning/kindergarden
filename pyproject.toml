@@ -24,10 +24,6 @@ dependencies = [
    "scipy>=1.14.0",
    "relational_structs>=0.0.1",
    "prpl_utils>=0.0.1",
-]
-
-[project.optional-dependencies]
-all = [
    "pygame>=2.5.2",
    "pymunk==7.1.0",
    "mujoco~=3.3.0",
@@ -36,6 +32,8 @@ all = [
    "tomsgeoms2d>=0.0.1",
    "pybullet_helpers>=0.1.0",
 ]
+
+[project.optional-dependencies]
 dynamic2d = [
    "pygame>=2.5.2",
    "pymunk==7.1.0",

@@ -15,8 +15,7 @@ See [https://prpl.group/kinder-site/](https://prpl.group/kinder-site/) for docum
 ### From PyPI
 
 ```bash
-pip install kindergarden          # core only
-pip install kindergarden[all]     # all environment dependencies
+pip install kindergarden                # all environment dependencies
 pip install kindergarden[dynamic2d]     # only dynamic2d environments
 pip install kindergarden[kinematic2d]   # only kinematic2d environments
 pip install kindergarden[kinematic3d]   # only kinematic3d environments
@@ -37,8 +36,6 @@ uv pip install -e ".[develop]"   # all dependencies + dev tools
 
 Or install only what you need:
 ```bash
-uv pip install -e .              # core only
-uv pip install -e ".[all]"      # all environment dependencies
 uv pip install -e ".[dynamic2d]" # only dynamic2d environments
 ```
 

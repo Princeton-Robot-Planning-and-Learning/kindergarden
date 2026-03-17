@@ -173,6 +173,10 @@ class ObjectCentricDynPushPullHook2DEnv(
         config: DynPushPullHook2DEnvConfig = DynPushPullHook2DEnvConfig(),
         **kwargs,
     ) -> None:
+        if num_obstructions < 0:
+            raise ValueError(
+                f"num_obstructions must be non-negative, got {num_obstructions}"
+            )
         super().__init__(config, **kwargs)
         self._num_obstructions = num_obstructions
 

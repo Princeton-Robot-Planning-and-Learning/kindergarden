@@ -4,7 +4,7 @@ A physical reasoning benchmark for robot learning and planning.
 
 ## Website
 
-See [https://prpl.group/kinder-site/](https://prpl.group/kinder-site/) for documentation and tutorials.
+See [https://prpl-group.com/kinder-site/](https://prpl-group.com/kinder-site/) for documentation and tutorials.
 
 ### Requirements
 1. Python >=3.10, <3.13

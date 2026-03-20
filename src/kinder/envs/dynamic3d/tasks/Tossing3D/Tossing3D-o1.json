@@ -1,14 +1,14 @@
 {
     "robots": {
         "tidybot": {
-            "robot_0": {}
+            "robot": {}
         }
     },
     "scene": "lab2",
     "regions": {
         "bin_init_region": {
             "target": "ground",
-            "ranges": [[2.0, -0.0005, 2.001, 0.0005]],
+            "ranges": [[2.23, -0.0005, 2.231, 0.0005]],
             "yaw_ranges": [[0, 0]]
         },
         "blocks_init_region": {
@@ -69,7 +69,7 @@
         }
     },
     "initial_state": [
-        ["on", "robot_0", "robot_init_region"],
+        ["on", "robot", "robot_init_region"],
         ["on", "cube_0", "blocks_init_region"],
         ["on", "bin_0", "bin_init_region"],
         ["on", "cuboid_barrier", "barrier_init_region"]

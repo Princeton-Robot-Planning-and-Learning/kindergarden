@@ -1,7 +1,7 @@
 {
     "robots": {
         "tidybot": {
-            "robot_0": {}
+            "robot": {}
         }
     },
     "scene": "lab2",
@@ -74,7 +74,7 @@
         }
     },
     "initial_state": [
-        ["on", "robot_0", "robot_init_region"],
+        ["on", "robot", "robot_init_region"],
         ["on", "seesaw_1", "seesaw_init_region"],
         ["on", "small_block_1", "blocks_init_region"],
         ["on", "small_block_2", "blocks_init_region"],

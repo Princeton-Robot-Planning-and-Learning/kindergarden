@@ -154,6 +154,10 @@ class ObjectCentricObstruction3DEnv(
         config: Obstruction3DEnvConfig = Obstruction3DEnvConfig(),
         **kwargs,
     ) -> None:
+        if num_obstructions < 0:
+            raise ValueError(
+                f"num_obstructions must be non-negative, got {num_obstructions}"
+            )
         self._num_obstructions = num_obstructions
         super().__init__(config=config, **kwargs)
 

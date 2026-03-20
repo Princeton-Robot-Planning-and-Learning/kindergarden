@@ -1,5 +1,7 @@
 """Utilities for Dynamic2D PyMunk-based environments."""
 
+from __future__ import annotations
+
 import math
 from typing import Any
 

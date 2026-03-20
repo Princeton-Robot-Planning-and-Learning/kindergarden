@@ -37,8 +37,9 @@ def test_straight_base_motion():
     obs, _ = env.reset(seed=123)
     assert isinstance(env.observation_space, ObjectCentricBoxSpace)
     state = env.observation_space.devectorize(obs)
+    robot_name = env.unwrapped._object_centric_env.robot_name  # type: ignore[attr-defined] # pylint: disable=protected-access
     target = state.get_object_from_name("cube1")
-    robot = state.get_object_from_name("robot_0")
+    robot = state.get_object_from_name(robot_name)
     target_x = state.get(target, "x")
     target_y = state.get(target, "y")
     robot_x = state.get(robot, "pos_base_x")
@@ -73,7 +74,7 @@ def test_straight_base_motion():
     "Run: python scripts/download_mimiclabs_assets.py",
 )
 @pytest.mark.parametrize(
-    "view", ["frontview", "agentview_1", "agentview_2", "robot_0_base", "robot_0_wrist"]
+    "view", ["frontview", "agentview_1", "agentview_2", "robot_base", "robot_wrist"]
 )
 def test_straight_base_motion_mimiclabs(view):
     """Test base motion with MimicLabs background scene (uses lab5 for base_motion)."""
@@ -93,8 +94,9 @@ def test_straight_base_motion_mimiclabs(view):
     obs, _ = env.reset(seed=123)
     assert isinstance(env.observation_space, ObjectCentricBoxSpace)
     state = env.observation_space.devectorize(obs)
+    robot_name = env.unwrapped._object_centric_env.robot_name  # type: ignore[attr-defined] # pylint: disable=protected-access
     target = state.get_object_from_name("cube1")
-    robot = state.get_object_from_name("robot_0")
+    robot = state.get_object_from_name(robot_name)
     target_x = state.get(target, "x")
     target_y = state.get(target, "y")
     robot_x = state.get(robot, "pos_base_x")

@@ -1132,6 +1132,16 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
         # pylint: disable=unused-argument
         return self._check_goals()
 
+    def render_all_cameras(self) -> dict[str, NDArray[np.uint8]]:
+        """Render all available cameras in the environment."""
+        if self.render_mode == "rgb_array":
+            assert self._robot_env is not None, "Robot environment not initialized"
+            images = self._robot_env.get_camera_images()
+            if images is not None:
+                return images
+            raise RuntimeError("No camera images available in observation.")
+        raise NotImplementedError(f"Render mode {self.render_mode} not supported")
+
     def render(self) -> NDArray[np.uint8]:  # type: ignore
         """Render the environment."""
         if self.render_mode == "rgb_array":
@@ -1223,7 +1233,10 @@ class ObjectCentricTidyBot3DEnv(ObjectCentricRobotEnv):
         """Set the robot state in the simulation."""
         assert self._robot_env is not None, "Robot environment not initialized"
 
-        robot_obj = state.get_object_from_name(self.robot_name)
+        # Get robot by type instead of by name for flexibility
+        robots = state.get_objects(MujocoTidyBotRobotObjectType)
+        assert len(robots) == 1, f"Expected exactly 1 robot, got {len(robots)}"
+        robot_obj = list(robots)[0]
 
         # Reset the robot base position.
         robot_base_pos = [
@@ -1392,7 +1405,10 @@ class ObjectCentricRBY1A3DEnv(ObjectCentricRobotEnv):
         """Set the robot state in the simulation."""
         assert self._robot_env is not None, "Robot environment not initialized"
 
-        robot_obj = state.get_object_from_name(self.robot_name)
+        # Get robot by type instead of by name for flexibility
+        robots = state.get_objects(MujocoRBY1ARobotObjectType)
+        assert len(robots) == 1, f"Expected exactly 1 robot, got {len(robots)}"
+        robot_obj = list(robots)[0]
 
         # Reset the robot base position.
         assert self._robot_env.qpos is not None

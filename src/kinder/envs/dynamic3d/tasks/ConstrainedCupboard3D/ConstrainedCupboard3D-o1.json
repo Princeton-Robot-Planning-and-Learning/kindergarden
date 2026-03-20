@@ -1,7 +1,7 @@
 {
     "robots": {
         "tidybot": {
-            "robot_0": {}
+            "robot": {}
         }
     },
     "scene": "lab2",
@@ -122,7 +122,7 @@
         ["on", "cupboard_1", "cupboard_init_region"],
         ["on", "cupboard_2", "cupboard_init_region"],
         ["in", "cuboid_0", "ground_object_init_region"],
-        ["on", "robot_0", "robot_task_init_region"]
+        ["on", "robot", "robot_task_init_region"]
     ],
     "goal_state": [
         ["on", "cuboid_0", "cupboard_1_shelf_0_goal"],

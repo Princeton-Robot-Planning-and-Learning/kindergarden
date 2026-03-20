@@ -1,7 +1,7 @@
 {
     "robots": {
         "tidybot": {
-            "robot_0": {}
+            "robot": {}
         }
     },
     "scene": {
@@ -146,6 +146,12 @@
             "lookat": [1.2, 0, 0],
             "fovy": 70,
             "resolution": [640, 480]
+        },
+        "task_view": {
+            "position": [0.5, 0, 2.5],
+            "lookat": [0.5, 0, 0],
+            "fovy": 60,
+            "resolution": [640, 480]
         }
     },
     "initial_state": [
@@ -162,6 +168,6 @@
         ["on", "obstacle_chair_11", "chair_11_init_region"]
     ],
     "goal_state": [
-        ["on", "robot_0", "ground_goal_region"]
+        ["on", "robot", "ground_goal_region"]
     ]
 }

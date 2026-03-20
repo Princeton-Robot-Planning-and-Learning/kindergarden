@@ -1,7 +1,7 @@
 {
     "robots": {
         "tidybot": {
-            "robot_0": {}
+            "robot": {}
         }
     },
     "scene": "lab2_kitchen_gray",
@@ -93,7 +93,7 @@
     "initial_state": [
         ["on", "bin_yellow_0", "bin_yellow_init_region"],
         ["on", "bin_green_0", "bin_green_init_region"],
-        ["on", "robot_0", "robot_task_init_region"],
+        ["on", "robot", "robot_task_init_region"],
         ["in", "cube_0", "blocks_init_region"],
         ["in", "cube_1", "blocks_init_region"],
         ["in", "cube_2", "blocks_init_region"],

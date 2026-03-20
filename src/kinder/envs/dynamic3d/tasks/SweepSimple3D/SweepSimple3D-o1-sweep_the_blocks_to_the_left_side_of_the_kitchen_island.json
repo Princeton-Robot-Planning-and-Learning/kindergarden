@@ -1,7 +1,7 @@
 {
     "robots": {
         "tidybot": {
-            "robot_0": {}
+            "robot": {}
         }
     },
     "scene": "lab2_kitchen_gray",
@@ -57,7 +57,7 @@
     "initial_state": [
         ["in", "wiper_0", "wiper_init_region"],
         ["in", "cube_0", "blocks_init_region"],
-        ["on", "robot_0", "robot_task_init_region"]
+        ["on", "robot", "robot_task_init_region"]
     ],
     "goal_state": [
         ["on", "cube_0", "sweep_region"]

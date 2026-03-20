@@ -1,7 +1,7 @@
 {
     "robots": {
         "tidybot": {
-            "robot_0": {}
+            "robot": {}
         }
     },
     "scene": "lab2_kitchen_gray",
@@ -75,7 +75,7 @@
         ["on", "boxed_drink_0", "kitchen_island_shelf_2_boxed_drink_region"],
         ["on", "can_0", "kitchen_island_shelf_2_can_region"],
         ["on", "bowl_0", "kitchen_island_shelf_2_bowl_region"],
-        ["on", "robot_0", "robot_task_init_region"]
+        ["on", "robot", "robot_task_init_region"]
     ],
     "goal_state": [
         ["on", "boxed_drink_0", "bowl_0_front_region"],

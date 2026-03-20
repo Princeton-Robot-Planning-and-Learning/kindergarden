@@ -1233,7 +1233,10 @@ class ObjectCentricTidyBot3DEnv(ObjectCentricRobotEnv):
         """Set the robot state in the simulation."""
         assert self._robot_env is not None, "Robot environment not initialized"
 
-        robot_obj = state.get_object_from_name(self.robot_name)
+        # Get robot by type instead of by name for flexibility
+        robots = state.get_objects(MujocoTidyBotRobotObjectType)
+        assert len(robots) == 1, f"Expected exactly 1 robot, got {len(robots)}"
+        robot_obj = list(robots)[0]
 
         # Reset the robot base position.
         robot_base_pos = [
@@ -1402,7 +1405,10 @@ class ObjectCentricRBY1A3DEnv(ObjectCentricRobotEnv):
         """Set the robot state in the simulation."""
         assert self._robot_env is not None, "Robot environment not initialized"
 
-        robot_obj = state.get_object_from_name(self.robot_name)
+        # Get robot by type instead of by name for flexibility
+        robots = state.get_objects(MujocoRBY1ARobotObjectType)
+        assert len(robots) == 1, f"Expected exactly 1 robot, got {len(robots)}"
+        robot_obj = list(robots)[0]
 
         # Reset the robot base position.
         assert self._robot_env.qpos is not None

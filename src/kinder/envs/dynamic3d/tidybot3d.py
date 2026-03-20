@@ -1132,6 +1132,16 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
         # pylint: disable=unused-argument
         return self._check_goals()
 
+    def render_all_cameras(self) -> dict[str, NDArray[np.uint8]]:
+        """Render all available cameras in the environment."""
+        if self.render_mode == "rgb_array":
+            assert self._robot_env is not None, "Robot environment not initialized"
+            images = self._robot_env.get_camera_images()
+            if images is not None:
+                return images
+            raise RuntimeError("No camera images available in observation.")
+        raise NotImplementedError(f"Render mode {self.render_mode} not supported")
+
     def render(self) -> NDArray[np.uint8]:  # type: ignore
         """Render the environment."""
         if self.render_mode == "rgb_array":

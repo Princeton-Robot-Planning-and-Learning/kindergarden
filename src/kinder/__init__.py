@@ -24,9 +24,9 @@ ENV_CLASSES: dict[str, dict[str, Any]] = {}
 def _check_deps(*modules: str) -> bool:
     """Return True if all named modules are importable.
 
-    Catches any exception (not just ImportError) because some packages
-    may import successfully but fail during initialization — e.g. mujoco
-    raising AttributeError when OpenGL is unavailable in headless CI.
+    Catches any exception (not just ImportError) because some packages may import
+    successfully but fail during initialization — e.g. mujoco raising AttributeError
+    when OpenGL is unavailable in headless CI.
     """
     for mod in modules:
         try:

@@ -168,15 +168,35 @@ class ObjectCentricKinDEREnv(
         self._check_state_access()
         self._set_state(state)
 
-    def get_next_state(self, state: _ObsType, action: _ActType) -> _ObsType:
-        """Get the next state given a state and action.
+    def get_transition(
+        self, state: _ObsType, action: _ActType
+    ) -> tuple[_ObsType, float, bool]:
+        """Get the full transition: (next_state, reward, terminated).
 
         Default implementation sets state and steps. Subclasses can override.
         """
         self._check_state_access()
         self._set_state(state)
-        obs, _, _, _, _ = self.step(action)
-        return obs
+        obs, reward, terminated, _, _ = self.step(action)
+        return obs, reward, terminated
+
+    def get_next_state(self, state: _ObsType, action: _ActType) -> _ObsType:
+        """Get the next state given a state and action.
+
+        Consider using get_transition() if you also need reward or termination.
+        """
+        next_state, _, _ = self.get_transition(state, action)
+        return next_state
+
+    def get_reward_and_done(
+        self, state: _ObsType, action: _ActType
+    ) -> tuple[float, bool]:
+        """Get the reward and termination for taking an action in a state.
+
+        Consider using get_transition() if you also need the next state.
+        """
+        _, reward, terminated = self.get_transition(state, action)
+        return reward, terminated
 
 
 class ConstantObjectKinDEREnv(gymnasium.Env[NDArray[Any], NDArray[Any]]):
@@ -353,12 +373,38 @@ class ConstantObjectKinDEREnv(gymnasium.Env[NDArray[Any], NDArray[Any]]):
         obj_state = self.observation_space.devectorize(state)
         self._object_centric_env.set_state(obj_state)
 
-    def get_next_state(self, state: NDArray[Any], action: NDArray[Any]) -> NDArray[Any]:
-        """Get the next state given a state and action."""
+    def get_transition(
+        self, state: NDArray[Any], action: NDArray[Any]
+    ) -> tuple[NDArray[Any], float, bool]:
+        """Get the full transition: (next_state, reward, terminated).
+
+        Consider using this instead of get_next_state() or get_reward_and_done()
+        when you need multiple outputs, to avoid redundant computation.
+        """
         assert isinstance(self.observation_space, ObjectCentricBoxSpace)
         obj_state = self.observation_space.devectorize(state)
-        next_state = self._object_centric_env.get_next_state(obj_state, action)
-        return self.observation_space.vectorize(next_state)
+        next_obj_state, reward, terminated = self._object_centric_env.get_transition(
+            obj_state, action
+        )
+        return self.observation_space.vectorize(next_obj_state), reward, terminated
+
+    def get_next_state(self, state: NDArray[Any], action: NDArray[Any]) -> NDArray[Any]:
+        """Get the next state given a state and action.
+
+        Consider using get_transition() if you also need reward or termination.
+        """
+        next_state, _, _ = self.get_transition(state, action)
+        return next_state
+
+    def get_reward_and_done(
+        self, state: NDArray[Any], action: NDArray[Any]
+    ) -> tuple[float, bool]:
+        """Get the reward and termination for taking an action in a state.
+
+        Consider using get_transition() if you also need the next state.
+        """
+        _, reward, terminated = self.get_transition(state, action)
+        return reward, terminated
 
     def render(self):
         return self._object_centric_env.render()

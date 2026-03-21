@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kindergarden"
-version = "0.0.6"
+version = "0.0.7"
 description = "A robotics benchmark for physical reasoning."
 license = {text = "MIT"}
 readme = "README.md"

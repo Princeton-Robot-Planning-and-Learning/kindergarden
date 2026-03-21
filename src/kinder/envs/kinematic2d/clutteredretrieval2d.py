@@ -152,10 +152,6 @@ class ObjectCentricClutteredRetrieval2DEnv(
         config: ClutteredRetrieval2DEnvConfig = ClutteredRetrieval2DEnvConfig(),
         **kwargs,
     ) -> None:
-        if num_obstructions < 0:
-            raise ValueError(
-                f"num_obstructions must be non-negative, got {num_obstructions}"
-            )
         super().__init__(config, **kwargs)
         self._num_obstructions = num_obstructions
 

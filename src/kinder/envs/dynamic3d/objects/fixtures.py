@@ -1283,20 +1283,15 @@ class Cupboard(MujocoFixture):
         # Position relative to drawer body center
         face_local_center_x = face_center_x - drawer_center_x
         face_local_center_y = drawer_half_depth + face_thickness_half
-
-        # Face geom height: covers entire shelf compartment plus extends 40% into
-        # the shelf thickness above and below.
-        # Bottom of drawer minus half shelf thickness
-        face_z_min = -bottom_half_t - 0.8 * shelf_half_thickness
-        # Top of drawer plus half shelf thickness
-        face_z_max = shelf_height - bottom_half_t + 0.8 * shelf_half_thickness
-        face_height_half = (face_z_max - face_z_min) / 2
-        face_z_pos = (face_z_min + face_z_max) / 2
-
+        # Face geom height: covers drawer wall plus shelf thickness plus extends
+        # halfway into shelf above
+        face_height = wall_half_height + shelf_half_thickness + shelf_half_thickness / 2
+        # Shift face position upward to extend into the shelf above
+        face_z_pos = wall_pos_z - wall_half_t + shelf_half_thickness / 4
         face = ET.SubElement(drawer_body, "geom")
         face.set("name", f"{self.name}_drawer_{drawer_index}_face")
         face.set("type", "box")
-        face.set("size", f"{face_half_length} {face_thickness_half} {face_height_half}")
+        face.set("size", f"{face_half_length} {face_thickness_half} {face_height}")
         face.set(
             "pos",
             f"{face_local_center_x} {face_local_center_y} {face_z_pos}",

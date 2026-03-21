@@ -65,7 +65,7 @@ env = ObjectCentricObstruction2DEnv(num_obstructions=3)
 obs, _ = env.reset(seed=123)
 print(obs.pretty_str())
 ```
-Here, `obs` is an [ObjectCentricState](https://github.com/tomsilver/relational-structs/blob/main/src/relational_structs/object_centric_state.py#L25), and the printout is:
+Here, `obs` is an [ObjectCentricState](https://github.com/Princeton-Robot-Planning-and-Learning/prpl-mono/tree/main/relational-structs/src/relational_structs/object_centric_state.py#L25), and the printout is:
 ```
 ############################################################### STATE ###############################################################
 type: crv_robot           x         y    theta    base_radius    arm_joint    arm_length    vacuum    gripper_height    gripper_width

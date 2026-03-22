@@ -3,23 +3,37 @@
 from __future__ import annotations
 
 import math
-from typing import Any
+from typing import Any, Iterable
 
 import numpy as np
 import pymunk
 from numpy.typing import NDArray
 from pymunk import Body, Shape
 from pymunk.vec2d import Vec2d
-from relational_structs import Object
+from relational_structs import (
+    Object,
+    ObjectCentricState,
+)
+from tomsgeoms2d.structs import Rectangle
 
 from kinder.envs.dynamic2d.object_types import (
     KinRectangleType,
 )
+from prpl_utils.motion_planning import BiRRT
+from prpl_utils.utils import get_signed_angle_distance, wrap_angle
+
 from kinder.envs.kinematic2d.structs import (
+    MultiBody2D,
     SE2Pose,
     ZOrder,
 )
-from kinder.envs.utils import BLACK, RobotActionSpace
+from kinder.envs.utils import (
+    BLACK,
+    RobotActionSpace,
+    get_se2_pose,
+    kin_robot_to_multibody2d,
+    state_2d_has_collision,
+)
 
 # Collision types from the basic_pymunk.py script
 STATIC_COLLISION_TYPE = 0
@@ -1078,3 +1092,221 @@ def get_dot_robot_action_from_gui_input(
     action[1] = _rescale(right_y, low[1], high[1])
 
     return action
+
+
+def get_tool_tip_position(
+    state: ObjectCentricState, robot: Object
+) -> tuple[float, float]:
+    """Get the tip of the tool for the robot, which is defined as the center of the
+    bottom edge of the gripper."""
+    multibody = kin_robot_to_multibody2d(robot, state)
+    gripper_geom = multibody.get_body("gripper_base").geom
+    assert isinstance(gripper_geom, Rectangle)
+    return (gripper_geom.x, gripper_geom.y)
+
+
+def get_suctioned_objects(
+    state: ObjectCentricState, robot: Object
+) -> list[tuple[Object, SE2Pose]]:
+    """Find objects that are in the suction zone of a CRVRobot and return the associated
+    transform from gripper tool tip to suctioned object."""
+    # If the robot's vacuum is not on, there are no suctioned objects.
+    if state.get(robot, "vacuum") <= 0.5:
+        return []
+    gripper_x, gripper_y = get_tool_tip_position(state, robot)
+    gripper_theta = state.get(robot, "theta")
+    world_to_gripper = SE2Pose(gripper_x, gripper_y, gripper_theta)
+    # Find MOVABLE objects in collision with the suction geom.
+    suctioned_objects: list[tuple[Object, SE2Pose]] = []
+    for obj in state:
+        if "held" in state.type_features[obj.type]:
+            if state.get(obj, "held"):
+                world_to_obj = SE2Pose(
+                    x=state.get(obj, "x"), y=state.get(obj, "y"), theta=state.get(obj, "theta")
+                )
+                gripper_to_obj = world_to_gripper.inverse * world_to_obj
+                suctioned_objects.append((obj, gripper_to_obj))
+    return suctioned_objects
+
+
+def snap_suctioned_objects(
+    state: ObjectCentricState,
+    robot: Object,
+    suctioned_objs: list[tuple[Object, SE2Pose]],
+) -> None:
+    """Updates the state in-place."""
+    gripper_x, gripper_y = get_tool_tip_position(state, robot)
+    gripper_theta = state.get(robot, "theta")
+    world_to_gripper = SE2Pose(gripper_x, gripper_y, gripper_theta)
+    for obj, gripper_to_obj in suctioned_objs:
+        world_to_obj = world_to_gripper * gripper_to_obj
+        state.set(obj, "x", world_to_obj.x)
+        state.set(obj, "y", world_to_obj.y)
+        state.set(obj, "theta", world_to_obj.theta)
+
+
+def get_held_objects(
+    state: ObjectCentricState, robot: Object
+) -> list[tuple[Object, SE2Pose]]:
+    """Find objects held by the KinRobot's gripper and return the transform
+    from the gripper tool-tip to each held object.
+
+    Unlike ``get_suctioned_objects`` (which checks a vacuum flag), this checks
+    the ``held`` attribute on every non-robot object in the state.
+    """
+    gripper_x, gripper_y = get_tool_tip_position(state, robot)
+    gripper_theta = state.get(robot, "theta")
+    world_to_gripper = SE2Pose(gripper_x, gripper_y, gripper_theta)
+    held_objects: list[tuple[Object, SE2Pose]] = []
+    for obj in state:
+        if obj == robot:
+            continue
+        if "held" in state.type_features[obj.type]:
+            if state.get(obj, "held"):
+                world_to_obj = SE2Pose(
+                    x=state.get(obj, "x"),
+                    y=state.get(obj, "y"),
+                    theta=state.get(obj, "theta"),
+                )
+                gripper_to_obj = world_to_gripper.inverse * world_to_obj
+                held_objects.append((obj, gripper_to_obj))
+    return held_objects
+
+
+def snap_held_objects(
+    state: ObjectCentricState,
+    robot: Object,
+    held_objs: list[tuple[Object, SE2Pose]],
+) -> None:
+    """Update held-object poses in-place so they stay rigidly attached to the
+    robot's gripper tool-tip."""
+    gripper_x, gripper_y = get_tool_tip_position(state, robot)
+    gripper_theta = state.get(robot, "theta")
+    world_to_gripper = SE2Pose(gripper_x, gripper_y, gripper_theta)
+    for obj, gripper_to_obj in held_objs:
+        world_to_obj = world_to_gripper * gripper_to_obj
+        state.set(obj, "x", world_to_obj.x)
+        state.set(obj, "y", world_to_obj.y)
+        state.set(obj, "theta", world_to_obj.theta)
+
+
+def run_motion_planning_for_kin_robot(
+    state: ObjectCentricState,
+    robot: Object,
+    target_pose: SE2Pose,
+    action_space: KinRobotActionSpace,
+    static_object_body_cache: dict[Object, MultiBody2D] | None = None,
+    seed: int = 0,
+    num_attempts: int = 10,
+    num_iters: int = 100,
+    smooth_amt: int = 50,
+) -> list[SE2Pose] | None:
+    """Run BiRRT motion planning for a KinRobot to reach ``target_pose``.
+
+    This plans a collision-free SE2 path for the robot base, snapping any
+    held objects along with it.
+
+    .. note::
+
+        This planner assumes **no contact** between the robot/held objects
+        and dynamic objects in the scene — every configuration along the
+        planned path is checked for geometric intersection only.  In a
+        dynamic (PyMunk) environment, physics-based contacts (pushing,
+        friction, etc.) are not modelled, so the resulting path may be
+        unreliable when the robot must interact with movable objects.
+    """
+    if static_object_body_cache is None:
+        static_object_body_cache = {}
+
+    rng = np.random.default_rng(seed)
+
+    # Use the object positions in the state to create a rough room boundary.
+    x_lb, x_ub, y_lb, y_ub = np.inf, -np.inf, np.inf, -np.inf
+    for obj in state:
+        pose = get_se2_pose(state, obj)
+        x_lb = min(x_lb, pose.x)
+        x_ub = max(x_ub, pose.x)
+        y_lb = min(y_lb, pose.y)
+        y_ub = max(y_ub, pose.y)
+
+    # Create a static version of the state so that the geoms only need to be
+    # instantiated once during motion planning (except for the robot).  Make
+    # sure to not update the global cache because we don't want to carry over
+    # static things that are not actually static.
+    static_object_body_cache = static_object_body_cache.copy()
+    held_objects = get_held_objects(state, robot)
+    moving_objects = {robot} | {o for o, _ in held_objects}
+    static_state = state.copy()
+    for o in static_state:
+        if o in moving_objects:
+            continue
+        static_state.set(o, "static", 1.0)
+
+    # Set up the BiRRT methods.
+    def sample_fn(_: SE2Pose) -> SE2Pose:
+        """Sample a robot pose."""
+        x = rng.uniform(x_lb, x_ub)
+        y = rng.uniform(y_lb, y_ub)
+        theta = rng.uniform(-np.pi, np.pi)
+        return SE2Pose(x, y, theta)
+
+    def extend_fn(pt1: SE2Pose, pt2: SE2Pose) -> Iterable[SE2Pose]:
+        """Interpolate between the two poses respecting action-space bounds."""
+        dx = pt2.x - pt1.x
+        dy = pt2.y - pt1.y
+        dtheta = get_signed_angle_distance(pt2.theta, pt1.theta)
+        assert isinstance(action_space, KinRobotActionSpace)
+        abs_x = action_space.high[0] if dx > 0 else action_space.low[0]
+        abs_y = action_space.high[1] if dy > 0 else action_space.low[1]
+        abs_theta = action_space.high[2] if dtheta > 0 else action_space.low[2]
+        x_num_steps = int(dx / abs_x) + 1
+        assert x_num_steps > 0
+        y_num_steps = int(dy / abs_y) + 1
+        assert y_num_steps > 0
+        theta_num_steps = int(dtheta / abs_theta) + 1
+        assert theta_num_steps > 0
+        num_steps = max(x_num_steps, y_num_steps, theta_num_steps)
+        x = pt1.x
+        y = pt1.y
+        theta = pt1.theta
+        yield SE2Pose(x, y, theta)
+        for _ in range(num_steps):
+            x += dx / num_steps
+            y += dy / num_steps
+            theta = wrap_angle(theta + dtheta / num_steps)
+            yield SE2Pose(x, y, theta)
+
+    def collision_fn(pt: SE2Pose) -> bool:
+        """Check for collisions if the robot were at this pose."""
+        static_state.set(robot, "x", pt.x)
+        static_state.set(robot, "y", pt.y)
+        static_state.set(robot, "theta", pt.theta)
+
+        # Snap held objects to the new robot pose.
+        snap_held_objects(static_state, robot, held_objects)
+        obstacle_objects = set(static_state) - moving_objects
+
+        return state_2d_has_collision(
+            static_state, moving_objects, obstacle_objects, static_object_body_cache
+        )
+
+    def distance_fn(pt1: SE2Pose, pt2: SE2Pose) -> float:
+        """Return a distance between the two points."""
+        dx = pt2.x - pt1.x
+        dy = pt2.y - pt1.y
+        dtheta = get_signed_angle_distance(pt2.theta, pt1.theta)
+        return np.sqrt(dx**2 + dy**2) + abs(dtheta)
+
+    birrt = BiRRT(
+        sample_fn,
+        extend_fn,
+        collision_fn,
+        distance_fn,
+        rng,
+        num_attempts,
+        num_iters,
+        smooth_amt,
+    )
+
+    initial_pose = get_se2_pose(state, robot)
+    return birrt.query(initial_pose, target_pose)

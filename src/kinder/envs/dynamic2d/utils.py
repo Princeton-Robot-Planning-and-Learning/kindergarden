@@ -1200,6 +1200,7 @@ def run_motion_planning_for_kin_robot(
     num_attempts: int = 10,
     num_iters: int = 100,
     smooth_amt: int = 50,
+    motion_border: list[float] | None = None,
 ) -> list[SE2Pose] | None:
     """Run BiRRT motion planning for a KinRobot to reach ``target_pose``.
 
@@ -1228,6 +1229,17 @@ def run_motion_planning_for_kin_robot(
         x_ub = max(x_ub, pose.x)
         y_lb = min(y_lb, pose.y)
         y_ub = max(y_ub, pose.y)
+
+    if motion_border is not None:
+        # NOTE: We might overwrite the motion border due to some
+        # walls, e.g., pushpullhook2d.
+        # It is tricky to use Z-order for collision checking in 
+        # that environment, so we just use the motion border to 
+        # set the sampling space for motion planning.
+        x_lb = motion_border[0]
+        x_ub = motion_border[1]
+        y_lb = motion_border[2]
+        y_ub = motion_border[3]
 
     # Create a static version of the state so that the geoms only need to be
     # instantiated once during motion planning (except for the robot).  Make

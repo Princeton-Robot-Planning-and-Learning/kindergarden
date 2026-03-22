@@ -487,12 +487,19 @@ class ObjectCentricDynPushPullHook2DEnv(
         return create_state_from_dict(init_state_dict, Dynamic2DRobotEnvTypeFeatures)
 
     def _add_state_to_space(self, state: ObjectCentricState) -> None:
-        """Add objects from the state to the PyMunk space."""
+        """Add objects from the state to the PyMunk space.
+
+        The robot must be processed first so that the gripper is at the
+        correct position before any held objects call ``add_to_hand``
+        (which computes a relative pose from the current gripper pose).
+        """
         assert self.pymunk_space is not None, "Space not initialized"
-        for obj in state:
-            if obj.is_instance(KinRobotType):
-                self._reset_robot_in_space(obj, state)
-            else:
+        # Process the robot first, then everything else.
+        robot_objs = [o for o in state if o.is_instance(KinRobotType)]
+        other_objs = [o for o in state if not o.is_instance(KinRobotType)]
+        for obj in robot_objs:
+            self._reset_robot_in_space(obj, state)
+        for obj in other_objs:
                 # Everything else are rectangles in this environment.
                 x = state.get(obj, "x")
                 y = state.get(obj, "y")
@@ -611,7 +618,10 @@ class ObjectCentricDynPushPullHook2DEnv(
                         body.angular_velocity = omega
                         self._state_obj_to_pymunk_body[obj] = body
                     else:
-                        # Held dynamic objects are treated as kinematic
+                        # Held dynamic objects are treated as kinematic.
+                        # Match on_gripper_grasp: do NOT set velocity from
+                        # state — the PD controller will set the correct
+                        # velocity on the next step.
                         body = pymunk.Body(body_type=pymunk.Body.KINEMATIC)
                         shape1 = pymunk.Poly(body, vs_l1)
                         shape2 = pymunk.Poly(body, vs_l2)
@@ -626,8 +636,6 @@ class ObjectCentricDynPushPullHook2DEnv(
                         self.pymunk_space.add(body, shape1, shape2)
                         body.angle = theta
                         body.position = x, y
-                        body.velocity = vx, vy
-                        body.angular_velocity = omega
                         # Add to robot hand
                         self._state_obj_to_pymunk_body[obj] = body
                         assert self.robot is not None, "Robot not initialized"

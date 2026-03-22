@@ -621,6 +621,7 @@ class ObjectCentricDynPushPullHook2DEnv(
                         shape1.mass = mass / 2
                         shape2.friction = 1.0
                         shape2.density = 1.0
+                        shape2.mass = mass / 2
                         shape2.collision_type = ROBOT_COLLISION_TYPE
                         self.pymunk_space.add(body, shape1, shape2)
                         body.angle = theta

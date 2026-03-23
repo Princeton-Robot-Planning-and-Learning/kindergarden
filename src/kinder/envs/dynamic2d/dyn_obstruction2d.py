@@ -404,89 +404,91 @@ class ObjectCentricDynObstruction2DEnv(
         assert self.pymunk_space is not None, "Space not initialized"
 
         # Add static objects (table, walls)
-        for obj in state:
-            if obj.is_instance(KinRobotType):
-                self._reset_robot_in_space(obj, state)
-            else:
-                # Everything else are rectangles in this environment.
-                x = state.get(obj, "x")
-                y = state.get(obj, "y")
-                width = state.get(obj, "width")
-                height = state.get(obj, "height")
-                theta = state.get(obj, "theta")
-                vx = state.get(obj, "vx")
-                vy = state.get(obj, "vy")
-                omega = state.get(obj, "omega")
-                held = state.get(obj, "held")
+        # Process the robot first, then everything else.
+        robot_objs = [o for o in state if o.is_instance(KinRobotType)]
+        other_objs = [o for o in state if not o.is_instance(KinRobotType)]
+        for obj in robot_objs:
+            self._reset_robot_in_space(obj, state)
 
-                if (
-                    (obj.name == "table")
-                    or "wall" in obj.name
-                    or obj.is_instance(TargetSurfaceType)
-                ):
-                    # Static objects
-                    # We use Pymunk kinematic bodies for static objects
-                    b2 = pymunk.Body(body_type=pymunk.Body.KINEMATIC)
-                    vs = [
-                        (-width / 2, -height / 2),
-                        (-width / 2, height / 2),
-                        (width / 2, height / 2),
-                        (width / 2, -height / 2),
-                    ]
-                    shape = pymunk.Poly(b2, vs)
+        for obj in other_objs:
+            # Everything else are rectangles in this environment.
+            x = state.get(obj, "x")
+            y = state.get(obj, "y")
+            width = state.get(obj, "width")
+            height = state.get(obj, "height")
+            theta = state.get(obj, "theta")
+            vx = state.get(obj, "vx")
+            vy = state.get(obj, "vy")
+            omega = state.get(obj, "omega")
+            held = state.get(obj, "held")
+
+            if (
+                (obj.name == "table")
+                or "wall" in obj.name
+                or obj.is_instance(TargetSurfaceType)
+            ):
+                # Static objects
+                # We use Pymunk kinematic bodies for static objects
+                b2 = pymunk.Body(body_type=pymunk.Body.KINEMATIC)
+                vs = [
+                    (-width / 2, -height / 2),
+                    (-width / 2, height / 2),
+                    (width / 2, height / 2),
+                    (width / 2, -height / 2),
+                ]
+                shape = pymunk.Poly(b2, vs)
+                shape.friction = 1.0
+                shape.density = 1.0
+                shape.mass = 1.0
+                shape.elasticity = 0.99
+                shape.collision_type = STATIC_COLLISION_TYPE
+                self.pymunk_space.add(b2, shape)
+                b2.angle = theta
+                b2.position = x, y
+                self._state_obj_to_pymunk_body[obj] = b2
+            else:
+                # Target block and obstructions
+                mass = state.get(obj, "mass")
+                vs = [
+                    (-width / 2, -height / 2),
+                    (-width / 2, height / 2),
+                    (width / 2, height / 2),
+                    (width / 2, -height / 2),
+                ]
+
+                if not held:
+                    # Dynamic objects
+                    moment = pymunk.moment_for_box(mass, (width, height))
+                    body = pymunk.Body()
+                    shape = pymunk.Poly(body, vs)
                     shape.friction = 1.0
                     shape.density = 1.0
-                    shape.mass = 1.0
-                    shape.elasticity = 0.99
-                    shape.collision_type = STATIC_COLLISION_TYPE
-                    self.pymunk_space.add(b2, shape)
-                    b2.angle = theta
-                    b2.position = x, y
-                    self._state_obj_to_pymunk_body[obj] = b2
+                    shape.collision_type = DYNAMIC_COLLISION_TYPE
+                    shape.mass = mass
+                    assert shape.body is not None
+                    shape.body.moment = moment
+                    shape.body.mass = mass
+                    self.pymunk_space.add(body, shape)
+                    body.angle = theta
+                    body.position = x, y
+                    body.velocity = vx, vy
+                    body.angular_velocity = omega
+                    self._state_obj_to_pymunk_body[obj] = body
                 else:
-                    # Target block and obstructions
-                    mass = state.get(obj, "mass")
-                    vs = [
-                        (-width / 2, -height / 2),
-                        (-width / 2, height / 2),
-                        (width / 2, height / 2),
-                        (width / 2, -height / 2),
-                    ]
-
-                    if not held:
-                        # Dynamic objects
-                        moment = pymunk.moment_for_box(mass, (width, height))
-                        body = pymunk.Body()
-                        shape = pymunk.Poly(body, vs)
-                        shape.friction = 1.0
-                        shape.density = 1.0
-                        shape.collision_type = DYNAMIC_COLLISION_TYPE
-                        shape.mass = mass
-                        assert shape.body is not None
-                        shape.body.moment = moment
-                        shape.body.mass = mass
-                        self.pymunk_space.add(body, shape)
-                        body.angle = theta
-                        body.position = x, y
-                        body.velocity = vx, vy
-                        body.angular_velocity = omega
-                        self._state_obj_to_pymunk_body[obj] = body
-                    else:
-                        # Held dynamic objects are treated as kinematic
-                        body = pymunk.Body(body_type=pymunk.Body.KINEMATIC)
-                        shape = pymunk.Poly(body, vs)
-                        shape.friction = 1.0
-                        shape.density = 1.0
-                        shape.collision_type = ROBOT_COLLISION_TYPE
-                        self.pymunk_space.add(body, shape)
-                        body.angle = theta
-                        body.position = x, y
-                        body.velocity = vx, vy
-                        body.angular_velocity = omega
-                        # Add to robot hand
-                        self._state_obj_to_pymunk_body[obj] = body
-                        assert self.robot is not None, "Robot not initialized"
-                        self.robot.add_to_hand((body, [shape]), mass)
+                    # Held dynamic objects are treated as kinematic
+                    body = pymunk.Body(body_type=pymunk.Body.KINEMATIC)
+                    shape = pymunk.Poly(body, vs)
+                    shape.friction = 1.0
+                    shape.density = 1.0
+                    shape.mass = mass
+                    shape.collision_type = ROBOT_COLLISION_TYPE
+                    self.pymunk_space.add(body, shape)
+                    body.angle = theta
+                    body.position = x, y
+                    # Add to robot hand
+                    self._state_obj_to_pymunk_body[obj] = body
+                    assert self.robot is not None, "Robot not initialized"
+                    self.robot.add_to_hand((body, [shape]), mass)
 
     def _read_state_from_space(self) -> None:
         """Read the current state from the PyMunk space."""

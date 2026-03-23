@@ -21,9 +21,9 @@ from kinder.envs.dynamic2d.object_types import (
     LObjectType,
 )
 from kinder.envs.dynamic2d.utils import (
+    ARM_COLLISION_TYPE,
     DYNAMIC_COLLISION_TYPE,
     FINGER_COLLISION_TYPE,
-    ARM_COLLISION_TYPE,
     ROBOT_COLLISION_TYPE,
     STATIC_COLLISION_TYPE,
     KinRobot,
@@ -501,148 +501,148 @@ class ObjectCentricDynPushPullHook2DEnv(
         for obj in robot_objs:
             self._reset_robot_in_space(obj, state)
         for obj in other_objs:
-                # Everything else are rectangles in this environment.
-                x = state.get(obj, "x")
-                y = state.get(obj, "y")
-                width = state.get(obj, "width")
+            # Everything else are rectangles in this environment.
+            x = state.get(obj, "x")
+            y = state.get(obj, "y")
+            width = state.get(obj, "width")
+            theta = state.get(obj, "theta")
+            vx = state.get(obj, "vx")
+            vy = state.get(obj, "vy")
+            omega = state.get(obj, "omega")
+            held = state.get(obj, "held")
+            # Add static objects (table, walls)
+            if "wall" in obj.name:
+                # Static objects
+                # We use Pymunk kinematic bodies for static objects
+                height = state.get(obj, "height")
+                b2 = pymunk.Body(body_type=pymunk.Body.KINEMATIC)
+                vs = [
+                    (-width / 2, -height / 2),
+                    (-width / 2, height / 2),
+                    (width / 2, height / 2),
+                    (width / 2, -height / 2),
+                ]
+                shape = pymunk.Poly(b2, vs)
+                shape.friction = 1.0
+                shape.density = 1.0
+                shape.mass = 1.0
+                shape.elasticity = 0.99
+                shape.collision_type = STATIC_COLLISION_TYPE
+                self.pymunk_space.add(b2, shape)
+                b2.angle = theta
+                b2.position = x, y
+                self._state_obj_to_pymunk_body[obj] = b2
+            elif obj.is_instance(DynRectangleType):
+                # Target block and obstructions
+                assert not held, "Blocks cannot be held in this env"
+                height = state.get(obj, "height")
+                mass = state.get(obj, "mass")
+                vs = [
+                    (-width / 2, -height / 2),
+                    (-width / 2, height / 2),
+                    (width / 2, height / 2),
+                    (width / 2, -height / 2),
+                ]
+                # Dynamic objects
+                moment = pymunk.moment_for_box(mass, (width, height))
+                body = pymunk.Body()
+                shape = pymunk.Poly(body, vs)
+                shape.friction = 1.0
+                shape.density = 1.0
+                shape.collision_type = DYNAMIC_COLLISION_TYPE
+                shape.mass = mass
+                assert shape.body is not None
+                shape.body.moment = moment
+                shape.body.mass = mass
+                self.pymunk_space.add(body, shape)
+                body.angle = theta
+                body.position = x, y
+                body.velocity = vx, vy
+                body.angular_velocity = omega
+                self._state_obj_to_pymunk_body[obj] = body
+            elif obj.is_instance(HookType):
+                mass = state.get(obj, "mass")
+                x, y = state.get(obj, "x"), state.get(obj, "y")
                 theta = state.get(obj, "theta")
-                vx = state.get(obj, "vx")
-                vy = state.get(obj, "vy")
-                omega = state.get(obj, "omega")
-                held = state.get(obj, "held")
-                # Add static objects (table, walls)
-                if "wall" in obj.name:
-                    # Static objects
-                    # We use Pymunk kinematic bodies for static objects
-                    height = state.get(obj, "height")
-                    b2 = pymunk.Body(body_type=pymunk.Body.KINEMATIC)
-                    vs = [
-                        (-width / 2, -height / 2),
-                        (-width / 2, height / 2),
-                        (width / 2, height / 2),
-                        (width / 2, -height / 2),
-                    ]
-                    shape = pymunk.Poly(b2, vs)
-                    shape.friction = 1.0
-                    shape.density = 1.0
-                    shape.mass = 1.0
-                    shape.elasticity = 0.99
-                    shape.collision_type = STATIC_COLLISION_TYPE
-                    self.pymunk_space.add(b2, shape)
-                    b2.angle = theta
-                    b2.position = x, y
-                    self._state_obj_to_pymunk_body[obj] = b2
-                elif obj.is_instance(DynRectangleType):
-                    # Target block and obstructions
-                    assert not held, "Blocks cannot be held in this env"
-                    height = state.get(obj, "height")
-                    mass = state.get(obj, "mass")
-                    vs = [
-                        (-width / 2, -height / 2),
-                        (-width / 2, height / 2),
-                        (width / 2, height / 2),
-                        (width / 2, -height / 2),
-                    ]
+                l1 = state.get(obj, "length_side1")
+                l2 = state.get(obj, "length_side2")
+                w = state.get(obj, "width")
+                # Approximate moment of inertia for L-shape as two rectangles
+                vertices = [
+                    (0, 0),  # The right top vertex described in L101.
+                    (-l1, 0),
+                    (-l1, -w),
+                    (-w, -w),
+                    (-w, -l2),
+                    (0, -l2),
+                    (0, -w),
+                    (-w, 0),
+                ]
+                vs_l1 = (
+                    vertices[0],
+                    vertices[1],
+                    vertices[2],
+                    vertices[6],
+                )
+                vs_l2 = (
+                    vertices[4],
+                    vertices[5],
+                    vertices[0],
+                    vertices[7],
+                )
+                moment1 = pymunk.moment_for_poly(mass / 2, vs_l1)
+                moment2 = pymunk.moment_for_poly(mass / 2, vs_l2)
+                moment = moment1 + moment2
+                if not held:
                     # Dynamic objects
-                    moment = pymunk.moment_for_box(mass, (width, height))
-                    body = pymunk.Body()
-                    shape = pymunk.Poly(body, vs)
-                    shape.friction = 1.0
-                    shape.density = 1.0
-                    shape.collision_type = DYNAMIC_COLLISION_TYPE
-                    shape.mass = mass
-                    assert shape.body is not None
-                    shape.body.moment = moment
-                    shape.body.mass = mass
-                    self.pymunk_space.add(body, shape)
+                    body = pymunk.Body(mass=mass, moment=moment)
+                    shape1 = pymunk.Poly(body, vs_l1)
+                    shape2 = pymunk.Poly(body, vs_l2)
+                    shape1.friction = 1.0
+                    shape1.density = 1.0
+                    shape1.collision_type = DYNAMIC_COLLISION_TYPE
+                    shape1.mass = mass / 2
+                    shape2.friction = 1.0
+                    shape2.density = 1.0
+                    shape2.collision_type = DYNAMIC_COLLISION_TYPE
+                    shape2.mass = mass / 2
+                    assert shape1.body is not None
+                    assert shape2.body is not None
+                    shape1.body.moment = moment1
+                    shape1.body.mass = mass
+                    shape2.body.moment = moment2
+                    shape2.body.mass = mass
+                    self.pymunk_space.add(body, shape1, shape2)
                     body.angle = theta
                     body.position = x, y
                     body.velocity = vx, vy
                     body.angular_velocity = omega
                     self._state_obj_to_pymunk_body[obj] = body
-                elif obj.is_instance(HookType):
-                    mass = state.get(obj, "mass")
-                    x, y = state.get(obj, "x"), state.get(obj, "y")
-                    theta = state.get(obj, "theta")
-                    l1 = state.get(obj, "length_side1")
-                    l2 = state.get(obj, "length_side2")
-                    w = state.get(obj, "width")
-                    # Approximate moment of inertia for L-shape as two rectangles
-                    vertices = [
-                        (0, 0),  # The right top vertex described in L101.
-                        (-l1, 0),
-                        (-l1, -w),
-                        (-w, -w),
-                        (-w, -l2),
-                        (0, -l2),
-                        (0, -w),
-                        (-w, 0),
-                    ]
-                    vs_l1 = (
-                        vertices[0],
-                        vertices[1],
-                        vertices[2],
-                        vertices[6],
-                    )
-                    vs_l2 = (
-                        vertices[4],
-                        vertices[5],
-                        vertices[0],
-                        vertices[7],
-                    )
-                    moment1 = pymunk.moment_for_poly(mass / 2, vs_l1)
-                    moment2 = pymunk.moment_for_poly(mass / 2, vs_l2)
-                    moment = moment1 + moment2
-                    if not held:
-                        # Dynamic objects
-                        body = pymunk.Body(mass=mass, moment=moment)
-                        shape1 = pymunk.Poly(body, vs_l1)
-                        shape2 = pymunk.Poly(body, vs_l2)
-                        shape1.friction = 1.0
-                        shape1.density = 1.0
-                        shape1.collision_type = DYNAMIC_COLLISION_TYPE
-                        shape1.mass = mass / 2
-                        shape2.friction = 1.0
-                        shape2.density = 1.0
-                        shape2.collision_type = DYNAMIC_COLLISION_TYPE
-                        shape2.mass = mass / 2
-                        assert shape1.body is not None
-                        assert shape2.body is not None
-                        shape1.body.moment = moment1
-                        shape1.body.mass = mass
-                        shape2.body.moment = moment2
-                        shape2.body.mass = mass
-                        self.pymunk_space.add(body, shape1, shape2)
-                        body.angle = theta
-                        body.position = x, y
-                        body.velocity = vx, vy
-                        body.angular_velocity = omega
-                        self._state_obj_to_pymunk_body[obj] = body
-                    else:
-                        # Held dynamic objects are treated as kinematic.
-                        # Match on_gripper_grasp: do NOT set velocity from
-                        # state — the PD controller will set the correct
-                        # velocity on the next step.
-                        body = pymunk.Body(body_type=pymunk.Body.KINEMATIC)
-                        shape1 = pymunk.Poly(body, vs_l1)
-                        shape2 = pymunk.Poly(body, vs_l2)
-                        shape1.friction = 1.0
-                        shape1.density = 1.0
-                        shape1.collision_type = ARM_COLLISION_TYPE
-                        shape1.mass = mass / 2
-                        shape2.friction = 1.0
-                        shape2.density = 1.0
-                        shape2.mass = mass / 2
-                        shape2.collision_type = ARM_COLLISION_TYPE
-                        self.pymunk_space.add(body, shape1, shape2)
-                        body.angle = theta
-                        body.position = x, y
-                        # Add to robot hand
-                        self._state_obj_to_pymunk_body[obj] = body
-                        assert self.robot is not None, "Robot not initialized"
-                        self.robot.add_to_hand((body, [shape1, shape2]), mass)
                 else:
-                    assert "floor" in obj.name, "Unknown object type"
+                    # Held dynamic objects are treated as kinematic.
+                    # Match on_gripper_grasp: do NOT set velocity from
+                    # state — the PD controller will set the correct
+                    # velocity on the next step.
+                    body = pymunk.Body(body_type=pymunk.Body.KINEMATIC)
+                    shape1 = pymunk.Poly(body, vs_l1)
+                    shape2 = pymunk.Poly(body, vs_l2)
+                    shape1.friction = 1.0
+                    shape1.density = 1.0
+                    shape1.collision_type = ARM_COLLISION_TYPE
+                    shape1.mass = mass / 2
+                    shape2.friction = 1.0
+                    shape2.density = 1.0
+                    shape2.mass = mass / 2
+                    shape2.collision_type = ARM_COLLISION_TYPE
+                    self.pymunk_space.add(body, shape1, shape2)
+                    body.angle = theta
+                    body.position = x, y
+                    # Add to robot hand
+                    self._state_obj_to_pymunk_body[obj] = body
+                    assert self.robot is not None, "Robot not initialized"
+                    self.robot.add_to_hand((body, [shape1, shape2]), mass)
+            else:
+                assert "floor" in obj.name, "Unknown object type"
 
     def _read_state_from_space(self) -> None:
         """Read the current state from the PyMunk space."""

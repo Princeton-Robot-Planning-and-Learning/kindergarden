@@ -8,6 +8,8 @@ from typing import Any, Iterable
 import numpy as np
 import pymunk
 from numpy.typing import NDArray
+from prpl_utils.motion_planning import BiRRT
+from prpl_utils.utils import get_signed_angle_distance, wrap_angle
 from pymunk import Body, Shape
 from pymunk.vec2d import Vec2d
 from relational_structs import (
@@ -19,9 +21,6 @@ from tomsgeoms2d.structs import Rectangle
 from kinder.envs.dynamic2d.object_types import (
     KinRectangleType,
 )
-from prpl_utils.motion_planning import BiRRT
-from prpl_utils.utils import get_signed_angle_distance, wrap_angle
-
 from kinder.envs.kinematic2d.structs import (
     MultiBody2D,
     SE2Pose,
@@ -1122,7 +1121,9 @@ def get_suctioned_objects(
         if "held" in state.type_features[obj.type]:
             if state.get(obj, "held"):
                 world_to_obj = SE2Pose(
-                    x=state.get(obj, "x"), y=state.get(obj, "y"), theta=state.get(obj, "theta")
+                    x=state.get(obj, "x"),
+                    y=state.get(obj, "y"),
+                    theta=state.get(obj, "theta"),
                 )
                 gripper_to_obj = world_to_gripper.inverse * world_to_obj
                 suctioned_objects.append((obj, gripper_to_obj))
@@ -1148,8 +1149,8 @@ def snap_suctioned_objects(
 def get_held_objects(
     state: ObjectCentricState, robot: Object
 ) -> list[tuple[Object, SE2Pose]]:
-    """Find objects held by the KinRobot's gripper and return the transform
-    from the gripper tool-tip to each held object.
+    """Find objects held by the KinRobot's gripper and return the transform from the
+    gripper tool-tip to each held object.
 
     Unlike ``get_suctioned_objects`` (which checks a vacuum flag), this checks
     the ``held`` attribute on every non-robot object in the state.
@@ -1178,8 +1179,8 @@ def snap_held_objects(
     robot: Object,
     held_objs: list[tuple[Object, SE2Pose]],
 ) -> None:
-    """Update held-object poses in-place so they stay rigidly attached to the
-    robot's gripper tool-tip."""
+    """Update held-object poses in-place so they stay rigidly attached to the robot's
+    gripper tool-tip."""
     gripper_x, gripper_y = get_tool_tip_position(state, robot)
     gripper_theta = state.get(robot, "theta")
     world_to_gripper = SE2Pose(gripper_x, gripper_y, gripper_theta)
@@ -1233,8 +1234,8 @@ def run_motion_planning_for_kin_robot(
     if motion_border is not None:
         # NOTE: We might overwrite the motion border due to some
         # walls, e.g., pushpullhook2d.
-        # It is tricky to use Z-order for collision checking in 
-        # that environment, so we just use the motion border to 
+        # It is tricky to use Z-order for collision checking in
+        # that environment, so we just use the motion border to
         # set the sampling space for motion planning.
         x_lb = motion_border[0]
         x_ub = motion_border[1]

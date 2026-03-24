@@ -60,16 +60,17 @@ def is_corrupted(data: bytes) -> bool:
     return True
 
 
-def fix_file(data: bytearray) -> bytearray:
+def fix_file(data: bytes) -> bytearray:
     """Fix the string length byte and frame length header."""
-    data = bytearray(data)
-    actual = len(data) - 11
-    data[24] -= 1  # fix SHORT_BINUNICODE length for env_id value
-    data[3:11] = struct.pack("<Q", actual)  # fix frame length
-    return data
+    fixed = bytearray(data)
+    actual = len(fixed) - 11
+    fixed[24] -= 1  # fix SHORT_BINUNICODE length for env_id value
+    fixed[3:11] = struct.pack("<Q", actual)  # fix frame length
+    return fixed
 
 
 def main() -> None:
+    """Fix all corrupted demo pickle files in the demos directory."""
     files = sorted(glob.glob(str(DEMO_DIR / "**" / "*.p"), recursive=True))
     if not files:
         print(f"No demo files found in {DEMO_DIR}")

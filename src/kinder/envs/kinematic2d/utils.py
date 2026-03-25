@@ -4,7 +4,7 @@ from typing import Any, Iterable
 
 import numpy as np
 from numpy.typing import NDArray
-from prpl_utils.motion_planning import BiRRT
+from prpl_utils.motion_planning import BiRRT, MotionPlanningMetrics
 from prpl_utils.utils import get_signed_angle_distance, wrap_angle
 from relational_structs import (
     Array,
@@ -280,7 +280,7 @@ def run_motion_planning_for_crv_robot(
     num_attempts: int = 10,
     num_iters: int = 100,
     smooth_amt: int = 50,
-) -> list[SE2Pose] | None:
+) -> tuple[list[SE2Pose] | None, MotionPlanningMetrics]:
     """Run motion planning in an environment with a CRV action space."""
     if static_object_body_cache is None:
         static_object_body_cache = {}
@@ -399,7 +399,8 @@ def run_motion_planning_for_crv_robot(
     )
 
     initial_pose = get_se2_pose(state, robot)
-    return birrt.query(initial_pose, target_pose)
+    plan, metrics = birrt.query(initial_pose, target_pose)
+    return plan, metrics
 
 
 def crv_pose_plan_to_action_plan(

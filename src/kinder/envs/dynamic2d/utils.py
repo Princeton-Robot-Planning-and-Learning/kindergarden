@@ -8,7 +8,7 @@ from typing import Any, Iterable
 import numpy as np
 import pymunk
 from numpy.typing import NDArray
-from prpl_utils.motion_planning import BiRRT
+from prpl_utils.motion_planning import BiRRT, MotionPlanningMetrics
 from prpl_utils.utils import get_signed_angle_distance, wrap_angle
 from pymunk import Body, Shape
 from pymunk.vec2d import Vec2d
@@ -1202,7 +1202,7 @@ def run_motion_planning_for_kin_robot(
     num_iters: int = 100,
     smooth_amt: int = 50,
     motion_border: list[float] | None = None,
-) -> list[SE2Pose] | None:
+) -> tuple[list[SE2Pose] | None, MotionPlanningMetrics]:
     """Run BiRRT motion planning for a KinRobot to reach ``target_pose``.
 
     This plans a collision-free SE2 path for the robot base, snapping any
@@ -1322,4 +1322,5 @@ def run_motion_planning_for_kin_robot(
     )
 
     initial_pose = get_se2_pose(state, robot)
-    return birrt.query(initial_pose, target_pose)
+    plan, metrics = birrt.query(initial_pose, target_pose)
+    return plan, metrics

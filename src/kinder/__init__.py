@@ -17,6 +17,11 @@ from gymnasium.envs.registration import (  # pylint: disable=wrong-import-positi
     register,
 )
 
+from kinder.wrappers import (  # noqa: E402  # pylint: disable=wrong-import-position,unused-import
+    NoisyAction,
+    NoisyObservation,
+)
+
 # Registry of environment classes with their metadata
 ENV_CLASSES: dict[str, dict[str, Any]] = {}
 

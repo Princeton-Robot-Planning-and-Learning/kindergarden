@@ -98,6 +98,21 @@ object_centric_obs = env.observation_space.devectorize(vec_obs)
 recovered_vec_obs = env.observation_space.vectorize(object_centric_obs)
 ```
 
+### Noisy Observation and Action Wrappers
+
+KinDER provides Gymnasium-compatible wrappers for adding stochasticity to observations and actions:
+
+```python
+import kinder
+kinder.register_all_environments()
+env = kinder.make("kinder/Obstruction2D-o3-v0")
+env = kinder.NoisyObservation(env, noise_std=0.05)  # Gaussian noise on observations
+env = kinder.NoisyAction(env, noise_std=0.01)        # Gaussian noise on actions (clipped to bounds)
+obs, info = env.reset(seed=42)
+```
+
+`noise_std` can be a scalar (uniform across dimensions) or a per-dimension array. `NoisyAction` automatically clips noisy actions to the action space bounds.
+
 ## Quick Environment Reference
 
 | Environment | Category | Example Environment ID |

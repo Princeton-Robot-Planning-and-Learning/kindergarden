@@ -45,6 +45,9 @@ class NoisyObservation(gymnasium.ObservationWrapper):
             loc=0.0, scale=self._noise_std, size=observation.shape
         )
         noisy_obs = observation + noise
+        noisy_obs = np.clip(
+            noisy_obs, self.observation_space.low, self.observation_space.high
+        )
         return noisy_obs.astype(observation.dtype)
 
 

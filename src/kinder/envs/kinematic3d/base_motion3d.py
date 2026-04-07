@@ -188,6 +188,186 @@ class BaseMotion3DEnv(ConstantObjectKinDEREnv):
         # pylint: disable=line-too-long
         return """A very simple environment where only base motion planning is needed to reach a goal."""
 
+    def _create_in_context_examples(self) -> str:
+        """Create concrete examples showing strategies for solving the BaseMotion3D
+        task.
+
+        Returns formatted examples with actual object positions and action sequences.
+        """
+        # pylint: disable=line-too-long
+        return """
+**Example 1: Direct Path to Target**
+
+Initial State:
+- Robot: base at (0.0, 0.0, 0.0), orientation 0°
+- Target: position (1.0, 0.5, 0.2), radius 0.05m
+
+Goal: Move robot base to within 0.05m of target position (1.0, 0.5)
+
+Strategy: Navigate directly to target using collision-free motion planning
+
+High-Level Plan:
+1. move_base_to_target(robot, target, params=[])
+   - Navigate robot base from (0.0, 0.0, 0.0) to (1.0, 0.5, 0.2)
+   - No parameters needed (params=[])
+   - Uses PyBullet motion planning internally to compute collision-free path
+   - Plans sequence of base poses (x, y, theta) as waypoints
+   - Controller executes waypoint trajectory:
+     - Computes velocities [dx_base, dy_base, dtheta_base] for base motion
+     - Maintains arm joints [7 values] and gripper [1 value] at fixed configuration
+     - Action space: [dx_base, dy_base, dtheta_base, joint1, ..., joint7, gripper] (11D)
+   - Simple case: path to (1.0, 0.5) with no obstacles
+
+Goal Reached:
+- Distance between robot base and target < 0.05m ✓
+- Efficient navigation with automatic path planning ✓
+
+Key Insights:
+- move_base_to_target handles full motion planning pipeline internally
+- No parameters required (empty tuple params=[])
+- Controllers track planned waypoints via low-level actions
+- Base controller maintains arm/gripper configuration during navigation
+
+**Example 2: Target Behind Robot**
+
+Initial State:
+- Robot: base at (1.0, 1.0, 0.0), orientation 0° (facing right)
+- Target: position (-0.5, 0.5, 0.2), radius 0.05m
+
+Goal: Move robot base to within 0.05m of target position (-0.5, 0.5)
+
+Strategy: Use motion planner to compute path (may include rotation/reversal)
+
+High-Level Plan:
+1. move_base_to_target(robot, target, params=[])
+   - Navigate from (1.0, 1.0, 0.0) to (-0.5, 0.5, 0.2)
+   - Motion planner computes efficient path:
+     - Option A: Move backwards along trajectory
+     - Option B: Rotate then drive forward
+     - Option C: Combined motion optimizing smoothness
+   - Controller executes planned waypoints
+   - Base actions [dx_base, dy_base, dtheta_base] implement trajectory
+   - Distance: √((1.0-(-0.5))² + (1.0-0.5)²) ≈ 1.58m
+
+Goal Reached:
+- Distance between robot base and target < 0.05m ✓
+- Backward/rotational navigation handled automatically ✓
+
+Key Insights:
+- Motion planner handles complex scenarios (backward motion, rotation)
+- Single skill call abstracts trajectory details
+- Controller ensures smooth base velocity profiles
+- No manual waypoint specification needed
+
+**Example 3: Diagonal Movement**
+
+Initial State:
+- Robot: base at (0.0, 0.0, 0.0), orientation 0°
+- Target: position (0.8, 0.6, 0.2), radius 0.05m
+
+Goal: Move robot base to within 0.05m of target position (0.8, 0.6)
+
+Strategy: Use motion planning for efficient diagonal path
+
+High-Level Plan:
+1. move_base_to_target(robot, target, params=[])
+   - Navigate from (0.0, 0.0, 0.0) to (0.8, 0.6, 0.2)
+   - Distance: √(0.8² + 0.6²) = 1.0m at angle ≈ 36.87°
+   - Motion planner computes diagonal trajectory:
+     - May rotate towards target direction initially
+     - Drive along optimal path
+     - Adjust orientation as needed for smooth motion
+   - Controller executes waypoint sequence:
+     - [dx_base, dy_base] follow planned trajectory
+     - [dtheta_base] adjusts orientation
+   - PyBullet motion planner ensures kinematic feasibility
+
+Goal Reached:
+- Distance between robot base and target < 0.05m ✓
+- Diagonal path executed smoothly ✓
+- Combined translation handled automatically ✓
+
+Key Insights:
+- Motion planning automatically computes optimal paths
+- Base controller can execute diagonal trajectories
+- No explicit waypoint calculation required by user
+- Efficient motion in 2D workspace
+
+**Example 4: Precise Positioning**
+
+Initial State:
+- Robot: base at (0.5, 0.5, 0.0), orientation 0° (facing right)
+- Target: position (0.5, 1.5, 0.2), radius 0.05m
+
+Goal: Move robot base to within 0.05m of target position (0.5, 1.5)
+
+Note: Robot orientation does not affect goal condition, only base position matters
+
+Strategy: Motion planning with position constraint
+
+High-Level Plan:
+1. move_base_to_target(robot, target, params=[])
+   - Navigate from (0.5, 0.5, 0°) to (0.5, 1.5, 0.2)
+   - Straight-line motion in y-direction (1.0m)
+   - Motion planner computes direct path:
+     - Robot may maintain current orientation (0°) 
+     - Or adjust orientation for smoother dynamics
+   - Controller executes waypoints to reach target
+   - Final position: (0.5, 1.5) within tolerance
+
+Goal Reached:
+- Distance between robot base and target < 0.05m ✓
+- Direct path utilized ✓
+
+Key Insights:
+- Goal only checks base position distance, not orientation
+- Motion planner optimizes for reaching target position
+- May or may not adjust orientation depending on dynamics
+- Single skill handles complete navigation
+
+**General Parameterized Skill Interpretation:**
+
+Skill:
+- move_base_to_target(robot, target, params=[]):
+  - Navigate robot base from current position to target position
+  - params=[] (empty tuple): no additional parameters needed
+  - Target specifies desired position (x, y, z)
+  - Uses PyBullet motion planning for collision-free path computation
+
+Motion Planning:
+- Computes sequence of waypoints in SE(2): [(x₁, y₁, θ₁), (x₂, y₂, θ₂), ..., (xₙ, yₙ, θₙ)]
+- Considers robot kinematics (differential drive or holonomic base)
+- Ensures collision-free trajectory in workspace (though no obstacles in this environment)
+- Optimizes for smoothness and efficiency
+
+Controller Execution:
+- Tracks planned waypoints using low-level base actions
+- Action space: [dx_base, dy_base, dtheta_base, joint1, ..., joint7, gripper]
+  - Indices 0-2: Base velocities [dx_base, dy_base, dtheta_base] for translation and rotation
+  - Indices 3-9: Joint angles [joint1, ..., joint7] for 7-DOF arm (held fixed during base motion)
+  - Index 10: Gripper state (held fixed during base motion)
+- Base controller modulates [dx_base, dy_base, dtheta_base] to follow waypoints
+- Arm joints and gripper remain at home/safe configuration during navigation
+
+Goal Conditions:
+- Position error: ||base_position - target_position|| < 0.05m (tolerance)
+- Orientation not constrained (goal only checks position distance)
+- Robot base must be within threshold distance of target
+
+Key Differences from Motion2D:
+- 3D environment with full robot (base + arm + gripper)
+- Uses PyBullet physics simulation for motion planning
+- Base is circular (not point mass with radius in 2D)
+- Action space includes arm joints and gripper (though not actuated for base motion task)
+- No obstacles in BaseMotion3D environment (unlike Motion2D)
+
+Implementation Notes:
+- Parameterized skill abstracts away low-level motion planning details
+- Users only specify target position, planner handles trajectory generation
+- Suitable for mobile manipulation tasks where base positioning is critical step
+- Foundation for more complex tasks involving arm manipulation after base motion
+"""
+
     def _create_variant_markdown_description(self) -> str:
         # pylint: disable=line-too-long
         return "This environment has only one variant."

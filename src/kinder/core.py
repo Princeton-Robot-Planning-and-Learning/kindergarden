@@ -244,6 +244,7 @@ class ConstantObjectKinDEREnv(gymnasium.Env[NDArray[Any], NDArray[Any]]):
         obs_md = self.observation_space.create_markdown_description()
         act_md = self.action_space.create_markdown_description()
         env_md = self._create_env_markdown_description()
+        in_context_examples_md = self._create_in_context_examples()
         reward_md = self._create_reward_markdown_description()
         references_md = self._create_references_markdown_description()
         variant_md = self._create_variant_markdown_description()
@@ -256,6 +257,7 @@ class ConstantObjectKinDEREnv(gymnasium.Env[NDArray[Any], NDArray[Any]]):
                 "description": env_md,
                 "observation_space_description": obs_md,
                 "action_space_description": act_md,
+                "in_context_examples": in_context_examples_md,
                 "reward_description": reward_md,
                 "references": references_md,
                 "variant_description": variant_md,
@@ -274,6 +276,10 @@ class ConstantObjectKinDEREnv(gymnasium.Env[NDArray[Any], NDArray[Any]]):
         self, exemplar_state: ObjectCentricState
     ) -> list[str]:
         """The ordered names of the constant objects extracted from the observations."""
+
+    @abc.abstractmethod
+    def _create_in_context_examples(self) -> str:
+        """Create in-context examples for the environment."""
 
     @abc.abstractmethod
     def _create_env_markdown_description(self) -> str:

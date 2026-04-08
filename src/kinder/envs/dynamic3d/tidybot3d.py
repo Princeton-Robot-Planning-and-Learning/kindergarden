@@ -823,6 +823,10 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
         # Initialize the robot pose
         self._initialize_robot_pose()
 
+        # step several times to get the initial state
+        for _ in range(10):
+            self._robot_env.step(np.zeros(TidyBot3DRobotActionSpace().shape))
+
         # Get object-centric observation
         self._current_state = self._get_object_centric_state()
 

@@ -516,3 +516,17 @@ This encourages the robot to efficiently clear obstructions and place the target
         # pylint: disable=line-too-long
         return """Similar environments have been used many times, especially in the task and motion planning literature. We took inspiration especially from the "1D Continuous TAMP" environment in [PDDLStream](https://github.com/caelan/pddlstream).
 """
+
+    def _create_in_context_examples(self) -> str:
+        """Create in-context examples for the environment."""
+        return """**Example: Navigate Around Obstacles to Reach Target**
+
+Initial State:
+- Robot: base at (0.0, 0.0, 0.0)
+- Target: position (2.0, 2.0, 0.5), radius 0.1m
+- Obstacles: multiple red boxes in workspace
+
+Goal: Reach target while avoiding collisions.
+
+Steps: Plan collision-free path through workspace, execute.
+"""

@@ -403,3 +403,18 @@ The robot has a movable circular base and a retractable arm with a rectangular v
 
     def _create_references_markdown_description(self) -> str:
         return 'Similar environments have been considered by many others, especially in the task and motion planning literature, e.g., "Combined Task and Motion Planning Through an Extensible Planner-Independent Interface Layer" (Srivastava et al., ICRA 2014).\n'  # pylint: disable=line-too-long
+    def _create_in_context_examples(self) -> str:
+        """Create in-context examples for the environment."""
+        # pylint: disable=line-too-long
+        return """**Example: Retrieving Target Block Amidst Clutter**
+
+Initial State:
+- Robot: position (0.2, 0.2)
+- Target block (purple): position (1.8, 1.8)
+- Obstructions: 5 red rectangular obstacles
+- Target region (brown): position (1.5, 2.2)
+
+Goal: Pick target block and place in target region.
+
+Steps: Navigate around obstructions, grasp target, transport to goal.
+"""

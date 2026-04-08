@@ -675,3 +675,18 @@ All objects include physics properties like mass, moment of inertia, and color i
     def _create_references_markdown_description(self) -> str:
         # pylint: disable=line-too-long
         return """This is loosely inspired by the Kitchen2D environment from "Active model learning and diverse action sampling for task and motion planning" (Wang et al., 2018)."""
+
+    def _create_in_context_examples(self) -> str:
+        """Create in-context examples for the environment."""
+        # pylint: disable=line-too-long
+        return """**Example: Scoop and Transfer Small Objects**
+
+Initial State:
+- Robot: position (0.5, 2.0)
+- Small objects: scattered on left side of wall
+- Middle wall: divides left and right regions
+
+Goal: Transfer 50% of small objects to the right side.
+
+Steps: Navigate, scoop objects, transport across wall, deposit on right.
+"""

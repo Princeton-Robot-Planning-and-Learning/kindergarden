@@ -196,3 +196,17 @@ class Ground3DEnv(ConstantObjectKinDEREnv):
         """Create references description."""
         # pylint: disable=line-too-long
         return """This is a very common kind of environment."""
+
+    def _create_in_context_examples(self) -> str:
+        """Create in-context examples for the environment."""
+        return """**Example: Place Cube on Ground Target**
+
+Initial State:
+- Robot: base at (0.0, 0.0, 0.0), arm at home
+- Cube: position (0.5, 0.0, 0.025)
+- Ground target: position (1.0, 1.0), blue circle
+
+Goal: Pick cube and place it on ground target.
+
+Steps: Navigate, grasp cube, transport to target, place on ground.
+"""

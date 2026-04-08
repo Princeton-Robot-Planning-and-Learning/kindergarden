@@ -1318,7 +1318,8 @@ The robot can control:
         assert isinstance(env, ObjectCentricTidyBot3DEnv)
 
         # Determine task type from task_config_path
-        # Extract task name from path (e.g., "SweepIntoDrawer3D" from ".../SweepIntoDrawer3D/SweepIntoDrawer3D-o5.json")
+        # Extract task name from path: e.g., "SweepIntoDrawer3D" from
+        # ".../SweepIntoDrawer3D/SweepIntoDrawer3D-o5.json"
         task_path = Path(env.task_config_path)
         task_name = (
             task_path.parent.name
@@ -1948,4 +1949,16 @@ Currently returns a small negative reward (-0.01) per timestep to encourage expl
     def _create_references_markdown_description(self) -> str:
         """Create references description."""
         return """TODO
+"""
+
+    def _create_in_context_examples(self) -> str:
+        """Create in-context examples for the environment."""
+        return """**Example: Simple Manipulation Task**
+
+Initial State:
+- Robot: RBY1A with closed gripper
+
+Goal: Execute task-specific manipulation.
+
+Steps: Identify targets, plan paths, grasp, transport, place.
 """

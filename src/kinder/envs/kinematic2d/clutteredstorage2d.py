@@ -415,3 +415,17 @@ The robot has a movable circular base and a retractable arm with a rectangular v
 
     def _create_references_markdown_description(self) -> str:
         return "Similar environments have been considered by many others, especially in the task and motion planning literature.\n"  # pylint: disable=line-too-long
+
+    def _create_in_context_examples(self) -> str:
+        """Create in-context examples for the environment."""
+        return """**Example: Store Blocks in Shelf**
+
+Initial State:
+- Robot: position (0.2, 0.2)
+- Blocks: scattered in workspace
+- Shelf: storage region
+
+Goal: Pick blocks and store in shelf.
+
+Steps: Navigate, grasp blocks, transport to shelf, place inside.
+"""

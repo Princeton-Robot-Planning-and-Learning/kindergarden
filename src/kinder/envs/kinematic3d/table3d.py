@@ -295,3 +295,17 @@ class Table3DEnv(ConstantObjectKinDEREnv):
         """Create references description."""
         # pylint: disable=line-too-long
         return """This is a very common kind of environment."""
+
+    def _create_in_context_examples(self) -> str:
+        """Create in-context examples for the environment."""
+        return """**Example: Place Cubes on Table Surface**
+
+Initial State:
+- Robot: base at (0.0, 0.0, 0.0)
+- Table: rectangular surface at (0.6, 0.0, 0.2)
+- Cubes: multiple cubes on ground surface
+
+Goal: Pick cubes and place them on table surface.
+
+Steps: Navigate, approach, grasp, transport, place on table.
+"""

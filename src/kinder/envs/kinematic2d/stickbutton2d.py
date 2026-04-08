@@ -360,34 +360,13 @@ class StickButton2DEnv(ConstantObjectKinDEREnv):
 
     def _create_env_markdown_description(self) -> str:
         num_buttons = len(self._constant_objects) - 2
-        # pylint: disable=line-too-long
-        return f"""A 2D environment where the goal is to touch all buttons, possibly by using a stick for buttons that are out of the robot's direct reach.
-
-In this environment, there are always {num_buttons} buttons.
-
-The robot has a movable circular base and a retractable arm with a rectangular vacuum end effector.
-"""
-
-    #         return f"""A 2D environment where the goal is to press all {num_buttons} buttons by bringing the robot or stick into contact with them. Buttons are located throughout a {self._object_centric_env.config.world_max_x}m × {self._object_centric_env.config.world_max_y}m world.
-
-    # **Robot Description:**
-    # The robot has a circular base (radius {self._object_centric_env.config.robot_base_radius}m) that can translate in x and y directions and rotate. Attached to the base is a retractable arm that extends radially from the base center. The arm length ranges from {self._object_centric_env.config.robot_base_radius}m (fully retracted, flush with base) to {self._object_centric_env.config.robot_arm_length}m (fully extended). At the arm's end is a small rectangular vacuum gripper (width {self._object_centric_env.config.robot_gripper_width}m, height {self._object_centric_env.config.robot_gripper_height}m) that can grasp and hold objects when the vacuum is activated (vacuum value > 0.5).
-
-    # **Action Space:**
-    # Actions are 5D continuous vectors [dx, dy, dtheta, darm, vacuum] representing:
-    # - dx, dy: Base displacement in x and y (range ±{self._object_centric_env.config.max_dx}m per step)
-    # - dtheta: Angular rotation (range ±{np.rad2deg(self._object_centric_env.config.max_dtheta):.2f}° per step)
-    # - darm: Arm extension/retraction (range ±{self._object_centric_env.config.max_darm}m per step)
-    # - vacuum: Gripper state (0.0 = off, 1.0 = on; objects grasp when > 0.5)
-
-    # **Objects:**
-    # - **Stick**: A vertical rectangular tool (width {self._object_centric_env.config.stick_shape[0]}m, height {self._object_centric_env.config.stick_shape[1]}m) that can be grasped by the robot's vacuum gripper. When grasped, the stick moves rigidly with the robot and maintains its relative pose to the gripper. The stick acts as an extension tool to reach distant buttons.
-    # - **Buttons**: Circular targets (radius {self._object_centric_env.config.button_radius}m) scattered throughout the world. Buttons turn green when pressed (contacted by robot or stick) and red when unpressed.
-    # - **Table**: A large static rectangular surface occupying the upper half of the world (y ∈ [{self._object_centric_env.config.world_min_y + (self._object_centric_env.config.world_max_y - self._object_centric_env.config.world_min_y) / 2}, {self._object_centric_env.config.world_max_y}]m). Buttons on the table cannot be reached by the robot's base or gripper alone due to height constraints, requiring the stick as a tool.
-
-    # **Strategy:**
-    # To solve this task, the robot must: (1) navigate to the stick, (2) align its gripper with the stick's center, (3) activate the vacuum to grasp the stick, (4) maneuver the grasped stick to contact each unpressed button, and (5) for floor-level buttons, optionally press them directly with the robot base. The stick enables reaching buttons on the elevated table surface that would otherwise be inaccessible.
-    # """
+        return (
+            f"A 2D environment where the goal is to touch all buttons, possibly by "
+            f"using a stick for buttons that are out of the robot's direct reach.\n\n"
+            f"In this environment, there are always {num_buttons} buttons.\n\n"
+            f"The robot has a movable circular base and a retractable arm with a "
+            f"rectangular vacuum end effector.\n"
+        )
 
     def _create_in_context_examples(self) -> str:
         """Create concrete examples showing strategies for solving the StickButton2D

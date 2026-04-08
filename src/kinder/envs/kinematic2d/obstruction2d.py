@@ -440,3 +440,17 @@ The robot has a movable circular base and a retractable arm with a rectangular v
         # pylint: disable=line-too-long
         return """Similar environments have been used many times, especially in the task and motion planning literature. We took inspiration especially from the "1D Continuous TAMP" environment in [PDDLStream](https://github.com/caelan/pddlstream).
 """
+    def _create_in_context_examples(self) -> str:
+        """Create in-context examples for the environment."""
+        return """**Example: Push Target Block onto Target Surface**
+
+Initial State:
+- Robot: position (0.3, 0.5), angle 0
+- Target surface: position (1.8, 0.5), purple
+- Target block: position (2.0, 0.5), purple
+- Obstruction: red rectangular block at (1.2, 0.5)
+
+Goal: Push target block onto the target surface.
+
+Steps: Navigate around obstruction, push block to target surface.
+"""

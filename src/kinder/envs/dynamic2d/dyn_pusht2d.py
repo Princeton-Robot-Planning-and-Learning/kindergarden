@@ -581,3 +581,17 @@ These thresholds ensure the T-block is precisely aligned with the goal pose.
         """Create references description."""
         # pylint: disable=line-too-long
         return """This implementation is based on the Push-T environment introduced in the Diffusion Policy paper (Chi et al., 2023)."""
+
+    def _create_in_context_examples(self) -> str:
+        """Create in-context examples for the environment."""
+        return """**Example: Push T-block to Goal Pose**
+
+Initial State:
+- Robot (dot): position (1.0, 1.0)
+- T-block: position (2.5, 2.5), angle -π
+- Goal: T-block at position (4.0, 4.0), angle 0
+
+Goal: Push the T-block to align with goal pose within thresholds.
+
+Steps: Navigate robot, contact T-block, apply pushing forces.
+"""

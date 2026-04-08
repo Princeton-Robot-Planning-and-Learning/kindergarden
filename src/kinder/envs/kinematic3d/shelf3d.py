@@ -299,3 +299,17 @@ class Shelf3DEnv(ConstantObjectKinDEREnv):
         """Create references description."""
         # pylint: disable=line-too-long
         return """This is a very common kind of environment. The background is adapted from the [Replica dataset](https://arxiv.org/abs/1906.05797) (Straub et al., 2019)."""
+
+    def _create_in_context_examples(self) -> str:
+        """Create in-context examples for the environment."""
+        return """**Example: Place Objects on Shelf**
+
+Initial State:
+- Robot: base at (0.0, 0.0, 0.0)
+- Shelf: multiple levels at different heights
+- Objects: cubes on ground
+
+Goal: Pick objects and place them on shelf levels.
+
+Steps: Approach, grasp, transport, place on shelf, release.
+"""

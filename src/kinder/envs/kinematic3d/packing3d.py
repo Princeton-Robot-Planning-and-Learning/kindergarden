@@ -817,3 +817,16 @@ This encourages the robot to efficiently pack the parts into the rack while avoi
         # pylint: disable=line-too-long
         return """Packing tasks are common in robotics and automated warehousing literature. This environment is inspired by standard manipulation benchmarks and simple bin-packing problems; it’s intended as a deterministic, physics-based testbed for pick-and-place planning and task-and-motion planning approaches.
 """
+    def _create_in_context_examples(self) -> str:
+        """Create in-context examples for the environment."""
+        return """**Example: Pack Cubes into Rack**
+
+Initial State:
+- Robot: base at (0.0, 0.0, 0.0)
+- Cubes: multiple cubes scattered in workspace
+- Rack: target storage surface
+
+Goal: Pack all cubes into the rack.
+
+Steps: Grasp each cube, transport to rack, place on rack surface.
+"""

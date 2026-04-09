@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from kinder.envs.dynamic3d.tidybot3d import ObjectCentricTidyBot3DEnv
+from kinder.envs.dynamic3d.envs import ObjectCentricTidyBot3DEnv
 
 
 def test_tidybot_cupboard_real_o1_goals():

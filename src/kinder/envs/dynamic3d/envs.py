@@ -1,4 +1,4 @@
-"""TidyBot 3D environment wrapper for KinDER."""
+"""Dynamic 3D environment wrapper for KinDER."""
 
 import abc
 import json

@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 import kinder
-from kinder.envs.dynamic3d.tidybot3d import ObjectCentricTidyBot3DEnv
+from kinder.envs.dynamic3d.envs import ObjectCentricTidyBot3DEnv
 
 
 def test_tidybot_lab2_fit_blocks_in_cupboard_goals():

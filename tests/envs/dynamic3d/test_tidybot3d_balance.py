@@ -14,7 +14,7 @@ from relational_structs import Object, ObjectCentricState
 
 import kinder
 from kinder.envs.dynamic3d.objects.generated_objects import GeneratedSeesaw
-from kinder.envs.dynamic3d.tidybot3d import ObjectCentricTidyBot3DEnv
+from kinder.envs.dynamic3d.envs import ObjectCentricTidyBot3DEnv
 
 
 def _get_balance_env() -> ObjectCentricTidyBot3DEnv:

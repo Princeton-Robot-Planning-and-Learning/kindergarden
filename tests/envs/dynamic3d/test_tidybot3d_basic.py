@@ -7,7 +7,7 @@ import numpy as np
 from relational_structs import ObjectCentricState
 
 from kinder.envs.dynamic3d.object_types import MujocoObjectTypeFeatures
-from kinder.envs.dynamic3d.tidybot3d import ObjectCentricTidyBot3DEnv
+from kinder.envs.dynamic3d.envs import ObjectCentricTidyBot3DEnv
 
 # Path to mimiclabs scenes for skip condition
 # Test file is at: kinder/tests/envs/dynamic3d/test_tidybot3d_basic.py

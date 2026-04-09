@@ -413,7 +413,7 @@ def _register_dynamic3d() -> None:
             variant_id = f"kinder/{robot}-{task_cfg}-v0"
             _register(
                 id=variant_id,
-                entry_point=f"kinder.envs.dynamic3d.tidybot3d:{robot}Env",
+                entry_point=f"kinder.envs.dynamic3d.envs:{robot}Env",
                 kwargs={
                     "scene_type": scene_type,
                     "num_objects": num_task_objects,
@@ -441,7 +441,7 @@ def _register_dynamic3d() -> None:
                     variant_id = f"kinder/{folder_name}-{task_cfg}-v0"
                     _register(
                         id=variant_id,
-                        entry_point=f"kinder.envs.dynamic3d.tidybot3d:{robot}Env",
+                        entry_point=f"kinder.envs.dynamic3d.envs:{robot}Env",
                         kwargs={
                             "task_config_path": str(task_config),
                             "scene_render_camera": "task_view",
@@ -457,7 +457,7 @@ def _register_dynamic3d() -> None:
         for robot, variant_ids in robot_variant_ids.items():
             _register_env_class(
                 class_name=class_name,
-                entry_point=f"kinder.envs.dynamic3d.tidybot3d:{robot}Env",
+                entry_point=f"kinder.envs.dynamic3d.envs:{robot}Env",
                 category="Dynamic3D",
                 variant_ids=variant_ids,
             )

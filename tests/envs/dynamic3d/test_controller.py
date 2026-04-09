@@ -6,7 +6,7 @@ torques and that the arm behaves reasonably under control.
 
 import numpy as np
 
-from kinder.envs.dynamic3d.tidybot3d import (
+from kinder.envs.dynamic3d.envs import (
     ObjectCentricTidyBot3DEnv,
     TidyBot3DConfig,
 )

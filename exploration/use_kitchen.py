@@ -5,6 +5,7 @@ Usage:
 """
 from __future__ import annotations
 
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -293,6 +294,120 @@ p.setGravity(0, 0, -9.81, physicsClientId=oc_env.physics_client_id)
 for cube_id in oc_env._cubes.values():
     p.changeDynamics(cube_id, -1, mass=0.1, physicsClientId=oc_env.physics_client_id)
 
+# ── Camera controls ────────────────────────────────────────────────────────────
+# Start early so controls work even during planning.
+from pynput import keyboard, mouse as pynput_mouse  # noqa: E402
+
+CAMERA_SPEED  = 0.05  # m per tick for arrow keys
+ROT_SCALE_DEG = 0.3   # degrees per pixel for right-click drag
+
+pressed: set = set()
+done = False
+
+# Right-click rotation state (updated by mouse listener, consumed by camera thread).
+_rot_lock = threading.Lock()
+_pending_rot_px = [0.0, 0.0]  # [dx, dy] accumulated since last camera tick
+_rmb_held = False
+_last_mouse_xy: tuple[int, int] | None = None
+
+
+def on_press(key):
+    pressed.add(key)
+    if key == keyboard.Key.enter:
+        global done
+        done = True
+        return False
+
+
+def on_release(key):
+    pressed.discard(key)
+
+
+def on_mouse_click(x, y, button, is_pressed):
+    global _rmb_held, _last_mouse_xy
+    if button == pynput_mouse.Button.right:
+        _rmb_held = is_pressed
+        _last_mouse_xy = (x, y) if is_pressed else None
+
+
+def on_mouse_move(x, y):
+    global _last_mouse_xy
+    if not _rmb_held or _last_mouse_xy is None:
+        return
+    dx = x - _last_mouse_xy[0]
+    dy = y - _last_mouse_xy[1]
+    _last_mouse_xy = (x, y)
+    with _rot_lock:
+        _pending_rot_px[0] += dx
+        _pending_rot_px[1] += dy
+
+
+
+def _camera_thread():
+    """Continuously update the camera based on arrow-key panning and right-click rotation."""
+    while not done:
+        cam = p.getDebugVisualizerCamera(physicsClientId=oc_env.physics_client_id)
+        distance, yaw, pitch, target = cam[10], cam[8], cam[9], list(cam[11])
+
+        yaw_rad = np.deg2rad(yaw)
+        forward = np.array([-np.cos(yaw_rad), -np.sin(yaw_rad), 0.0])
+        right   = np.array([-np.sin(yaw_rad),  np.cos(yaw_rad), 0.0])
+
+        # Arrow-key pan.
+        move = np.zeros(3)
+        for k in list(pressed):
+            if k == keyboard.Key.up:
+                move += right
+            elif k == keyboard.Key.down:
+                move -= right
+            elif k == keyboard.Key.right:
+                move -= forward
+            elif k == keyboard.Key.left:
+                move += forward
+        if np.any(move):
+            target = [target[i] + CAMERA_SPEED * move[i] / np.linalg.norm(move) for i in range(3)]
+
+        # Right-click drag rotation: rotate around the camera's own position.
+        with _rot_lock:
+            pdx, pdy = _pending_rot_px
+            _pending_rot_px[0] = 0.0
+            _pending_rot_px[1] = 0.0
+
+        if pdx or pdy:
+            # Current camera position in world space.
+            pr = np.deg2rad(pitch)
+            yr = np.deg2rad(yaw)
+            look = np.array([np.cos(pr) * np.cos(yr),
+                             np.cos(pr) * np.sin(yr),
+                             -np.sin(pr)])
+            cam_pos = np.array(target) + distance * look
+
+            # Apply rotation deltas.
+            yaw   += pdx * ROT_SCALE_DEG
+            pitch  = float(np.clip(pitch + pdy * ROT_SCALE_DEG, -89, 89))
+
+            # Recompute target so camera position stays fixed.
+            new_pr = np.deg2rad(pitch)
+            new_yr = np.deg2rad(yaw)
+            new_look = np.array([np.cos(new_pr) * np.cos(new_yr),
+                                 np.cos(new_pr) * np.sin(new_yr),
+                                 -np.sin(new_pr)])
+            target = (cam_pos - distance * new_look).tolist()
+
+        if np.any(move) or pdx or pdy:
+            p.resetDebugVisualizerCamera(
+                distance, yaw, pitch, target,
+                physicsClientId=oc_env.physics_client_id,
+            )
+
+        time.sleep(1 / 60.0)
+
+
+keyboard.Listener(on_press=on_press, on_release=on_release).start()
+pynput_mouse.Listener(on_click=on_mouse_click, on_move=on_mouse_move).start()
+threading.Thread(target=_camera_thread, daemon=True).start()
+print("Arrow keys = pan  |  Right-click drag = rotate  |  Enter = close")
+
 # Counter placement constants.
 COUNTER_X = 1.3
 COUNTER_Y = 1.0
@@ -496,26 +611,9 @@ assert base_plan is not None
 obs = _execute_base_plan(env, base_plan, obs)
 print(f"Home. Base: {obs.base_pose}")
 
-from pynput import keyboard
-
-done = False
-
-
-def on_press(key):
-    global done
-    if key == keyboard.Key.enter:
-        done = True
-        return False  # stop listener
-
-
-print("Press Enter to close...")
-listener = keyboard.Listener(on_press=on_press)
-listener.start()
-
 while not done:
     p.stepSimulation(physicsClientId=oc_env.physics_client_id)
     time.sleep(1 / 240.0)
 
-listener.stop()
 env.close()
 sim.close()

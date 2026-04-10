@@ -14,7 +14,7 @@ from typing import Type as TypingType
 import numpy as np
 import pybullet as p
 from prpl_utils.utils import wrap_angle
-from pybullet_helpers.geometry import Pose, SE2Pose, set_pose
+from pybullet_helpers.geometry import Pose, SE2Pose, matrix_from_quat, set_pose
 from pybullet_helpers.motion_planning import (
     create_joint_distance_fn,
     remap_joint_position_plan_to_constant_distance,
@@ -60,6 +60,7 @@ class KitchenEnvConfig(Kinematic3DEnvConfig, metaclass=FinalConfigMeta):
     # the cabinets from the front.
     kitchen_pose: Pose = Pose((0.0, 1.5, 0.0))
     block_half_extents: tuple[float, float, float] = (0.05, 0.025, 0.025)
+    floor_included_as_object: bool = True
 
     # Robot centred in x on the cabinet run (~1.3 m), facing +y toward the kitchen.
     robot_base_home_pose: SE2Pose = SE2Pose(1.3, 0.0, np.pi / 2)
@@ -213,6 +214,34 @@ class KitchenEnv(ConstantObjectKinDEREnv):
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+def compute_grasp_pose(
+    robot_arm,
+    object_position: tuple[float, float, float],
+    approach_height: float = 0.05,
+    contact_offset: float = 0.005,
+) -> tuple[Pose, Pose]:
+    """Compute pre-grasp and grasp poses from the robot arm's end-effector frame.
+
+    The approach direction is the EE's local +Z axis (per the Kinova URDF and the
+    pybullet_helpers retract convention). We rotate the current EE orientation so
+    that local +Z aligns with world -Z (straight-down, top-down grasp).
+    """
+    from scipy.spatial.transform import Rotation
+
+    R_ee = np.array(matrix_from_quat(robot_arm.get_end_effector_pose().orientation))
+    approach_axis = R_ee[:, 2]  # EE local +Z in world frame
+
+    # Minimal rotation that maps approach_axis → world -Z
+    rot, _ = Rotation.align_vectors([[0.0, 0.0, -1.0]], [approach_axis])
+    grasp_quat = tuple(Rotation.from_matrix(rot.as_matrix() @ R_ee).as_quat())
+
+    x, y, z = object_position
+    return (
+        Pose((x, y, z + approach_height), grasp_quat),
+        Pose((x, y, z + contact_offset),  grasp_quat),
+    )
+
+
 def _execute_base_plan(environment, base_plan, obs):
     for target_base_pose in base_plan[1:]:
         current_base_pose = obs.base_pose
@@ -254,173 +283,192 @@ sim = ObjectCentricKitchenEnv(
 sim.set_state(obs)
 
 kitchen_id = sim._kitchen_id
-counter_id = sim._counter_id
 base_id = sim.robot.base.robot_id
-
-# Teleport cube0 to the target landing spot so it's visible for debugging.
 oc_env = env.unwrapped._object_centric_env
-# target_x = 1.3
-# target_y = 1.0  # counter_place_y
-# target_z = COUNTER_SURFACE_Z + config.block_half_extents[2]  # resting on surface
-# p.resetBasePositionAndOrientation(
-#     oc_env._cubes["cube0"],
-#     [target_x, target_y, target_z],
-#     [0, 0, 0, 1],
-#     physicsClientId=oc_env.physics_client_id,
-# )
 
-# Step 1: Move base in front of cube1.
-target_cube_temp = obs.get_object_pose("cube1").to_se2()
-target_base = SE2Pose(target_cube_temp.x - 0.5, target_cube_temp.y, target_cube_temp.rot)
-base_plan = run_single_arm_mobile_base_motion_planning(
-    sim.robot,
-    sim.robot.base.get_pose(),
-    target_base,
-    collision_bodies={kitchen_id},
-    seed=123,
-)
-assert base_plan is not None
-obs = _execute_base_plan(env, base_plan, obs)
-print(f"Step 1 done. Base: {obs.base_pose}")
-
-# Step 2: Move arm to pre-grasp pose above cube1.
-sim.set_state(obs)
-x, y, z = obs.get_object_pose("cube1").position
-pre_grasp_pose = Pose.from_rpy((x, y, z + 0.05), (np.pi, 0, np.pi / 2))
-grasp_pose     = Pose.from_rpy((x, y, z + 0.005), (np.pi, 0, np.pi / 2))
-
-joint_distance_fn = create_joint_distance_fn(sim.robot.arm)
-joint_plan = run_smooth_motion_planning_to_pose(
-    pre_grasp_pose,
-    sim.robot.arm,
-    collision_ids={base_id, kitchen_id},
-    end_effector_frame_to_plan_frame=Pose.identity(),
-    seed=123,
-    max_candidate_plans=1,
-)
-joint_plan = remap_joint_position_plan_to_constant_distance(
-    joint_plan, sim.robot.arm, max_distance=config.max_action_mag / 2
-)
-obs = _execute_joint_plan(env, joint_plan, obs)
-print("Step 2 done.")
-
-# Step 3: Move arm straight down to grasp cube1.
-sim.set_state(obs)
-joint_plan = smoothly_follow_end_effector_path(
-    sim.robot.arm,
-    [sim.robot.arm.get_end_effector_pose(), grasp_pose],
-    sim.robot.arm.get_joint_positions(),
-    collision_ids={kitchen_id, base_id},
-    joint_distance_fn=joint_distance_fn,
-    max_smoothing_iters_per_step=1,
-)
-assert joint_plan is not None
-joint_plan = remap_joint_position_plan_to_constant_distance(
-    joint_plan, sim.robot.arm, max_distance=config.max_action_mag / 2
-)
-obs = _execute_joint_plan(env, joint_plan, obs)
-print("Step 3 done.")
-
-# Step 4: Close gripper.
-for _ in range(5):
-    action = np.array([0.0] * 3 + [0.0] * 7 + [-1.0], dtype=np.float32)
-    vec_obs, _, _, _, _ = env.step(action)
-    oc_obs = env.observation_space.devectorize(vec_obs)
-    obs = KitchenObjectCentricState(oc_obs.data, oc_obs.type_features)
-    time.sleep(STEP_DELAY)
-
-assert obs.grasped_object == "cube1"
-print(f"Grasped: {obs.grasped_object}")
-
-# Step 5: Retract arm to home.
-sim.set_state(obs)
-joint_plan = run_motion_planning(
-    sim.robot.arm,
-    sim.robot.arm.get_joint_positions(),
-    extend_joints_to_include_fingers(sim.config.initial_joints),
-    collision_bodies={kitchen_id, base_id},
-    seed=123,
-    physics_client_id=sim.physics_client_id,
-    held_object=sim._grasped_object_id,
-    base_link_to_held_obj=sim._grasped_object_transform,
-)
-joint_plan = remap_joint_position_plan_to_constant_distance(
-    joint_plan, sim.robot.arm, max_distance=config.max_action_mag / 2
-)
-obs = _execute_joint_plan(env, joint_plan, obs)
-print("Step 5 done.")
-
-# Step 6: Move base to in front of the counter.
-sim.set_state(obs)
-counter_x = 1.3
-counter_place_y = 1.0
-target_counter_base = SE2Pose(counter_x, 0.2, np.pi / 2)
-base_plan = run_single_arm_mobile_base_motion_planning(
-    sim.robot,
-    sim.robot.base.get_pose(),
-    target_counter_base,
-    collision_bodies={kitchen_id},
-    seed=456,
-)
-assert base_plan is not None
-obs = _execute_base_plan(env, base_plan, obs)
-print(f"Step 6 done. Base: {obs.base_pose}")
-
-# Step 7: Move arm to pre-place pose above the counter surface.
-sim.set_state(obs)
-place_z = COUNTER_SURFACE_Z + config.block_half_extents[2]
-pre_place_pose = Pose.from_rpy((counter_x, counter_place_y - 0.1, place_z), (-np.pi / 2, np.pi, 0))
-place_pose     = Pose.from_rpy((counter_x, counter_place_y,       place_z), (-np.pi / 2, np.pi, 0))
-
-joint_plan = run_smooth_motion_planning_to_pose(
-    pre_place_pose,
-    sim.robot.arm,
-    collision_ids={kitchen_id, base_id},
-    end_effector_frame_to_plan_frame=Pose.identity(),
-    seed=123,
-    max_time=10,
-    max_candidate_plans=10,
-)
-print("7...")
-assert joint_plan is not None
-joint_plan = remap_joint_position_plan_to_constant_distance(
-    joint_plan, sim.robot.arm, max_distance=config.max_action_mag / 2
-)
-obs = _execute_joint_plan(env, joint_plan, obs)
-print("Step 7 done.")
-
-# Step 8: Lower arm to place pose.
-sim.set_state(obs)
-joint_plan = smoothly_follow_end_effector_path(
-    sim.robot.arm,
-    [sim.robot.arm.get_end_effector_pose(), place_pose],
-    sim.robot.arm.get_joint_positions(),
-    collision_ids={kitchen_id, base_id},
-    joint_distance_fn=joint_distance_fn,
-    max_smoothing_iters_per_step=1,
-    held_object=sim._grasped_object_id,
-    base_link_to_held_obj=sim._grasped_object_transform,
-)
-print("8...")
-assert joint_plan is not None
-joint_plan = remap_joint_position_plan_to_constant_distance(
-    joint_plan, sim.robot.arm, max_distance=config.max_action_mag / 2
-)
-obs = _execute_joint_plan(env, joint_plan, obs)
-print("Step 8 done.")
-
-# Enable gravity and give cube1 mass so it settles onto the counter.
+# Enable gravity for all cubes from the start.  When a cube is grasped its mass
+# is set to 0 so the kinematic transport doesn't fight the physics; it is restored
+# to 0.1 on release so the cube settles naturally onto whatever surface it lands on.
 p.setGravity(0, 0, -9.81, physicsClientId=oc_env.physics_client_id)
-p.changeDynamics(oc_env._cubes["cube1"], -1, mass=0.1, physicsClientId=oc_env.physics_client_id)
+for cube_id in oc_env._cubes.values():
+    p.changeDynamics(cube_id, -1, mass=0.1, physicsClientId=oc_env.physics_client_id)
 
-# Step 9: Release cube1.
-oc_env._grasped_object = None
-oc_env._grasped_object_transform = None
-oc_env.robot.arm.open_fingers()
-print("cube1 placed on the kitchen counter!")
+# Counter placement constants.
+COUNTER_X = 1.3
+COUNTER_Y = 1.0
+PLACE_Z = COUNTER_SURFACE_Z + config.block_half_extents[2]
+# Offset the two cubes side-by-side in x; spacing = 2 * half_extent_x + small gap.
+CUBE_SPACING = 2 * config.block_half_extents[0] + 0.04
+PLACE_POSITIONS = {
+    "cube1": (COUNTER_X - CUBE_SPACING / 2, COUNTER_Y),
+    "cube0": (COUNTER_X + CUBE_SPACING / 2, COUNTER_Y),
+}
 
-# Step 10: Retract arm to home joints.
+
+def pick_and_place(cube_name: str, place_x: float, place_y: float, obs, step_offset: int):
+    """Pick `cube_name` from the floor and place it at (place_x, place_y) on the counter."""
+    joint_distance_fn = create_joint_distance_fn(sim.robot.arm)
+
+    # Move base in front of the cube.
+    target_cube_temp = obs.get_object_pose(cube_name).to_se2()
+    target_base = SE2Pose(target_cube_temp.x - 0.5, target_cube_temp.y, target_cube_temp.rot)
+    base_plan = run_single_arm_mobile_base_motion_planning(
+        sim.robot,
+        sim.robot.base.get_pose(),
+        target_base,
+        collision_bodies={kitchen_id},
+        seed=123,
+    )
+    assert base_plan is not None
+    obs = _execute_base_plan(env, base_plan, obs)
+    print(f"Step {step_offset + 1} done (base → {cube_name}). Base: {obs.base_pose}")
+
+    # Move arm to pre-grasp pose.
+    sim.set_state(obs)
+    cx, cy, cz = obs.get_object_pose(cube_name).position
+    pre_grasp_pose, grasp_pose = compute_grasp_pose(sim.robot.arm, (cx, cy, cz))
+
+    joint_plan = run_smooth_motion_planning_to_pose(
+        pre_grasp_pose,
+        sim.robot.arm,
+        collision_ids={base_id, kitchen_id},
+        end_effector_frame_to_plan_frame=Pose.identity(),
+        seed=123,
+        max_candidate_plans=1,
+    )
+    joint_plan = remap_joint_position_plan_to_constant_distance(
+        joint_plan, sim.robot.arm, max_distance=config.max_action_mag / 2
+    )
+    obs = _execute_joint_plan(env, joint_plan, obs)
+    print(f"Step {step_offset + 2} done (arm → pre-grasp).")
+
+    # Move straight down to grasp.
+    sim.set_state(obs)
+    joint_plan = smoothly_follow_end_effector_path(
+        sim.robot.arm,
+        [sim.robot.arm.get_end_effector_pose(), grasp_pose],
+        sim.robot.arm.get_joint_positions(),
+        collision_ids={kitchen_id, base_id},
+        joint_distance_fn=joint_distance_fn,
+        max_smoothing_iters_per_step=1,
+    )
+    assert joint_plan is not None
+    joint_plan = remap_joint_position_plan_to_constant_distance(
+        joint_plan, sim.robot.arm, max_distance=config.max_action_mag / 2
+    )
+    obs = _execute_joint_plan(env, joint_plan, obs)
+    print(f"Step {step_offset + 3} done (arm → grasp).")
+
+    # Close gripper.
+    for _ in range(5):
+        action = np.array([0.0] * 3 + [0.0] * 7 + [-1.0], dtype=np.float32)
+        vec_obs, _, _, _, _ = env.step(action)
+        oc_obs = env.observation_space.devectorize(vec_obs)
+        obs = KitchenObjectCentricState(oc_obs.data, oc_obs.type_features)
+        time.sleep(STEP_DELAY)
+    assert obs.grasped_object == cube_name
+    print(f"Step {step_offset + 4} done (grasped {obs.grasped_object}).")
+
+    # Suspend gravity on the held cube so kinematic transport is clean.
+    p.changeDynamics(oc_env._cubes[cube_name], -1, mass=0, physicsClientId=oc_env.physics_client_id)
+
+    # Retract arm to home joints.
+    sim.set_state(obs)
+    joint_plan = run_motion_planning(
+        sim.robot.arm,
+        sim.robot.arm.get_joint_positions(),
+        extend_joints_to_include_fingers(sim.config.initial_joints),
+        collision_bodies={kitchen_id, base_id},
+        seed=123,
+        physics_client_id=sim.physics_client_id,
+        held_object=sim._grasped_object_id,
+        base_link_to_held_obj=sim._grasped_object_transform,
+    )
+    joint_plan = remap_joint_position_plan_to_constant_distance(
+        joint_plan, sim.robot.arm, max_distance=config.max_action_mag / 2
+    )
+    obs = _execute_joint_plan(env, joint_plan, obs)
+    print(f"Step {step_offset + 5} done (arm retracted).")
+
+    # Move base in front of counter.
+    sim.set_state(obs)
+    target_counter_base = SE2Pose(COUNTER_X, 0.2, np.pi / 2)
+    base_plan = run_single_arm_mobile_base_motion_planning(
+        sim.robot,
+        sim.robot.base.get_pose(),
+        target_counter_base,
+        collision_bodies={kitchen_id},
+        seed=456,
+    )
+    assert base_plan is not None
+    obs = _execute_base_plan(env, base_plan, obs)
+    print(f"Step {step_offset + 6} done (base → counter). Base: {obs.base_pose}")
+
+    # Move arm to pre-place pose.
+    sim.set_state(obs)
+    pre_place_pose = Pose.from_rpy((place_x, place_y - 0.1, PLACE_Z + 0.1), (-np.pi / 2, np.pi, 0))
+    place_pose     = Pose.from_rpy((place_x, place_y,       PLACE_Z + 0.1), (-np.pi / 2, np.pi, 0))
+
+    joint_plan = run_smooth_motion_planning_to_pose(
+        pre_place_pose,
+        sim.robot.arm,
+        collision_ids={kitchen_id, base_id},
+        end_effector_frame_to_plan_frame=Pose.identity(),
+        seed=123,
+        max_time=10,
+        max_candidate_plans=10,
+        held_object=sim._grasped_object_id,
+        base_link_to_held_obj=sim._grasped_object_transform,
+    )
+    assert joint_plan is not None
+    joint_plan = remap_joint_position_plan_to_constant_distance(
+        joint_plan, sim.robot.arm, max_distance=config.max_action_mag / 2
+    )
+    obs = _execute_joint_plan(env, joint_plan, obs)
+    print(f"Step {step_offset + 7} done (arm → pre-place).")
+
+    # Lower arm to place pose.
+    sim.set_state(obs)
+    joint_plan = smoothly_follow_end_effector_path(
+        sim.robot.arm,
+        [sim.robot.arm.get_end_effector_pose(), place_pose],
+        sim.robot.arm.get_joint_positions(),
+        collision_ids={kitchen_id, base_id},
+        joint_distance_fn=joint_distance_fn,
+        max_smoothing_iters_per_step=1,
+        held_object=sim._grasped_object_id,
+        base_link_to_held_obj=sim._grasped_object_transform,
+    )
+    assert joint_plan is not None
+    joint_plan = remap_joint_position_plan_to_constant_distance(
+        joint_plan, sim.robot.arm, max_distance=config.max_action_mag / 2
+    )
+    obs = _execute_joint_plan(env, joint_plan, obs)
+    print(f"Step {step_offset + 8} done (arm → place).")
+
+    # Restore mass so the cube settles under gravity.
+    p.changeDynamics(oc_env._cubes[cube_name], -1, mass=0.1, physicsClientId=oc_env.physics_client_id)
+
+    # Release.
+    oc_env._grasped_object = None
+    oc_env._grasped_object_transform = None
+    oc_env.robot.arm.open_fingers()
+    print(f"{cube_name} placed on counter at ({place_x:.2f}, {place_y:.2f})!")
+
+    # Let the cube fall and settle before moving on.
+    for _ in range(480):  # 2 s at 240 Hz
+        p.stepSimulation(physicsClientId=oc_env.physics_client_id)
+        time.sleep(1 / 240.0)
+
+    return obs
+
+
+obs = pick_and_place("cube1", *PLACE_POSITIONS["cube1"], obs, step_offset=0)
+obs = pick_and_place("cube0", *PLACE_POSITIONS["cube0"], obs, step_offset=9)
+
+# Retract arm and return base home.
 sim.set_state(obs)
+joint_distance_fn = create_joint_distance_fn(sim.robot.arm)
 joint_plan = run_motion_planning(
     sim.robot.arm,
     sim.robot.arm.get_joint_positions(),
@@ -433,9 +481,8 @@ joint_plan = remap_joint_position_plan_to_constant_distance(
     joint_plan, sim.robot.arm, max_distance=config.max_action_mag / 2
 )
 obs = _execute_joint_plan(env, joint_plan, obs)
-print("Step 10 done.")
+print("Arm retracted.")
 
-# Step 11: Drive base back to home pose.
 sim.set_state(obs)
 home_base = config.robot_base_home_pose
 base_plan = run_single_arm_mobile_base_motion_planning(
@@ -447,7 +494,7 @@ base_plan = run_single_arm_mobile_base_motion_planning(
 )
 assert base_plan is not None
 obs = _execute_base_plan(env, base_plan, obs)
-print(f"Step 11 done. Base: {obs.base_pose}")
+print(f"Home. Base: {obs.base_pose}")
 
 from pynput import keyboard
 

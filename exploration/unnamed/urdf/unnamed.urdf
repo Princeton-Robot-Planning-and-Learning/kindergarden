@@ -1,0 +1,488 @@
+<robot name="unnamed" version="1.0">
+  <joint name="cab_1" type="fixed">
+    <origin rpy="0.00000 0.00000 -0.00000" xyz="-0.00000 -0.00000 1.79000"/>
+    <parent link="Cabinet1.001_link"/>
+    <child link="Cabinet1_link"/>
+  </joint>
+  <joint name="cab_d_1" type="revolute">
+    <limit lower="0.00000" upper="1.50000" effort="0.00000" velocity="0.00000"/>
+    <origin rpy="1.57080 -0.00000 1.57080" xyz="-0.00000 -0.31000 0.29600"/>
+    <parent link="Cabinet1_link"/>
+    <child link="Cabinet1_Door_link"/>
+    <axis xyz="0.00000 0.00000 -1.00000"/>
+  </joint>
+  <joint name="cab_3_d_2" type="prismatic">
+    <limit lower="0.00000" upper="0.20000" effort="0.00000" velocity="0.00000"/>
+    <origin rpy="1.57080 0.00000 0.00000" xyz="-0.00000 -0.60000 0.23667"/>
+    <parent link="Cabinet1.003_link"/>
+    <child link="Drawer.004_link"/>
+    <axis xyz="0.00000 0.00000 1.00000"/>
+  </joint>
+  <joint name="cab_3_d_3" type="prismatic">
+    <limit lower="0.00000" upper="0.20000" effort="0.00000" velocity="0.00000"/>
+    <origin rpy="1.57080 0.00000 0.00000" xyz="-0.00000 -0.60000 -0.00000"/>
+    <parent link="Cabinet1.003_link"/>
+    <child link="Drawer.003_link"/>
+    <axis xyz="0.00000 0.00000 1.00000"/>
+  </joint>
+  <joint name="cab_4" type="fixed">
+    <origin rpy="0.00000 0.00000 -0.00000" xyz="1.73500 -0.00000 1.60106"/>
+    <parent link="Cabinet1.001_link"/>
+    <child link="Cabinet1.002_link"/>
+  </joint>
+  <joint name="cab_4_d_1" type="revolute">
+    <limit lower="0.00000" upper="1.50000" effort="0.00000" velocity="0.00000"/>
+    <origin rpy="0.00000 0.00000 0.00000" xyz="0.00000 -0.31100 0.00000"/>
+    <parent link="Cabinet1.002_link"/>
+    <child link="Cabinet1_Door.002_link"/>
+    <axis xyz="0.00000 0.00000 -1.00000"/>
+  </joint>
+  <joint name="cab_4_h_1" type="fixed">
+    <origin rpy="-0.00000 1.57080 0.00000" xyz="0.39992 -0.02000 0.03777"/>
+    <parent link="Cabinet1_Door.002_link"/>
+    <child link="Handle.001_link"/>
+  </joint>
+  <joint name="cab_4_d_2" type="revolute">
+    <limit lower="0.00000" upper="1.50000" effort="0.00000" velocity="0.00000"/>
+    <origin rpy="0.00000 0.00000 0.00000" xyz="0.90900 -0.31100 0.00000"/>
+    <parent link="Cabinet1.002_link"/>
+    <child link="Cabinet2_Door.001_link"/>
+    <axis xyz="0.00000 0.00000 1.00000"/>
+  </joint>
+  <joint name="cab_4_h_2" type="fixed">
+    <origin rpy="0.00000 1.57080 0.00000" xyz="-0.39992 -0.02000 0.03777"/>
+    <parent link="Cabinet2_Door.001_link"/>
+    <child link="Handle.002_link"/>
+  </joint>
+  <joint name="cab_5" type="fixed">
+    <origin rpy="0.00000 0.00000 -0.00000" xyz="2.64500 -0.00000 1.29806"/>
+    <parent link="Cabinet1.001_link"/>
+    <child link="Cabinet1.004_link"/>
+  </joint>
+  <joint name="cab_5_d_1" type="revolute">
+    <limit lower="0.00000" upper="1.50000" effort="0.00000" velocity="0.00000"/>
+    <origin rpy="0.00000 0.00000 0.00000" xyz="0.00000 -0.31100 0.00000"/>
+    <parent link="Cabinet1.004_link"/>
+    <child link="Cabinet1_Door.004_link"/>
+    <axis xyz="0.00000 0.00000 -1.00000"/>
+  </joint>
+  <joint name="cab_5_h_1" type="fixed">
+    <origin rpy="0.00000 1.57080 0.00000" xyz="0.24692 -0.02000 0.07577"/>
+    <parent link="Cabinet1_Door.004_link"/>
+    <child link="Handle.005_link"/>
+  </joint>
+  <joint name="cab_h_1" type="fixed">
+    <origin rpy="-1.57080 -1.57080 0.00000" xyz="-0.02100 -0.25230 0.43077"/>
+    <parent link="Cabinet1_Door_link"/>
+    <child link="Handle_link"/>
+  </joint>
+  <joint name="cab_5_d_2" type="revolute">
+    <limit lower="0.00000" upper="1.50000" effort="0.00000" velocity="0.00000"/>
+    <origin rpy="0.00000 0.00000 0.00000" xyz="0.60300 -0.31100 -0.00000"/>
+    <parent link="Cabinet1.004_link"/>
+    <child link="Cabinet2_Door.003_link"/>
+    <axis xyz="0.00000 0.00000 1.00000"/>
+  </joint>
+  <joint name="cab_5_h_2" type="fixed">
+    <origin rpy="0.00000 1.57080 0.00000" xyz="-0.24692 -0.02000 0.07577"/>
+    <parent link="Cabinet2_Door.003_link"/>
+    <child link="Handle.006_link"/>
+  </joint>
+  <joint name="cab_6" type="fixed">
+    <origin rpy="0.00000 0.00000 -0.00000" xyz="1.72170 0.00149 0.01860"/>
+    <parent link="Cabinet1.001_link"/>
+    <child link="Cabinet1.005_link"/>
+  </joint>
+  <joint name="cab_6_d_1" type="revolute">
+    <limit lower="0.00000" upper="1.50000" effort="0.00000" velocity="0.00000"/>
+    <origin rpy="0.00000 0.00000 0.00000" xyz="-0.00000 -0.60100 0.00000"/>
+    <parent link="Cabinet1.005_link"/>
+    <child link="Cabinet1_Door.005_link"/>
+    <axis xyz="0.00000 0.00000 -1.00000"/>
+  </joint>
+  <joint name="cab_6_h_1" type="fixed">
+    <origin rpy="0.00000 1.57080 0.00000" xyz="0.40292 -0.00073 0.54577"/>
+    <parent link="Cabinet1_Door.005_link"/>
+    <child link="Handle.007_link"/>
+  </joint>
+  <joint name="cab_6_d_2" type="revolute">
+    <limit lower="0.00000" upper="1.50000" effort="0.00000" velocity="0.00000"/>
+    <origin rpy="0.00000 0.00000 0.00000" xyz="0.91500 -0.60100 0.00000"/>
+    <parent link="Cabinet1.005_link"/>
+    <child link="Cabinet2_Door.004_link"/>
+    <axis xyz="0.00000 0.00000 1.00000"/>
+  </joint>
+  <joint name="cab_6_h_2" type="fixed">
+    <origin rpy="0.00000 1.57080 0.00000" xyz="-0.40292 -0.00073 0.54577"/>
+    <parent link="Cabinet2_Door.004_link"/>
+    <child link="Handle.008_link"/>
+  </joint>
+  <joint name="dishwasher" type="fixed">
+    <origin rpy="0.00000 0.00000 -0.00000" xyz="2.63770 0.02076 0.72860"/>
+    <parent link="Cabinet1.001_link"/>
+    <child link="Countertop1_link"/>
+  </joint>
+  <joint name="dishwasher_base_1" type="fixed">
+    <origin rpy="0.00000 0.00000 0.00000" xyz="0.59766 -0.57260 -0.82556"/>
+    <parent link="Countertop1_link"/>
+    <child link="base_link"/>
+  </joint>
+  <joint name="dishwasher_d" type="revolute">
+    <limit lower="0.00000" upper="1.50000" effort="0.00000" velocity="0.00000"/>
+    <origin rpy="-0.00000 1.57080 0.00000" xyz="-0.58432 0.02656 0.13047"/>
+    <parent link="base_link"/>
+    <child link="door_0_link"/>
+    <axis xyz="0.00000 0.00000 1.00000"/>
+  </joint>
+  <joint name="cab_2" type="fixed">
+    <origin rpy="0.00000 0.00000 -0.00000" xyz="1.28500 -0.27900 1.24806"/>
+    <parent link="Cabinet1.001_link"/>
+    <child link="Baseboard2.001_link"/>
+  </joint>
+  <joint name="fridge_d_1" type="revolute">
+    <limit lower="0.00000" upper="1.50000" effort="0.00000" velocity="0.00000"/>
+    <origin rpy="0.00000 0.00000 -0.00000" xyz="-0.00000 -0.70560 0.00000"/>
+    <parent link="Cabinet1.001_link"/>
+    <child link="Cabinet1_Door.001_link"/>
+    <axis xyz="0.00000 0.00000 -1.00000"/>
+  </joint>
+  <joint name="fridge_d_2" type="revolute">
+    <limit lower="0.00000" upper="1.50000" effort="0.00000" velocity="0.00000"/>
+    <origin rpy="0.00000 0.00000 -0.00000" xyz="0.83400 -0.72100 0.00000"/>
+    <parent link="Cabinet1.001_link"/>
+    <child link="Cabinet2_Door_link"/>
+    <axis xyz="0.00000 0.00000 1.00000"/>
+  </joint>
+  <joint name="cab_2_d_1" type="revolute">
+    <limit lower="0.00000" upper="1.50000" effort="0.00000" velocity="0.00000"/>
+    <origin rpy="0.00000 0.00000 0.00000" xyz="-0.45000 -0.03200 0.05000"/>
+    <parent link="Baseboard2.001_link"/>
+    <child link="Cabinet1_Door.003_link"/>
+    <axis xyz="0.00000 0.00000 -1.00000"/>
+  </joint>
+  <joint name="cab_2_h_1" type="fixed">
+    <origin rpy="-0.00000 1.57080 0.00000" xyz="0.39492 -0.02000 0.06577"/>
+    <parent link="Cabinet1_Door.003_link"/>
+    <child link="Handle.003_link"/>
+  </joint>
+  <joint name="cab_2_d_2" type="revolute">
+    <limit lower="0.00000" upper="1.50000" effort="0.00000" velocity="0.00000"/>
+    <origin rpy="0.00000 0.00000 0.00000" xyz="0.45000 0.00000 0.05000"/>
+    <parent link="Baseboard2.001_link"/>
+    <child link="Cabinet2_Door.002_link"/>
+    <axis xyz="0.00000 0.00000 1.00000"/>
+  </joint>
+  <joint name="cab_2_h_2" type="fixed">
+    <origin rpy="-0.00000 1.57080 0.00000" xyz="-0.39592 -0.05200 0.06577"/>
+    <parent link="Cabinet2_Door.002_link"/>
+    <child link="Handle.004_link"/>
+  </joint>
+  <joint name="cab_3" type="fixed">
+    <origin rpy="0.00000 0.00000 -0.00000" xyz="0.81170 0.00149 0.01860"/>
+    <parent link="Cabinet1.001_link"/>
+    <child link="Cabinet1.003_link"/>
+  </joint>
+  <joint name="cab_3_d_1" type="prismatic">
+    <limit lower="0.00000" upper="0.20000" effort="0.00000" velocity="0.00000"/>
+    <origin rpy="1.57080 0.00000 0.00000" xyz="-0.00000 -0.60000 0.47333"/>
+    <parent link="Cabinet1.003_link"/>
+    <child link="Drawer.005_link"/>
+    <axis xyz="0.00000 0.00000 1.00000"/>
+  </joint>
+  <link name="Cabinet1.001_link">
+    <visual name="Cabinet1.001">
+      <material name="None"/>
+      <origin rpy="0.00000 0.00000 -0.00000" xyz="0.00000 0.00000 0.00000"/>
+      <geometry>
+        <mesh filename="../meshes/stl/Cabinet1.005.stl" scale="1.00000 1.00000 1.00000"/>
+      </geometry>
+    </visual>
+  </link>
+  <link name="Cabinet1_link">
+    <visual name="Cabinet1">
+      <material name="None"/>
+      <origin rpy="0.00000 0.00000 0.00000" xyz="-0.00000 0.00000 -0.03794"/>
+      <geometry>
+        <mesh filename="../meshes/stl/Cabinet1.004.stl" scale="1.00000 1.00000 1.00000"/>
+      </geometry>
+    </visual>
+  </link>
+  <link name="Drawer.005_link">
+    <visual name="Drawer.005">
+      <material name="None"/>
+      <origin rpy="-1.57080 -0.00000 0.00000" xyz="0.00901 -0.00000 -0.01306"/>
+      <geometry>
+        <mesh filename="../meshes/stl/Drawer.014.stl" scale="1.00000 1.00000 1.00000"/>
+      </geometry>
+    </visual>
+  </link>
+  <link name="Drawer.004_link">
+    <visual name="Drawer.004">
+      <material name="None"/>
+      <origin rpy="-1.57080 -0.00000 0.00000" xyz="0.00901 0.00000 -0.01306"/>
+      <geometry>
+        <mesh filename="../meshes/stl/Drawer.013.stl" scale="1.00000 1.00000 1.00000"/>
+      </geometry>
+    </visual>
+  </link>
+  <link name="Drawer.003_link">
+    <visual name="Drawer.003">
+      <material name="None"/>
+      <origin rpy="-1.57080 -0.00000 0.00000" xyz="0.00901 -0.00000 -0.01306"/>
+      <geometry>
+        <mesh filename="../meshes/stl/Drawer.012.stl" scale="1.00000 1.00000 1.00000"/>
+      </geometry>
+    </visual>
+  </link>
+  <link name="Cabinet1.002_link">
+    <visual name="Cabinet1.002">
+      <material name="None"/>
+      <origin rpy="0.00000 0.00000 -0.00000" xyz="-0.00000 0.00000 -0.00000"/>
+      <geometry>
+        <mesh filename="../meshes/stl/Cabinet1.002.stl" scale="1.00000 1.00000 1.00000"/>
+      </geometry>
+    </visual>
+  </link>
+  <link name="Cabinet1_Door.002_link">
+    <visual name="Cabinet1_Door.002">
+      <material name="None"/>
+      <origin rpy="0.00000 0.00000 -0.00000" xyz="0.00000 -0.00000 0.00000"/>
+      <geometry>
+        <mesh filename="../meshes/stl/Cabinet1_Door.002.stl" scale="1.00000 1.00000 1.00000"/>
+      </geometry>
+    </visual>
+  </link>
+  <link name="Handle.001_link">
+    <visual name="Handle.001">
+      <material name="None"/>
+      <origin rpy="0.00000 -0.00000 -0.00000" xyz="0.00000 0.00000 0.00000"/>
+      <geometry>
+        <mesh filename="../meshes/stl/Handle.004.stl" scale="1.00000 1.00000 1.00000"/>
+      </geometry>
+    </visual>
+  </link>
+  <link name="Cabinet2_Door.001_link">
+    <visual name="Cabinet2_Door.001">
+      <material name="None"/>
+      <origin rpy="0.00000 0.00000 -0.00000" xyz="-0.00000 -0.00000 0.00000"/>
+      <geometry>
+        <mesh filename="../meshes/stl/Cabinet2_Door.003.stl" scale="1.00000 1.00000 1.00000"/>
+      </geometry>
+    </visual>
+  </link>
+  <link name="Handle.002_link">
+    <visual name="Handle.002">
+      <material name="None"/>
+      <origin rpy="0.00000 0.00000 0.00000" xyz="0.00000 0.00000 0.00000"/>
+      <geometry>
+        <mesh filename="../meshes/stl/Handle.005.stl" scale="1.00000 1.00000 1.00000"/>
+      </geometry>
+    </visual>
+  </link>
+  <link name="Cabinet1.004_link">
+    <visual name="Cabinet1.004">
+      <material name="None"/>
+      <origin rpy="0.00000 0.00000 0.00000" xyz="-0.00000 -0.00000 -0.00000"/>
+      <geometry>
+        <mesh filename="../meshes/stl/Cabinet1.003.stl" scale="1.00000 1.00000 1.00000"/>
+      </geometry>
+    </visual>
+  </link>
+  <link name="Cabinet1_Door.004_link">
+    <visual name="Cabinet1_Door.004">
+      <material name="None"/>
+      <origin rpy="0.00000 0.00000 -0.00000" xyz="0.00000 0.00000 0.00000"/>
+      <geometry>
+        <mesh filename="../meshes/stl/Cabinet1_Door.005.stl" scale="1.00000 1.00000 1.00000"/>
+      </geometry>
+    </visual>
+  </link>
+  <link name="Cabinet1_Door_link">
+    <visual name="Cabinet1_Door">
+      <material name="None"/>
+      <origin rpy="1.85332 -1.57080 2.85907" xyz="-0.00100 -0.33394 0.00000"/>
+      <geometry>
+        <mesh filename="../meshes/stl/Cabinet1_Door.003.stl" scale="1.00000 1.00000 1.00000"/>
+      </geometry>
+    </visual>
+  </link>
+  <link name="Handle.005_link">
+    <visual name="Handle.005">
+      <material name="None"/>
+      <origin rpy="-0.00000 0.00000 -0.00000" xyz="0.00000 -0.00000 -0.00000"/>
+      <geometry>
+        <mesh filename="../meshes/stl/Handle.006.stl" scale="1.00000 1.00000 1.00000"/>
+      </geometry>
+    </visual>
+  </link>
+  <link name="Cabinet2_Door.003_link">
+    <visual name="Cabinet2_Door.003">
+      <material name="None"/>
+      <origin rpy="0.00000 0.00000 -0.00000" xyz="-0.00000 0.00000 0.00000"/>
+      <geometry>
+        <mesh filename="../meshes/stl/Cabinet2_Door.005.stl" scale="1.00000 1.00000 1.00000"/>
+      </geometry>
+    </visual>
+  </link>
+  <link name="Handle.006_link">
+    <visual name="Handle.006">
+      <material name="None"/>
+      <origin rpy="-0.00000 0.00000 0.00000" xyz="-0.00000 0.00000 -0.00000"/>
+      <geometry>
+        <mesh filename="../meshes/stl/Handle.007.stl" scale="1.00000 1.00000 1.00000"/>
+      </geometry>
+    </visual>
+  </link>
+  <link name="Cabinet1.005_link">
+    <visual name="Cabinet1.005">
+      <material name="None"/>
+      <origin rpy="0.00000 0.00000 -0.00000" xyz="-0.00000 0.01927 0.00000"/>
+      <geometry>
+        <mesh filename="../meshes/stl/Cabinet1.007.stl" scale="1.00000 1.00000 1.00000"/>
+      </geometry>
+    </visual>
+  </link>
+  <link name="Cabinet1_Door.005_link">
+    <visual name="Cabinet1_Door.005">
+      <material name="None"/>
+      <origin rpy="0.00000 0.00000 0.00000" xyz="-0.00000 0.01927 -0.00000"/>
+      <geometry>
+        <mesh filename="../meshes/stl/Cabinet1_Door.008.stl" scale="1.00000 1.00000 1.00000"/>
+      </geometry>
+    </visual>
+  </link>
+  <link name="Handle.007_link">
+    <visual name="Handle.007">
+      <material name="None"/>
+      <origin rpy="-0.00000 -0.00000 0.00000" xyz="-0.00000 -0.00000 0.00000"/>
+      <geometry>
+        <mesh filename="../meshes/stl/Handle.011.stl" scale="1.00000 1.00000 1.00000"/>
+      </geometry>
+    </visual>
+  </link>
+  <link name="Cabinet2_Door.004_link">
+    <visual name="Cabinet2_Door.004">
+      <material name="None"/>
+      <origin rpy="0.00000 0.00000 0.00000" xyz="0.00000 0.01927 -0.00000"/>
+      <geometry>
+        <mesh filename="../meshes/stl/Cabinet2_Door.007.stl" scale="1.00000 1.00000 1.00000"/>
+      </geometry>
+    </visual>
+  </link>
+  <link name="Handle.008_link">
+    <visual name="Handle.008">
+      <material name="None"/>
+      <origin rpy="-0.00000 -0.00000 0.00000" xyz="-0.00000 -0.00000 0.00000"/>
+      <geometry>
+        <mesh filename="../meshes/stl/Handle.012.stl" scale="1.00000 1.00000 1.00000"/>
+      </geometry>
+    </visual>
+  </link>
+  <link name="Countertop1_link">
+    <visual name="Countertop1">
+      <material name="None"/>
+      <origin rpy="0.00000 0.00000 -0.00000" xyz="0.00000 -0.00000 0.00000"/>
+      <geometry>
+        <mesh filename="../meshes/stl/Countertop1.002.stl" scale="1.00000 1.00000 1.00000"/>
+      </geometry>
+    </visual>
+    <visual name="base">
+      <material name="None"/>
+      <origin rpy="-1.56905 0.00724 -0.60712" xyz="0.10115 -0.76896 -0.85766"/>
+      <geometry>
+        <mesh filename="../meshes/stl/base.stl" scale="1.00000 1.00000 1.00000"/>
+      </geometry>
+    </visual>
+  </link>
+  <link name="base_link"/>
+  <link name="Handle_link">
+    <visual name="Handle">
+      <material name="None"/>
+      <origin rpy="-0.00000 0.00000 0.00000" xyz="0.00000 -0.00000 -0.00000"/>
+      <geometry>
+        <mesh filename="../meshes/stl/Handle.008.stl" scale="1.00000 1.00000 1.00000"/>
+      </geometry>
+    </visual>
+  </link>
+  <link name="door_0_link">
+    <visual name="door_0">
+      <material name="None"/>
+      <origin rpy="-0.00867 -0.96364 -1.55811" xyz="0.16258 -0.22291 0.08781"/>
+      <geometry>
+        <mesh filename="../meshes/stl/door_0.stl" scale="1.00000 1.00000 1.00000"/>
+      </geometry>
+    </visual>
+  </link>
+  <link name="Cabinet1_Door.001_link">
+    <visual name="Cabinet1_Door.001">
+      <material name="None"/>
+      <origin rpy="0.00000 0.00000 -0.00000" xyz="0.41650 -0.01540 -0.00000"/>
+      <geometry>
+        <mesh filename="../meshes/stl/Cabinet1_Door.004.stl" scale="1.00000 1.00000 1.00000"/>
+      </geometry>
+    </visual>
+  </link>
+  <link name="Cabinet2_Door_link">
+    <visual name="Cabinet2_Door">
+      <material name="None"/>
+      <origin rpy="0.00000 0.00000 -0.00000" xyz="-0.41650 0.00000 -0.00000"/>
+      <geometry>
+        <mesh filename="../meshes/stl/Cabinet2_Door.002.stl" scale="1.00000 1.00000 1.00000"/>
+      </geometry>
+    </visual>
+  </link>
+  <link name="Baseboard2.001_link">
+    <visual name="Baseboard2.001">
+      <material name="None"/>
+      <origin rpy="0.00000 0.00000 -0.00000" xyz="0.00000 0.00000 -0.00000"/>
+      <geometry>
+        <mesh filename="../meshes/stl/Baseboard2.001.stl" scale="1.00000 1.00000 1.00000"/>
+      </geometry>
+    </visual>
+  </link>
+  <link name="Cabinet1_Door.003_link">
+    <visual name="Cabinet1_Door.003">
+      <material name="None"/>
+      <origin rpy="0.00000 0.00000 0.00000" xyz="-0.00000 -0.00000 -0.00000"/>
+      <geometry>
+        <mesh filename="../meshes/stl/Cabinet1_Door.001.stl" scale="1.00000 1.00000 1.00000"/>
+      </geometry>
+    </visual>
+  </link>
+  <link name="Handle.003_link">
+    <visual name="Handle.003">
+      <material name="None"/>
+      <origin rpy="0.00000 -0.00000 0.00000" xyz="-0.00000 -0.00000 0.00000"/>
+      <geometry>
+        <mesh filename="../meshes/stl/Handle.002.stl" scale="1.00000 1.00000 1.00000"/>
+      </geometry>
+    </visual>
+  </link>
+  <link name="Cabinet2_Door.002_link">
+    <visual name="Cabinet2_Door.002">
+      <material name="None"/>
+      <origin rpy="0.00000 0.00000 0.00000" xyz="-0.00100 -0.03200 -0.00000"/>
+      <geometry>
+        <mesh filename="../meshes/stl/Cabinet2_Door.001.stl" scale="1.00000 1.00000 1.00000"/>
+      </geometry>
+    </visual>
+  </link>
+  <link name="Handle.004_link">
+    <visual name="Handle.004">
+      <material name="None"/>
+      <origin rpy="0.00000 -0.00000 0.00000" xyz="-0.00000 -0.00000 0.00000"/>
+      <geometry>
+        <mesh filename="../meshes/stl/Handle.003.stl" scale="1.00000 1.00000 1.00000"/>
+      </geometry>
+    </visual>
+  </link>
+  <link name="Cabinet1.003_link">
+    <visual name="Cabinet1.003">
+      <material name="None"/>
+      <origin rpy="0.00000 0.00000 -0.00000" xyz="-0.00000 0.01927 -0.00000"/>
+      <geometry>
+        <mesh filename="../meshes/stl/Cabinet1.009.stl" scale="1.00000 1.00000 1.00000"/>
+      </geometry>
+    </visual>
+  </link>
+</robot>

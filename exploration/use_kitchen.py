@@ -287,6 +287,14 @@ kitchen_id = sim._kitchen_id
 base_id = sim.robot.base.robot_id
 oc_env = env.unwrapped._object_centric_env
 
+# Disable kitchen collision in the headless sim so mesh geometry doesn't slow
+# down motion planning.  The GUI env keeps full mesh collision for physics.
+_num_kitchen_links = p.getNumJoints(kitchen_id, physicsClientId=sim.physics_client_id)
+for _link_idx in range(-1, _num_kitchen_links):
+    p.setCollisionFilterGroupMask(
+        kitchen_id, _link_idx, 0, 0, physicsClientId=sim.physics_client_id
+    )
+
 # Enable gravity for all cubes from the start.  When a cube is grasped its mass
 # is set to 0 so the kinematic transport doesn't fight the physics; it is restored
 # to 0.1 on release so the cube settles naturally onto whatever surface it lands on.

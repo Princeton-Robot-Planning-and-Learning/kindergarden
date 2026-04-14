@@ -4,7 +4,8 @@ Usage:
   python generate_env_docs.py                    # Generate docs for changed environments
   python generate_env_docs.py --force            # Force regenerate all environments
   python generate_env_docs.py --env Motion2D     # Generate docs for specific environment
-  python generate_env_docs.py --env_category Kinematic2D     # Generate docs for specific category
+  python generate_env_docs.py --env_category Kinematic2D
+    # Generate docs for specific category
 """
 
 from __future__ import annotations
@@ -506,7 +507,8 @@ def _main() -> None:
     elif args.env:
         print(f"Generating docs for environments: {', '.join(args.env)}")
     elif args.env_category:
-        print(f"Generating docs for environment categories: {', '.join(args.env_category)}")
+        env_cats = ', '.join(args.env_category)
+        print(f"Generating docs for environment categories: {env_cats}")
     else:
         print("Checking for changes using git diff origin/main...")
 

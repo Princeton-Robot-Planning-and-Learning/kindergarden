@@ -401,31 +401,7 @@ def _register_dynamic3d() -> None:
 
     env_class_variants: dict[str, dict[str, list[str]]] = {}
     for task_item in tasks_root.iterdir():
-        if task_item.is_file() and task_item.suffix == ".json":
-            # Handle single config file directly in tasks_root
-            config_name = task_item.stem
-            robot = {"tidybot": "TidyBot3D", "rby1a": "RBY1A3D"}[
-                config_name.split("-")[0]
-            ]
-            scene_type = config_name.split("-")[1]
-            num_task_objects = int(config_name.split("-")[2][1:])
-            task_cfg = "-".join(config_name.split("-")[1:])
-            variant_id = f"kinder/{robot}-{task_cfg}-v0"
-            _register(
-                id=variant_id,
-                entry_point=f"kinder.envs.dynamic3d.envs:{robot}Env",
-                kwargs={
-                    "scene_type": scene_type,
-                    "num_objects": num_task_objects,
-                    "task_config_path": str(task_item),
-                },
-            )
-            if robot not in env_class_variants:
-                env_class_variants[robot] = {}
-            if robot not in env_class_variants[robot]:
-                env_class_variants[robot][robot] = []
-            env_class_variants[robot][robot].append(variant_id)
-        elif task_item.is_dir():
+        if task_item.is_dir():
             # Handle folders and register each config file within
             # Each folder corresponds to a task type
             folder_name = task_item.name

@@ -15,7 +15,7 @@ This variant uses the 'ground' scene type with 3 objects.
 ## Random Action Behavior
 ![random action GIF](../../assets/random_action_gifs/variants/BalanceBeam3D-o3.gif)
 
-**Random Action Stats**: Total Reward: -0.25, Success: No, Steps: 25
+**Random Action Stats**: Total Reward: -0.01, Success: Yes, Steps: 1
 
 ## Example Demonstration
 *(No demonstration GIFs available)*

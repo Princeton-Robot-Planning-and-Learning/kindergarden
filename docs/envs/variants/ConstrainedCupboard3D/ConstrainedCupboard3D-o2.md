@@ -1,19 +1,19 @@
-# TidyBot3D-ConstrainedCupboard3D-lab2-o2-fit_the_blocks_in_the_cupboard
+# ConstrainedCupboard3D-o2
 
 ## Usage
 ```python
 import kinder
-env = kinder.make("kinder/TidyBot3D-ConstrainedCupboard3D-lab2-o2-fit_the_blocks_in_the_cupboard-v0")
+env = kinder.make("kinder/ConstrainedCupboard3D-o2-v0")
 ```
 
 ## Description
-This variant uses the 'lab2' scene type with 2 objects.
+This variant uses the 'ground' scene type with 3 objects.
 
 ## Initial State Distribution
-![initial state GIF](../../assets/initial_state_gifs/variants/TidyBot3D-ConstrainedCupboard3D-lab2-o2-fit_the_blocks_in_the_cupboard.gif)
+![initial state GIF](../../assets/initial_state_gifs/variants/ConstrainedCupboard3D-o2.gif)
 
 ## Random Action Behavior
-![random action GIF](../../assets/random_action_gifs/variants/TidyBot3D-ConstrainedCupboard3D-lab2-o2-fit_the_blocks_in_the_cupboard.gif)
+![random action GIF](../../assets/random_action_gifs/variants/ConstrainedCupboard3D-o2.gif)
 
 **Random Action Stats**: Total Reward: -0.25, Success: No, Steps: 25
 

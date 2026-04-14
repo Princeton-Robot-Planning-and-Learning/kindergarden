@@ -20,13 +20,15 @@ The robot can control:
 ## Available Variants
 This environment has variants that differ in scene type and number of objects. Scene types include 'ground', 'cabinet', etc. The number of objects varies across variants.
 
+- [`kinder/Dynamo3D-o12-v0`](variants/Dynamo3D/Dynamo3D-o12.md) (o12)
+- [`kinder/Dynamo3D-o3-v0`](variants/Dynamo3D/Dynamo3D-o3.md) (o3)
 - [`kinder/Dynamo3D-o1-v0`](variants/Dynamo3D/Dynamo3D-o1.md) (o1)
 
 ## Initial State Distribution
 ![initial state GIF](assets/initial_state_gifs/Dynamo3D.gif)
 
 ## Example Demonstration
-*(No demonstration GIFs available)*
+![demo GIF](assets/group_gifs/Dynamo3D.gif)
 
 ## Observation Space
 *(Differs per variant, see individual variant pages)*

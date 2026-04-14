@@ -1,27 +1,21 @@
-# RBY1A3D
+# Shelf3D-o8
 
-*(Random action GIF could not be generated due to rendering issues)*
+## Usage
+```python
+import kinder
+env = kinder.make("kinder/Shelf3D-o8-v0")
+```
 
 ## Description
-A 3D mobile manipulation environment using the RBY1A platform.
-
-The robot has a holonomic mobile base with powered casters and a Kinova Gen3 arm.
-Scene type: cupboard with 8 objects.
-
-The robot can control:
-- Base pose (x, y, theta)
-- Arm position (x, y, z)
-- Arm orientation (quaternion)
-- Gripper position (open/close)
-
-
-## Available Variants
-This environment has variants that differ in scene type and number of objects. Scene types include 'ground', 'cabinet', etc. The number of objects varies across variants.
-
-- `kinder/RBY1A3D-cupboard-o8-v0` (cupboard-o8)
+This variant uses the 'ground' scene type with 3 objects.
 
 ## Initial State Distribution
-*(Initial state GIF could not be generated due to rendering issues)*
+![initial state GIF](../../assets/initial_state_gifs/variants/Shelf3D-o8.gif)
+
+## Random Action Behavior
+![random action GIF](../../assets/random_action_gifs/variants/Shelf3D-o8.gif)
+
+**Random Action Stats**: Total Reward: -0.25, Success: No, Steps: 25
 
 ## Example Demonstration
 *(No demonstration GIFs available)*
@@ -165,21 +159,25 @@ The entries of an array in this Box space correspond to the following object fea
 | 132 | cupboard_1 | qx |
 | 133 | cupboard_1 | qy |
 | 134 | cupboard_1 | qz |
-| 135 | robot | pos_base_right |
-| 136 | robot | pos_base_left |
-
-
-## Action Space
-Actions: joint positions for 2 base joints, 6 torso joints, 7 right arm joints, 7 left arm joints, 2 head joints
-
-## Rewards
-Reward function depends on the specific task:
-- Object stacking: Reward for successfully stacking objects
-- Drawer/cabinet tasks: Reward for opening/closing and placing objects
-- General manipulation: Reward for successful pick-and-place operations
-
-Currently returns a small negative reward (-0.01) per timestep to encourage exploration.
-
-
-## References
-TODO
+| 135 | robot | pos_base_x |
+| 136 | robot | pos_base_y |
+| 137 | robot | pos_base_rot |
+| 138 | robot | pos_arm_joint1 |
+| 139 | robot | pos_arm_joint2 |
+| 140 | robot | pos_arm_joint3 |
+| 141 | robot | pos_arm_joint4 |
+| 142 | robot | pos_arm_joint5 |
+| 143 | robot | pos_arm_joint6 |
+| 144 | robot | pos_arm_joint7 |
+| 145 | robot | pos_gripper |
+| 146 | robot | vel_base_x |
+| 147 | robot | vel_base_y |
+| 148 | robot | vel_base_rot |
+| 149 | robot | vel_arm_joint1 |
+| 150 | robot | vel_arm_joint2 |
+| 151 | robot | vel_arm_joint3 |
+| 152 | robot | vel_arm_joint4 |
+| 153 | robot | vel_arm_joint5 |
+| 154 | robot | vel_arm_joint6 |
+| 155 | robot | vel_arm_joint7 |
+| 156 | robot | vel_gripper |

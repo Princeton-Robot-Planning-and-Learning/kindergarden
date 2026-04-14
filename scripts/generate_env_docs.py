@@ -130,7 +130,7 @@ def create_random_action_gif(
             "num_steps": int(num_steps),
         }
         return True, stats
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-except
         print(f"    Warning: Failed to create random action GIF for {class_name}: {e}")
         return False, {}
 
@@ -169,7 +169,7 @@ def create_initial_state_gif(
         iio.mimsave(outfile, imgs, fps=fps, loop=0)
         optimize_gif(outfile)
         return True
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-except
         print(f"    Warning: Failed to create initial state GIF for {class_name}: {e}")
         return False
 
@@ -208,7 +208,7 @@ def create_variant_initial_state_gif(
         iio.mimsave(outfile, imgs, fps=fps, loop=0)
         optimize_gif(outfile)
         return True
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-except
         print(
             f"    Warning: Failed to create initial state GIF for {variant_name}: {e}"
         )
@@ -275,7 +275,7 @@ def create_variant_random_action_gif(
             "num_steps": int(num_steps),
         }
         return True, stats
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-except
         print(
             f"    Warning: Failed to create random action GIF for {variant_name}: {e}"
         )

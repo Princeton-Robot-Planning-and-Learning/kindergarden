@@ -412,7 +412,6 @@ def _register_dynamic3d() -> None:
                     robot = "TidyBot3D"
                     # Note: we only support one robot at the moment
                     # In the future, get robot from config.
-                    scene_type = config_name.split("-")[1]
                     task_cfg = "-".join(config_name.split("-")[1:])
                     variant_id = f"kinder/{folder_name}-{task_cfg}-v0"
                     _register(

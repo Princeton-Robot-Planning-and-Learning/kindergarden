@@ -1,6 +1,6 @@
 """Tests for packing3d.py."""
 
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 from gymnasium.wrappers import RecordVideo
@@ -67,15 +67,16 @@ def test_pick_place_on_rack() -> None:
         num_parts=num_parts, use_gui=False, render_mode="rgb_array", realistic_bg=False
     )
     assert isinstance(env.observation_space, ObjectCentricBoxSpace)
+    obs_space = env.observation_space
     config = (
-        env.unwrapped._object_centric_env.config  # pylint: disable=protected-access
+        cast(Packing3DEnv, env.unwrapped)._object_centric_env.config  # pylint: disable=protected-access
     )
     if MAKE_VIDEOS:
-        env = RecordVideo(env, "unit_test_videos")
+        env = RecordVideo(env, "unit_test_videos")  # type: ignore[assignment]
 
     vec_obs, _ = env.reset(seed=seed)
     # NOTE: we should soon make this smoother.
-    oc_obs = env.observation_space.devectorize(vec_obs)
+    oc_obs = obs_space.devectorize(vec_obs)
     obs = Packing3DObjectCentricState(oc_obs.data, oc_obs.type_features)
 
     # Initialize trajectory collection
@@ -148,7 +149,7 @@ def test_pick_place_on_rack() -> None:
             ep_terminated = ep_terminated or terminated
             ep_truncated = ep_truncated or truncated
             # NOTE: we should soon make this smoother.
-            oc_obs = env.observation_space.devectorize(vec_obs)
+            oc_obs = obs_space.devectorize(vec_obs)
             obs = Packing3DObjectCentricState(oc_obs.data, oc_obs.type_features)
 
         # Move down to grasp pose.
@@ -186,7 +187,7 @@ def test_pick_place_on_rack() -> None:
             ep_terminated = ep_terminated or terminated
             ep_truncated = ep_truncated or truncated
             # NOTE: we should soon make this smoother.
-            oc_obs = env.observation_space.devectorize(vec_obs)
+            oc_obs = obs_space.devectorize(vec_obs)
             obs = Packing3DObjectCentricState(oc_obs.data, oc_obs.type_features)
 
         # Close the gripper to grasp.
@@ -199,7 +200,7 @@ def test_pick_place_on_rack() -> None:
         ep_terminated = ep_terminated or terminated
         ep_truncated = ep_truncated or truncated
         # NOTE: we should soon make this smoother.
-        oc_obs = env.observation_space.devectorize(vec_obs)
+        oc_obs = obs_space.devectorize(vec_obs)
         obs = Packing3DObjectCentricState(oc_obs.data, oc_obs.type_features)
 
         assert obs.grasped_object == selected_object.name, "Object not grasped"
@@ -242,7 +243,7 @@ def test_pick_place_on_rack() -> None:
             ep_terminated = ep_terminated or terminated
             ep_truncated = ep_truncated or truncated
             # NOTE: we should soon make this smoother.
-            oc_obs = env.observation_space.devectorize(vec_obs)
+            oc_obs = obs_space.devectorize(vec_obs)
             obs = Packing3DObjectCentricState(oc_obs.data, oc_obs.type_features)
 
         # Determine placement pose and pre-placement pose.
@@ -250,6 +251,10 @@ def test_pick_place_on_rack() -> None:
         placement_padding = 1e-3  # leave some room to prevent collisions with surface
         rack_pose = obs.rack_pose
         rack_half_extents = obs.rack_half_extents
+        grasped_object = obs.grasped_object
+        grasped_object_transform = obs.grasped_object_transform
+        assert grasped_object is not None
+        assert grasped_object_transform is not None
         block_placement_pose = Pose(
             (
                 rack_pose.position[0] + x_coeffs[0] * rack_half_extents[0],
@@ -257,14 +262,14 @@ def test_pick_place_on_rack() -> None:
                 rack_pose.position[2]
                 - obs.rack_half_extents[2]
                 + 0.01
-                + obs.get_object_half_extents_packing3d(obs.grasped_object)[2]
+                + obs.get_object_half_extents_packing3d(grasped_object)[2]
                 + placement_padding,
             ),
             obs.rack_pose.orientation,
         )
         end_effector_placement_pose = multiply_poses(
             block_placement_pose,
-            obs.grasped_object_transform,
+            grasped_object_transform,
         )
         end_effector_pre_placement_pose = Pose(
             (
@@ -308,7 +313,7 @@ def test_pick_place_on_rack() -> None:
             ep_terminated = ep_terminated or terminated
             ep_truncated = ep_truncated or truncated
             # NOTE: we should soon make this smoother.
-            oc_obs = env.observation_space.devectorize(vec_obs)
+            oc_obs = obs_space.devectorize(vec_obs)
             obs = Packing3DObjectCentricState(oc_obs.data, oc_obs.type_features)
 
         # Open the gripper to finish the placement. Should trigger "done" (goal reached).
@@ -321,7 +326,7 @@ def test_pick_place_on_rack() -> None:
         ep_terminated = ep_terminated or done
         ep_truncated = ep_truncated or truncated
         # NOTE: we should soon make this smoother.
-        oc_obs = env.observation_space.devectorize(vec_obs)
+        oc_obs = obs_space.devectorize(vec_obs)
         obs = Packing3DObjectCentricState(oc_obs.data, oc_obs.type_features)
         assert obs.grasped_object is None, "Object not released"
 
@@ -365,7 +370,7 @@ def test_pick_place_on_rack() -> None:
             ep_terminated = ep_terminated or terminated
             ep_truncated = ep_truncated or truncated
             # NOTE: we should soon make this smoother.
-            oc_obs = env.observation_space.devectorize(vec_obs)
+            oc_obs = obs_space.devectorize(vec_obs)
             obs = Packing3DObjectCentricState(oc_obs.data, oc_obs.type_features)
 
         sim.set_state(obs)

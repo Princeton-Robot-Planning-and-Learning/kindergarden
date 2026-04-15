@@ -110,8 +110,8 @@ def test_pick_place_after_moving(env) -> None:  # pylint: disable=redefined-oute
 
     for target_base_pose in base_plan[1:]:
         current_base_pose = obs.base_pose
-        delta = target_base_pose - current_base_pose
-        delta_lst = [delta.x, delta.y, delta.rot]
+        base_pose_delta = target_base_pose - current_base_pose
+        delta_lst = [base_pose_delta.x, base_pose_delta.y, base_pose_delta.rot]
         action_lst = delta_lst + [0.0] * 7 + [0.0]
         action = np.array(action_lst, dtype=np.float32)
         vec_obs, reward, terminated, truncated, _ = env.step(action)

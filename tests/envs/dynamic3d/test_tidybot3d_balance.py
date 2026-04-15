@@ -12,7 +12,6 @@ import numpy as np
 from numpy.typing import NDArray
 from relational_structs import Object, ObjectCentricState
 
-import kinder
 from kinder.envs.dynamic3d.objects.generated_objects import GeneratedSeesaw
 from kinder.envs.dynamic3d.envs import ObjectCentricTidyBot3DEnv
 

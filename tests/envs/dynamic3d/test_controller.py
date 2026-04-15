@@ -4,9 +4,9 @@ These tests verify that the PD controller correctly converts target joint positi
 torques and that the arm behaves reasonably under control.
 """
 
-import numpy as np
-
 from pathlib import Path
+
+import numpy as np
 
 from kinder.envs.dynamic3d.envs import (
     ObjectCentricTidyBot3DEnv,
@@ -29,7 +29,11 @@ def test_arm_converges_to_target_position():
     """
     # Create environment with absolute position mode (not delta)
     config = TidyBot3DConfig(act_delta=False)
-    env = ObjectCentricTidyBot3DEnv(config=config, num_objects=1, task_config_path=str(_TEST_TASKS / "tidybot-ground-o1.json"))
+    env = ObjectCentricTidyBot3DEnv(
+        config=config,
+        num_objects=1,
+        task_config_path=str(_TEST_TASKS / "tidybot-ground-o1.json"),
+    )
     try:
         env.reset(seed=42)
 
@@ -94,7 +98,11 @@ def test_gravity_compensation_is_applied():
     3. The compensation is included in the torque output
     """
     config = TidyBot3DConfig(act_delta=False)
-    env = ObjectCentricTidyBot3DEnv(config=config, num_objects=1, task_config_path=str(_TEST_TASKS / "tidybot-ground-o1.json"))
+    env = ObjectCentricTidyBot3DEnv(
+        config=config,
+        num_objects=1,
+        task_config_path=str(_TEST_TASKS / "tidybot-ground-o1.json"),
+    )
     try:
         env.reset(seed=42)
 
@@ -156,7 +164,11 @@ def test_pd_achieves_accurate_tracking():
     positions with minimal steady-state error.
     """
     config = TidyBot3DConfig(act_delta=False)
-    env = ObjectCentricTidyBot3DEnv(config=config, num_objects=1, task_config_path=str(_TEST_TASKS / "tidybot-ground-o1.json"))
+    env = ObjectCentricTidyBot3DEnv(
+        config=config,
+        num_objects=1,
+        task_config_path=str(_TEST_TASKS / "tidybot-ground-o1.json"),
+    )
     try:
         env.reset(seed=42)
 
@@ -218,7 +230,11 @@ def test_arm_remains_stable():
     """
     # Create environment with absolute position mode
     config = TidyBot3DConfig(act_delta=False)
-    env = ObjectCentricTidyBot3DEnv(config=config, num_objects=1, task_config_path=str(_TEST_TASKS / "tidybot-ground-o1.json"))
+    env = ObjectCentricTidyBot3DEnv(
+        config=config,
+        num_objects=1,
+        task_config_path=str(_TEST_TASKS / "tidybot-ground-o1.json"),
+    )
     try:
         env.reset(seed=42)
 
@@ -276,7 +292,11 @@ def test_velocity_tracking_mode():
     4. Velocity tracking produces different torques than position-only mode
     """
     config = TidyBot3DConfig(act_delta=False)
-    env = ObjectCentricTidyBot3DEnv(config=config, num_objects=1, task_config_path=str(_TEST_TASKS / "tidybot-ground-o1.json"))
+    env = ObjectCentricTidyBot3DEnv(
+        config=config,
+        num_objects=1,
+        task_config_path=str(_TEST_TASKS / "tidybot-ground-o1.json"),
+    )
     try:
         env.reset(seed=42)
 
@@ -371,7 +391,11 @@ def test_velocity_tracking_for_dynamic_motion():
     3. Velocity tracking behaves differently from position-only control
     """
     config = TidyBot3DConfig(act_delta=False)
-    env = ObjectCentricTidyBot3DEnv(config=config, num_objects=1, task_config_path=str(_TEST_TASKS / "tidybot-ground-o1.json"))
+    env = ObjectCentricTidyBot3DEnv(
+        config=config,
+        num_objects=1,
+        task_config_path=str(_TEST_TASKS / "tidybot-ground-o1.json"),
+    )
     try:
         env.reset(seed=42)
 

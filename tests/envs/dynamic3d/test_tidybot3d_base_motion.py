@@ -7,7 +7,6 @@ import pytest
 from gymnasium.wrappers import RecordVideo
 from relational_structs.spaces import ObjectCentricBoxSpace
 
-import kinder
 from kinder.envs.dynamic3d.envs import TidyBot3DEnv
 from tests.conftest import MAKE_VIDEOS
 

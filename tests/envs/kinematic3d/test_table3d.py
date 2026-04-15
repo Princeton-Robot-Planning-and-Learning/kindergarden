@@ -57,7 +57,7 @@ def test_base_table3d_env(env):  # pylint: disable=redefined-outer-name
     #     p.stepSimulation(env.unwrapped._object_centric_env.physics_client_id)
 
 
-def test_pick_place_after_moving(env):  # pylint: disable=redefined-outer-name
+def test_pick_place_after_moving(env) -> None:  # pylint: disable=redefined-outer-name
     """Test moving in front of a block, picking it up, and placing it."""
     assert isinstance(env.observation_space, ObjectCentricBoxSpace)
     config = (

@@ -57,7 +57,7 @@ def get_target_object_from_obs(
     return obs.get_object_from_name(target_part_name)
 
 
-def test_pick_place_on_rack():
+def test_pick_place_on_rack() -> None:
     """Test that picking and placing can be executed for any object."""
     # Create the real environment.
 

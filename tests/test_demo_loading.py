@@ -3,7 +3,7 @@
 from kinder.utils import find_all_demo_files, load_demo
 
 
-def test_load_sample_of_demos():
+def test_load_sample_of_demos() -> None:
     """Load a sample of demos across different environments to catch corruption.
 
     Picks the first demo from each environment directory so we get broad coverage

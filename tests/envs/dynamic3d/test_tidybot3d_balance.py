@@ -17,15 +17,15 @@ from kinder.envs.dynamic3d.objects.generated_objects import GeneratedSeesaw
 from kinder.envs.dynamic3d.envs import ObjectCentricTidyBot3DEnv
 
 
+_TEST_TASKS = Path(__file__).parent / "test_tasks"
+
+
 def _get_balance_env() -> ObjectCentricTidyBot3DEnv:
     """Create and return a balance task environment."""
-    tasks_root = (
-        Path(kinder.__path__[0]).parent / "kinder" / "envs" / "dynamic3d" / "tasks"
-    )
     return ObjectCentricTidyBot3DEnv(
         scene_type="balance",
         num_objects=4,
-        task_config_path=str(tasks_root / "tidybot-balance-o4.json"),
+        task_config_path=str(_TEST_TASKS / "tidybot-balance-o4.json"),
         allow_state_access=True,
     )
 

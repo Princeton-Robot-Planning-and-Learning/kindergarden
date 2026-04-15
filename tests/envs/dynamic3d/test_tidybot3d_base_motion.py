@@ -8,6 +8,7 @@ from gymnasium.wrappers import RecordVideo
 from relational_structs.spaces import ObjectCentricBoxSpace
 
 import kinder
+from kinder.envs.dynamic3d.envs import TidyBot3DEnv
 from tests.conftest import MAKE_VIDEOS
 
 # Path to mimiclabs scenes for skip condition
@@ -23,12 +24,16 @@ MIMICLABS_SCENES_DIR = (
     / "meshes"
 )
 
+_TEST_TASKS = Path(__file__).parent / "test_tasks"
+
 
 def test_straight_base_motion():
     """This environment is really simple: moving directly towards the target works."""
 
-    kinder.register_all_environments()
-    env = kinder.make("kinder/TidyBot3D-base_motion-o1-v0", render_mode="rgb_array")
+    env = TidyBot3DEnv(
+        task_config_path=str(_TEST_TASKS / "tidybot-base_motion-o1.json"),
+        render_mode="rgb_array",
+    )
 
     if MAKE_VIDEOS:
         env = RecordVideo(env, "unit_test_videos")
@@ -79,9 +84,8 @@ def test_straight_base_motion():
 def test_straight_base_motion_mimiclabs(view):
     """Test base motion with MimicLabs background scene (uses lab5 for base_motion)."""
 
-    kinder.register_all_environments()
-    env = kinder.make(
-        "kinder/TidyBot3D-base_motion-o1-v0",
+    env = TidyBot3DEnv(
+        task_config_path=str(_TEST_TASKS / "tidybot-base_motion-o1.json"),
         render_mode="rgb_array",
         scene_bg=True,  # Use default mimiclabs scene (lab5 for base_motion)
         scene_render_camera=f"{view}",

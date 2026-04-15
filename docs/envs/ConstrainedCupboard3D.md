@@ -5,9 +5,10 @@
 **Random Action Stats**: Total Reward: -0.25, Success: No, Steps: 25
 
 ## Description
-A 3D task where the robot is supposed to fit multiple long rods into constrained spaces in a cupboard. The cupboard has varying numbers and sizes of rows and columns.
+A 3D mobile manipulation environment using the TidyBot platform.
 
 The robot has a holonomic mobile base with powered casters and a Kinova Gen3 arm.
+Scene type: ground with 3 objects. In the 'ground' scene, objects are placed randomly on a flat ground plane.
 
 The robot can control:
 - Base pose (x, y, theta)
@@ -17,17 +18,17 @@ The robot can control:
 
 
 ## Available Variants
-The variants require fitting different number of objects into cupboards of different sizes with varying arrangement of feasible regions at each reset.
+This environment has variants that differ in scene type and number of objects. Scene types include 'ground', 'cabinet', etc. The number of objects varies across variants.
 
-- [`kinder/TidyBot3D-ConstrainedCupboard3D-lab2-o1-fit_the_blocks_in_the_cupboard-v0`](variants/ConstrainedCupboard3D/TidyBot3D-ConstrainedCupboard3D-lab2-o1-fit_the_blocks_in_the_cupboard.md) (TidyBot3D-lab2-o1-fit_the_blocks_in_the_cupboard)
-- [`kinder/TidyBot3D-ConstrainedCupboard3D-lab2-o2-fit_the_blocks_in_the_cupboard-v0`](variants/ConstrainedCupboard3D/TidyBot3D-ConstrainedCupboard3D-lab2-o2-fit_the_blocks_in_the_cupboard.md) (TidyBot3D-lab2-o2-fit_the_blocks_in_the_cupboard)
-- [`kinder/TidyBot3D-ConstrainedCupboard3D-lab2-o6-fit_the_blocks_in_the_cupboard-v0`](variants/ConstrainedCupboard3D/TidyBot3D-ConstrainedCupboard3D-lab2-o6-fit_the_blocks_in_the_cupboard.md) (TidyBot3D-lab2-o6-fit_the_blocks_in_the_cupboard)
+- [`kinder/ConstrainedCupboard3D-o6-v0`](variants/ConstrainedCupboard3D/ConstrainedCupboard3D-o6.md) (o6)
+- [`kinder/ConstrainedCupboard3D-o1-v0`](variants/ConstrainedCupboard3D/ConstrainedCupboard3D-o1.md) (o1)
+- [`kinder/ConstrainedCupboard3D-o2-v0`](variants/ConstrainedCupboard3D/ConstrainedCupboard3D-o2.md) (o2)
 
 ## Initial State Distribution
 ![initial state GIF](assets/initial_state_gifs/ConstrainedCupboard3D.gif)
 
 ## Example Demonstration
-*(No demonstration GIFs available)*
+![demo GIF](assets/group_gifs/ConstrainedCupboard3D.gif)
 
 ## Observation Space
 *(Differs per variant, see individual variant pages)*
@@ -36,12 +37,11 @@ The variants require fitting different number of objects into cupboards of diffe
 Actions: base pos and yaw (3), arm joints (7), gripper pos (1)
 
 ## Rewards
-Reward function depends on the specific task:
-- Object stacking: Reward for successfully stacking objects
-- Drawer/cabinet tasks: Reward for opening/closing and placing objects
-- General manipulation: Reward for successful pick-and-place operations
-
-Currently returns a small negative reward (-0.01) per timestep to encourage exploration.
+The primary reward is for successfully placing objects at their target locations.
+- A reward of +1.0 is given for each object placed within a 5cm tolerance of its target.
+- A smaller positive reward is given for objects within a 10cm tolerance to guide the robot.
+- A small negative reward (-0.01) is applied at each timestep to encourage efficiency.
+The episode terminates when all objects are placed at their respective targets.
 
 
 ## References

@@ -4,6 +4,8 @@ Usage:
   python generate_env_docs.py                    # Generate docs for changed environments
   python generate_env_docs.py --force            # Force regenerate all environments
   python generate_env_docs.py --env Motion2D     # Generate docs for specific environment
+  python generate_env_docs.py --env_category Kinematic2D
+    # Generate docs for specific category
 """
 
 from __future__ import annotations
@@ -129,7 +131,7 @@ def create_random_action_gif(
             "num_steps": int(num_steps),
         }
         return True, stats
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-except
         print(f"    Warning: Failed to create random action GIF for {class_name}: {e}")
         return False, {}
 
@@ -168,7 +170,7 @@ def create_initial_state_gif(
         iio.mimsave(outfile, imgs, fps=fps, loop=0)
         optimize_gif(outfile)
         return True
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-except
         print(f"    Warning: Failed to create initial state GIF for {class_name}: {e}")
         return False
 
@@ -207,7 +209,7 @@ def create_variant_initial_state_gif(
         iio.mimsave(outfile, imgs, fps=fps, loop=0)
         optimize_gif(outfile)
         return True
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-except
         print(
             f"    Warning: Failed to create initial state GIF for {variant_name}: {e}"
         )
@@ -274,7 +276,7 @@ def create_variant_random_action_gif(
             "num_steps": int(num_steps),
         }
         return True, stats
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-except
         print(
             f"    Warning: Failed to create random action GIF for {variant_name}: {e}"
         )
@@ -488,6 +490,15 @@ def _main() -> None:
             "(e.g., Motion2D Manipulation3D)"
         ),
     )
+    parser.add_argument(
+        "--env_category",
+        type=str,
+        nargs="+",
+        help=(
+            "Generate docs for specific environment categories "
+            "(e.g., Kinematic2D Dynamic2D Kinematic3D Dynamic3D)"
+        ),
+    )
     args = parser.parse_args()
 
     print("Regenerating environment docs...")
@@ -495,6 +506,9 @@ def _main() -> None:
         print("Force flag detected - regenerating all environment classes")
     elif args.env:
         print(f"Generating docs for environments: {', '.join(args.env)}")
+    elif args.env_category:
+        env_cats = ', '.join(args.env_category)
+        print(f"Generating docs for environment categories: {env_cats}")
     else:
         print("Checking for changes using git diff origin/main...")
 
@@ -524,6 +538,20 @@ def _main() -> None:
             return
         env_classes = {env: env_classes[env] for env in args.env}
 
+    # Filter to specific environment categories if requested
+    if args.env_category:
+        env_categories = kinder.get_env_categories()
+        not_found = [cat for cat in args.env_category if cat not in env_categories]
+        if not_found:
+            print(f"Error: Category(ies) not found: {', '.join(not_found)}")
+            print(f"Available categories: {', '.join(sorted(env_categories.keys()))}")
+            return
+        # Collect all class names from the requested categories
+        filtered_classes = set()
+        for category in args.env_category:
+            filtered_classes.update(env_categories[category])
+        env_classes = {env: env_classes[env] for env in filtered_classes}
+
     for class_name, class_info in env_classes.items():
         total_classes += 1
         variants = class_info["variants"]
@@ -546,7 +574,7 @@ def _main() -> None:
             is_env_changed(make_env(v), changed_files) for v in variants
         )
 
-        if args.force or args.env or class_changed:
+        if args.force or args.env or args.env_category or class_changed:
             print(f"  Regenerating {class_name}...")
             has_random_gif, random_action_stats = create_random_action_gif(
                 class_name, env

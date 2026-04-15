@@ -1,19 +1,19 @@
-# TidyBot3D-ScoopPour3D-lab2_kitchen-o5-scoop_the_blocks_from_the_yellow_bin_to_the_green_bin
+# ScoopPour3D-o100
 
 ## Usage
 ```python
 import kinder
-env = kinder.make("kinder/TidyBot3D-ScoopPour3D-lab2_kitchen-o5-scoop_the_blocks_from_the_yellow_bin_to_the_green_bin-v0")
+env = kinder.make("kinder/ScoopPour3D-o100-v0")
 ```
 
 ## Description
-This variant uses the 'lab2_kitchen' scene type with 5 objects.
+This variant uses the 'ground' scene type with 3 objects.
 
 ## Initial State Distribution
-![initial state GIF](../../assets/initial_state_gifs/variants/TidyBot3D-ScoopPour3D-lab2_kitchen-o5-scoop_the_blocks_from_the_yellow_bin_to_the_green_bin.gif)
+![initial state GIF](../../assets/initial_state_gifs/variants/ScoopPour3D-o100.gif)
 
 ## Random Action Behavior
-![random action GIF](../../assets/random_action_gifs/variants/TidyBot3D-ScoopPour3D-lab2_kitchen-o5-scoop_the_blocks_from_the_yellow_bin_to_the_green_bin.gif)
+![random action GIF](../../assets/random_action_gifs/variants/ScoopPour3D-o100.gif)
 
 **Random Action Stats**: Total Reward: -0.25, Success: No, Steps: 25
 
@@ -1663,69 +1663,79 @@ The entries of an array in this Box space correspond to the following object fea
 | 1636 | kitchen_cooking_area | qx |
 | 1637 | kitchen_cooking_area | qy |
 | 1638 | kitchen_cooking_area | qz |
-| 1639 | kitchen_cooking_area_upper | x |
-| 1640 | kitchen_cooking_area_upper | y |
-| 1641 | kitchen_cooking_area_upper | z |
-| 1642 | kitchen_cooking_area_upper | qw |
-| 1643 | kitchen_cooking_area_upper | qx |
-| 1644 | kitchen_cooking_area_upper | qy |
-| 1645 | kitchen_cooking_area_upper | qz |
-| 1646 | kitchen_island | x |
-| 1647 | kitchen_island | y |
-| 1648 | kitchen_island | z |
-| 1649 | kitchen_island | qw |
-| 1650 | kitchen_island | qx |
-| 1651 | kitchen_island | qy |
-| 1652 | kitchen_island | qz |
-| 1653 | kitchen_left_corner | x |
-| 1654 | kitchen_left_corner | y |
-| 1655 | kitchen_left_corner | z |
-| 1656 | kitchen_left_corner | qw |
-| 1657 | kitchen_left_corner | qx |
-| 1658 | kitchen_left_corner | qy |
-| 1659 | kitchen_left_corner | qz |
-| 1660 | kitchen_left_side | x |
-| 1661 | kitchen_left_side | y |
-| 1662 | kitchen_left_side | z |
-| 1663 | kitchen_left_side | qw |
-| 1664 | kitchen_left_side | qx |
-| 1665 | kitchen_left_side | qy |
-| 1666 | kitchen_left_side | qz |
-| 1667 | robot | pos_base_x |
-| 1668 | robot | pos_base_y |
-| 1669 | robot | pos_base_rot |
-| 1670 | robot | pos_arm_joint1 |
-| 1671 | robot | pos_arm_joint2 |
-| 1672 | robot | pos_arm_joint3 |
-| 1673 | robot | pos_arm_joint4 |
-| 1674 | robot | pos_arm_joint5 |
-| 1675 | robot | pos_arm_joint6 |
-| 1676 | robot | pos_arm_joint7 |
-| 1677 | robot | pos_gripper |
-| 1678 | robot | vel_base_x |
-| 1679 | robot | vel_base_y |
-| 1680 | robot | vel_base_rot |
-| 1681 | robot | vel_arm_joint1 |
-| 1682 | robot | vel_arm_joint2 |
-| 1683 | robot | vel_arm_joint3 |
-| 1684 | robot | vel_arm_joint4 |
-| 1685 | robot | vel_arm_joint5 |
-| 1686 | robot | vel_arm_joint6 |
-| 1687 | robot | vel_arm_joint7 |
-| 1688 | robot | vel_gripper |
-| 1689 | scoop_0 | x |
-| 1690 | scoop_0 | y |
-| 1691 | scoop_0 | z |
-| 1692 | scoop_0 | qw |
-| 1693 | scoop_0 | qx |
-| 1694 | scoop_0 | qy |
-| 1695 | scoop_0 | qz |
-| 1696 | scoop_0 | vx |
-| 1697 | scoop_0 | vy |
-| 1698 | scoop_0 | vz |
-| 1699 | scoop_0 | wx |
-| 1700 | scoop_0 | wy |
-| 1701 | scoop_0 | wz |
-| 1702 | scoop_0 | bb_x |
-| 1703 | scoop_0 | bb_y |
-| 1704 | scoop_0 | bb_z |
+| 1639 | kitchen_cooking_area_drawer_s0c1 | pos |
+| 1640 | kitchen_cooking_area_drawer_s1c1 | pos |
+| 1641 | kitchen_cooking_area_upper | x |
+| 1642 | kitchen_cooking_area_upper | y |
+| 1643 | kitchen_cooking_area_upper | z |
+| 1644 | kitchen_cooking_area_upper | qw |
+| 1645 | kitchen_cooking_area_upper | qx |
+| 1646 | kitchen_cooking_area_upper | qy |
+| 1647 | kitchen_cooking_area_upper | qz |
+| 1648 | kitchen_island | x |
+| 1649 | kitchen_island | y |
+| 1650 | kitchen_island | z |
+| 1651 | kitchen_island | qw |
+| 1652 | kitchen_island | qx |
+| 1653 | kitchen_island | qy |
+| 1654 | kitchen_island | qz |
+| 1655 | kitchen_island_drawer_s0c0 | pos |
+| 1656 | kitchen_island_drawer_s0c1 | pos |
+| 1657 | kitchen_island_drawer_s0c2 | pos |
+| 1658 | kitchen_island_drawer_s1c0 | pos |
+| 1659 | kitchen_island_drawer_s1c1 | pos |
+| 1660 | kitchen_island_drawer_s1c2 | pos |
+| 1661 | kitchen_left_corner | x |
+| 1662 | kitchen_left_corner | y |
+| 1663 | kitchen_left_corner | z |
+| 1664 | kitchen_left_corner | qw |
+| 1665 | kitchen_left_corner | qx |
+| 1666 | kitchen_left_corner | qy |
+| 1667 | kitchen_left_corner | qz |
+| 1668 | kitchen_left_side | x |
+| 1669 | kitchen_left_side | y |
+| 1670 | kitchen_left_side | z |
+| 1671 | kitchen_left_side | qw |
+| 1672 | kitchen_left_side | qx |
+| 1673 | kitchen_left_side | qy |
+| 1674 | kitchen_left_side | qz |
+| 1675 | kitchen_left_side_drawer_s0c1 | pos |
+| 1676 | kitchen_left_side_drawer_s1c1 | pos |
+| 1677 | robot | pos_base_x |
+| 1678 | robot | pos_base_y |
+| 1679 | robot | pos_base_rot |
+| 1680 | robot | pos_arm_joint1 |
+| 1681 | robot | pos_arm_joint2 |
+| 1682 | robot | pos_arm_joint3 |
+| 1683 | robot | pos_arm_joint4 |
+| 1684 | robot | pos_arm_joint5 |
+| 1685 | robot | pos_arm_joint6 |
+| 1686 | robot | pos_arm_joint7 |
+| 1687 | robot | pos_gripper |
+| 1688 | robot | vel_base_x |
+| 1689 | robot | vel_base_y |
+| 1690 | robot | vel_base_rot |
+| 1691 | robot | vel_arm_joint1 |
+| 1692 | robot | vel_arm_joint2 |
+| 1693 | robot | vel_arm_joint3 |
+| 1694 | robot | vel_arm_joint4 |
+| 1695 | robot | vel_arm_joint5 |
+| 1696 | robot | vel_arm_joint6 |
+| 1697 | robot | vel_arm_joint7 |
+| 1698 | robot | vel_gripper |
+| 1699 | scoop_0 | x |
+| 1700 | scoop_0 | y |
+| 1701 | scoop_0 | z |
+| 1702 | scoop_0 | qw |
+| 1703 | scoop_0 | qx |
+| 1704 | scoop_0 | qy |
+| 1705 | scoop_0 | qz |
+| 1706 | scoop_0 | vx |
+| 1707 | scoop_0 | vy |
+| 1708 | scoop_0 | vz |
+| 1709 | scoop_0 | wx |
+| 1710 | scoop_0 | wy |
+| 1711 | scoop_0 | wz |
+| 1712 | scoop_0 | bb_x |
+| 1713 | scoop_0 | bb_y |
+| 1714 | scoop_0 | bb_z |

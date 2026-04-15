@@ -5,10 +5,10 @@
 **Random Action Stats**: Total Reward: -0.25, Success: No, Steps: 25
 
 ## Description
-A 3D task where the robot must pick up objects from the ground and place them onto a space-constrained shelf in a cupboard with three layers.
+A 3D mobile manipulation environment using the TidyBot platform.
 
 The robot has a holonomic mobile base with powered casters and a Kinova Gen3 arm.
-Scene type: cupboard_real with 8 objects.
+Scene type: ground with 3 objects. In the 'ground' scene, objects are placed randomly on a flat ground plane.
 
 The robot can control:
 - Base pose (x, y, theta)
@@ -18,11 +18,11 @@ The robot can control:
 
 
 ## Available Variants
-The variants require picking and placing different numbers of objects.
+This environment has variants that differ in scene type and number of objects. Scene types include 'ground', 'cabinet', etc. The number of objects varies across variants.
 
-- [`kinder/TidyBot3D-Shelf3D-cupboard_real-o1-v0`](variants/Shelf3D/TidyBot3D-Shelf3D-cupboard_real-o1.md) (TidyBot3D-cupboard_real-o1)
-- [`kinder/TidyBot3D-Shelf3D-cupboard_real-o8-v0`](variants/Shelf3D/TidyBot3D-Shelf3D-cupboard_real-o8.md) (TidyBot3D-cupboard_real-o8)
-- [`kinder/TidyBot3D-Shelf3D-cupboard_real-o2-v0`](variants/Shelf3D/TidyBot3D-Shelf3D-cupboard_real-o2.md) (TidyBot3D-cupboard_real-o2)
+- [`kinder/Shelf3D-o1-v0`](variants/Shelf3D/Shelf3D-o1.md) (o1)
+- [`kinder/Shelf3D-o2-v0`](variants/Shelf3D/Shelf3D-o2.md) (o2)
+- [`kinder/Shelf3D-o8-v0`](variants/Shelf3D/Shelf3D-o8.md) (o8)
 
 ## Initial State Distribution
 ![initial state GIF](assets/initial_state_gifs/Shelf3D.gif)
@@ -37,12 +37,11 @@ The variants require picking and placing different numbers of objects.
 Actions: base pos and yaw (3), arm joints (7), gripper pos (1)
 
 ## Rewards
-Reward function depends on the specific task:
-- Object stacking: Reward for successfully stacking objects
-- Drawer/cabinet tasks: Reward for opening/closing and placing objects
-- General manipulation: Reward for successful pick-and-place operations
-
-Currently returns a small negative reward (-0.01) per timestep to encourage exploration.
+The primary reward is for successfully placing objects at their target locations.
+- A reward of +1.0 is given for each object placed within a 5cm tolerance of its target.
+- A smaller positive reward is given for objects within a 10cm tolerance to guide the robot.
+- A small negative reward (-0.01) is applied at each timestep to encourage efficiency.
+The episode terminates when all objects are placed at their respective targets.
 
 
 ## References

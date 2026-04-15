@@ -7,7 +7,7 @@ env = kinder.make("kinder/Shelf3D-o2-v0")
 ```
 
 ## Description
-This variant has 2 objects to place on the shelf.
+This variant uses the 'ground' scene type with 3 objects.
 
 ## Initial State Distribution
 ![initial state GIF](../../assets/initial_state_gifs/variants/Shelf3D-o2.gif)
@@ -15,7 +15,7 @@ This variant has 2 objects to place on the shelf.
 ## Random Action Behavior
 ![random action GIF](../../assets/random_action_gifs/variants/Shelf3D-o2.gif)
 
-**Random Action Stats**: Total Reward: -25.00, Success: No, Steps: 25
+**Random Action Stats**: Total Reward: -0.25, Success: No, Steps: 25
 
 ## Example Demonstration
 *(No demonstration GIFs available)*
@@ -24,53 +24,64 @@ This variant has 2 objects to place on the shelf.
 The entries of an array in this Box space correspond to the following object features:
 | **Index** | **Object** | **Feature** |
 | --- | --- | --- |
-| 0 | robot | pos_base_x |
-| 1 | robot | pos_base_y |
-| 2 | robot | pos_base_rot |
-| 3 | robot | joint_1 |
-| 4 | robot | joint_2 |
-| 5 | robot | joint_3 |
-| 6 | robot | joint_4 |
-| 7 | robot | joint_5 |
-| 8 | robot | joint_6 |
-| 9 | robot | joint_7 |
-| 10 | robot | finger_state |
-| 11 | robot | grasp_active |
-| 12 | robot | grasp_tf_x |
-| 13 | robot | grasp_tf_y |
-| 14 | robot | grasp_tf_z |
-| 15 | robot | grasp_tf_qx |
-| 16 | robot | grasp_tf_qy |
-| 17 | robot | grasp_tf_qz |
-| 18 | robot | grasp_tf_qw |
-| 19 | shelf | pose_x |
-| 20 | shelf | pose_y |
-| 21 | shelf | pose_z |
-| 22 | shelf | pose_qx |
-| 23 | shelf | pose_qy |
-| 24 | shelf | pose_qz |
-| 25 | shelf | pose_qw |
-| 26 | cube0 | pose_x |
-| 27 | cube0 | pose_y |
-| 28 | cube0 | pose_z |
-| 29 | cube0 | pose_qx |
-| 30 | cube0 | pose_qy |
-| 31 | cube0 | pose_qz |
-| 32 | cube0 | pose_qw |
-| 33 | cube0 | grasp_active |
-| 34 | cube0 | object_type |
-| 35 | cube0 | half_extent_x |
-| 36 | cube0 | half_extent_y |
-| 37 | cube0 | half_extent_z |
-| 38 | cube1 | pose_x |
-| 39 | cube1 | pose_y |
-| 40 | cube1 | pose_z |
-| 41 | cube1 | pose_qx |
-| 42 | cube1 | pose_qy |
-| 43 | cube1 | pose_qz |
-| 44 | cube1 | pose_qw |
-| 45 | cube1 | grasp_active |
-| 46 | cube1 | object_type |
-| 47 | cube1 | half_extent_x |
-| 48 | cube1 | half_extent_y |
-| 49 | cube1 | half_extent_z |
+| 0 | cube1 | x |
+| 1 | cube1 | y |
+| 2 | cube1 | z |
+| 3 | cube1 | qw |
+| 4 | cube1 | qx |
+| 5 | cube1 | qy |
+| 6 | cube1 | qz |
+| 7 | cube1 | vx |
+| 8 | cube1 | vy |
+| 9 | cube1 | vz |
+| 10 | cube1 | wx |
+| 11 | cube1 | wy |
+| 12 | cube1 | wz |
+| 13 | cube1 | bb_x |
+| 14 | cube1 | bb_y |
+| 15 | cube1 | bb_z |
+| 16 | cube2 | x |
+| 17 | cube2 | y |
+| 18 | cube2 | z |
+| 19 | cube2 | qw |
+| 20 | cube2 | qx |
+| 21 | cube2 | qy |
+| 22 | cube2 | qz |
+| 23 | cube2 | vx |
+| 24 | cube2 | vy |
+| 25 | cube2 | vz |
+| 26 | cube2 | wx |
+| 27 | cube2 | wy |
+| 28 | cube2 | wz |
+| 29 | cube2 | bb_x |
+| 30 | cube2 | bb_y |
+| 31 | cube2 | bb_z |
+| 32 | cupboard_1 | x |
+| 33 | cupboard_1 | y |
+| 34 | cupboard_1 | z |
+| 35 | cupboard_1 | qw |
+| 36 | cupboard_1 | qx |
+| 37 | cupboard_1 | qy |
+| 38 | cupboard_1 | qz |
+| 39 | robot | pos_base_x |
+| 40 | robot | pos_base_y |
+| 41 | robot | pos_base_rot |
+| 42 | robot | pos_arm_joint1 |
+| 43 | robot | pos_arm_joint2 |
+| 44 | robot | pos_arm_joint3 |
+| 45 | robot | pos_arm_joint4 |
+| 46 | robot | pos_arm_joint5 |
+| 47 | robot | pos_arm_joint6 |
+| 48 | robot | pos_arm_joint7 |
+| 49 | robot | pos_gripper |
+| 50 | robot | vel_base_x |
+| 51 | robot | vel_base_y |
+| 52 | robot | vel_base_rot |
+| 53 | robot | vel_arm_joint1 |
+| 54 | robot | vel_arm_joint2 |
+| 55 | robot | vel_arm_joint3 |
+| 56 | robot | vel_arm_joint4 |
+| 57 | robot | vel_arm_joint5 |
+| 58 | robot | vel_arm_joint6 |
+| 59 | robot | vel_arm_joint7 |
+| 60 | robot | vel_gripper |

@@ -5,9 +5,10 @@
 **Random Action Stats**: Total Reward: -0.25, Success: No, Steps: 25
 
 ## Description
-A 3D task where the robot must sort a pile of objects into different receptacles based on their color. The objects may be initially in contact with each other, requiring singulation before grasping.
+A 3D mobile manipulation environment using the TidyBot platform.
 
 The robot has a holonomic mobile base with powered casters and a Kinova Gen3 arm.
+Scene type: ground with 3 objects. In the 'ground' scene, objects are placed randomly on a flat ground plane.
 
 The robot can control:
 - Base pose (x, y, theta)
@@ -17,7 +18,7 @@ The robot can control:
 
 
 ## Available Variants
-The variants differ in the number of objects to sort and in the types of receptacles (a cupboard or bins).
+This environment has variants that differ in scene type and number of objects. Scene types include 'ground', 'cabinet', etc. The number of objects varies across variants.
 
 - [`kinder/SortClutteredBlocks3D-o12-sort_the_blocks_into_the_cupboard-v0`](variants/SortClutteredBlocks3D/SortClutteredBlocks3D-o12-sort_the_blocks_into_the_cupboard.md) (o12-sort_the_blocks_into_the_cupboard)
 - [`kinder/SortClutteredBlocks3D-o20-sort_the_cluttered_blocks_into_bins-v0`](variants/SortClutteredBlocks3D/SortClutteredBlocks3D-o20-sort_the_cluttered_blocks_into_bins.md) (o20-sort_the_cluttered_blocks_into_bins)

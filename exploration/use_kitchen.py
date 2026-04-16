@@ -46,7 +46,7 @@ from kinder.envs.kinematic3d.utils import (
 )
 
 KITCHEN_URDF = Path(__file__).parent / "PRPL_lab" / "urdf" / "PRPL_lab_collision.urdf"
-STEP_DELAY = 0.05
+STEP_DELAY = 0.01
 
 # Countertop1_link sits at z=0.729 from the kitchen root (world z=0); add ~3 cm
 # for the mesh thickness to get the actual resting surface.
@@ -287,18 +287,29 @@ kitchen_id = sim._kitchen_id
 base_id = sim.robot.base.robot_id
 oc_env = env.unwrapped._object_centric_env
 
-# Disable kitchen collision in both physics clients — the headless sim for
-# fast planning, and the GUI client so arm execution isn't blocked by mesh geometry.
+# Disable kitchen collision in both physics clients.
+# setCollisionFilterGroupMask — disables broadphase / getContactPoints.
+# setCollisionFilterPair      — also disables getClosestPoints, which is what
+#   the kinematic env's collision-revert logic (check_body_collisions) uses.
+#   Without the pair-level disable the env reverts arm moves that approach
+#   cabinet geometry, even though collision_ids=set() is used in planning.
 _num_kitchen_links = p.getNumJoints(kitchen_id, physicsClientId=sim.physics_client_id)
 for _link_idx in range(-1, _num_kitchen_links):
     p.setCollisionFilterGroupMask(
         kitchen_id, _link_idx, 0, 0, physicsClientId=sim.physics_client_id
     )
+_robot_id_gui = oc_env.robot.arm.robot_id
+_num_robot_links_gui = p.getNumJoints(_robot_id_gui, physicsClientId=oc_env.physics_client_id)
 _num_kitchen_links_gui = p.getNumJoints(oc_env._kitchen_id, physicsClientId=oc_env.physics_client_id)
 for _link_idx in range(-1, _num_kitchen_links_gui):
     p.setCollisionFilterGroupMask(
         oc_env._kitchen_id, _link_idx, 0, 0, physicsClientId=oc_env.physics_client_id
     )
+    for _rlink in range(-1, _num_robot_links_gui):
+        p.setCollisionFilterPair(
+            _robot_id_gui, oc_env._kitchen_id, _rlink, _link_idx, 0,
+            physicsClientId=oc_env.physics_client_id,
+        )
 
 # Enable gravity for all cubes from the start.  When a cube is grasped its mass
 # is set to 0 so the kinematic transport doesn't fight the physics; it is restored
@@ -433,21 +444,45 @@ PLACE_POSITIONS = {
 }
 
 
-def pick_and_place(cube_name: str, place_x: float, place_y: float, obs, step_offset: int):
-    """Pick `cube_name` from the floor and place it at (place_x, place_y) on the counter."""
+def pick_and_place(
+    cube_name: str,
+    place_x: float,
+    place_y: float,
+    obs,
+    step_offset: int,
+    place_base: SE2Pose | None = None,
+    place_z_ee: float | None = None,
+    place_rpy: tuple | None = None,
+    place_collision_ids: set | None = None,
+    place_direct: bool = False,
+):
+    """Pick `cube_name` from the floor and place it at (place_x, place_y).
+
+    Optional overrides for cabinet placement:
+        place_base           : SE2Pose for step 6 (default: COUNTER_X, 0.2, π/2)
+        place_z_ee           : EE z at placement   (default: PLACE_Z + 0.1)
+        place_rpy            : EE orientation RPY  (default: (-π/2, π, 0))
+        place_collision_ids  : arm-planning IDs    (default: {kitchen_id, base_id})
+    """
     joint_distance_fn = create_joint_distance_fn(sim.robot.arm)
 
-    # Move base in front of the cube.
+    # Move base in front of the cube (0.5 m on the -y side, facing +y toward kitchen).
     target_cube_temp = obs.get_object_pose(cube_name).to_se2()
-    target_base = SE2Pose(target_cube_temp.x - 0.5, target_cube_temp.y, target_cube_temp.rot)
-    base_plan = run_single_arm_mobile_base_motion_planning(
-        sim.robot,
-        sim.robot.base.get_pose(),
-        target_base,
-        collision_bodies={kitchen_id},
-        seed=123,
-    )
-    assert base_plan is not None
+    target_base = SE2Pose(target_cube_temp.x, target_cube_temp.y - 0.5, np.pi / 2)
+    print(f"  {cube_name} at ({target_cube_temp.x:.2f}, {target_cube_temp.y:.2f}); "
+          f"base target: ({target_base.x:.2f}, {target_base.y:.2f})")
+    base_plan = None
+    for _seed in range(20):
+        base_plan = run_single_arm_mobile_base_motion_planning(
+            sim.robot,
+            sim.robot.base.get_pose(),
+            target_base,
+            collision_bodies={kitchen_id},
+            seed=_seed,
+        )
+        if base_plan is not None:
+            break
+    assert base_plan is not None, f"Base plan to {cube_name} failed"
     obs = _execute_base_plan(env, base_plan, obs)
     print(f"Step {step_offset + 1} done (base → {cube_name}). Base: {obs.base_pose}")
 
@@ -518,61 +553,95 @@ def pick_and_place(cube_name: str, place_x: float, place_y: float, obs, step_off
     obs = _execute_joint_plan(env, joint_plan, obs)
     print(f"Step {step_offset + 5} done (arm retracted).")
 
-    # Move base in front of counter.
+    # Move base in front of place target.
     sim.set_state(obs)
-    target_counter_base = SE2Pose(COUNTER_X, 0.2, np.pi / 2)
-    base_plan = run_single_arm_mobile_base_motion_planning(
-        sim.robot,
-        sim.robot.base.get_pose(),
-        target_counter_base,
-        collision_bodies={kitchen_id},
-        seed=456,
-    )
-    assert base_plan is not None
+    _place_base = place_base if place_base is not None else SE2Pose(COUNTER_X, 0.2, np.pi / 2)
+    _place_z    = place_z_ee if place_z_ee is not None else PLACE_Z + 0.1
+    _place_rpy  = place_rpy if place_rpy is not None else (-np.pi / 2, np.pi, 0)
+    _place_col  = place_collision_ids if place_collision_ids is not None else {kitchen_id, base_id}
+    base_plan = None
+    for _seed in range(10):
+        base_plan = run_single_arm_mobile_base_motion_planning(
+            sim.robot,
+            sim.robot.base.get_pose(),
+            _place_base,
+            collision_bodies={kitchen_id},
+            seed=456 + _seed,
+        )
+        if base_plan is not None:
+            break
+    assert base_plan is not None, "Base plan to placement target failed"
     obs = _execute_base_plan(env, base_plan, obs)
-    print(f"Step {step_offset + 6} done (base → counter). Base: {obs.base_pose}")
+    print(f"Step {step_offset + 6} done (base → place target). Base: {obs.base_pose}")
 
-    # Move arm to pre-place pose.
+    # Move arm to place pose.
     sim.set_state(obs)
-    pre_place_pose = Pose.from_rpy((place_x, place_y - 0.1, PLACE_Z + 0.1), (-np.pi / 2, np.pi, 0))
-    place_pose     = Pose.from_rpy((place_x, place_y,       PLACE_Z + 0.1), (-np.pi / 2, np.pi, 0))
+    place_pose = Pose.from_rpy((place_x, place_y, _place_z), _place_rpy)
 
-    joint_plan = run_smooth_motion_planning_to_pose(
-        pre_place_pose,
-        sim.robot.arm,
-        collision_ids={kitchen_id, base_id},
-        end_effector_frame_to_plan_frame=Pose.identity(),
-        seed=123,
-        max_time=10,
-        max_candidate_plans=10,
-        held_object=sim._grasped_object_id,
-        base_link_to_held_obj=sim._grasped_object_transform,
-    )
-    assert joint_plan is not None
-    joint_plan = remap_joint_position_plan_to_constant_distance(
-        joint_plan, sim.robot.arm, max_distance=config.max_action_mag / 2
-    )
-    obs = _execute_joint_plan(env, joint_plan, obs)
-    print(f"Step {step_offset + 7} done (arm → pre-place).")
+    if place_direct:
+        # Plan straight to the final pose — no intermediate pre-place or EE-path
+        # tracking.  More robust when the target is deep inside a cabinet where
+        # a forced Cartesian approach line can fail IK mid-path.
+        joint_plan = None
+        for _seed in range(20):
+            joint_plan = run_smooth_motion_planning_to_pose(
+                place_pose,
+                sim.robot.arm,
+                collision_ids=_place_col,
+                end_effector_frame_to_plan_frame=Pose.identity(),
+                seed=_seed,
+                max_time=5,
+                max_candidate_plans=5,
+                held_object=sim._grasped_object_id,
+                base_link_to_held_obj=sim._grasped_object_transform,
+            )
+            if joint_plan is not None:
+                break
+        assert joint_plan is not None, "Direct place plan failed"
+        joint_plan = remap_joint_position_plan_to_constant_distance(
+            joint_plan, sim.robot.arm, max_distance=config.max_action_mag / 2
+        )
+        obs = _execute_joint_plan(env, joint_plan, obs)
+        print(f"Step {step_offset + 7} done (arm → place, direct).")
+    else:
+        pre_place_pose = Pose.from_rpy((place_x, place_y - 0.1, _place_z), _place_rpy)
 
-    # Lower arm to place pose.
-    sim.set_state(obs)
-    joint_plan = smoothly_follow_end_effector_path(
-        sim.robot.arm,
-        [sim.robot.arm.get_end_effector_pose(), place_pose],
-        sim.robot.arm.get_joint_positions(),
-        collision_ids={kitchen_id, base_id},
-        joint_distance_fn=joint_distance_fn,
-        max_smoothing_iters_per_step=1,
-        held_object=sim._grasped_object_id,
-        base_link_to_held_obj=sim._grasped_object_transform,
-    )
-    assert joint_plan is not None
-    joint_plan = remap_joint_position_plan_to_constant_distance(
-        joint_plan, sim.robot.arm, max_distance=config.max_action_mag / 2
-    )
-    obs = _execute_joint_plan(env, joint_plan, obs)
-    print(f"Step {step_offset + 8} done (arm → place).")
+        joint_plan = run_smooth_motion_planning_to_pose(
+            pre_place_pose,
+            sim.robot.arm,
+            collision_ids=_place_col,
+            end_effector_frame_to_plan_frame=Pose.identity(),
+            seed=123,
+            max_time=10,
+            max_candidate_plans=10,
+            held_object=sim._grasped_object_id,
+            base_link_to_held_obj=sim._grasped_object_transform,
+        )
+        assert joint_plan is not None
+        joint_plan = remap_joint_position_plan_to_constant_distance(
+            joint_plan, sim.robot.arm, max_distance=config.max_action_mag / 2
+        )
+        obs = _execute_joint_plan(env, joint_plan, obs)
+        print(f"Step {step_offset + 7} done (arm → pre-place).")
+
+        # Lower arm to place pose.
+        sim.set_state(obs)
+        joint_plan = smoothly_follow_end_effector_path(
+            sim.robot.arm,
+            [sim.robot.arm.get_end_effector_pose(), place_pose],
+            sim.robot.arm.get_joint_positions(),
+            collision_ids=_place_col,
+            joint_distance_fn=joint_distance_fn,
+            max_smoothing_iters_per_step=1,
+            held_object=sim._grasped_object_id,
+            base_link_to_held_obj=sim._grasped_object_transform,
+        )
+        assert joint_plan is not None
+        joint_plan = remap_joint_position_plan_to_constant_distance(
+            joint_plan, sim.robot.arm, max_distance=config.max_action_mag / 2
+        )
+        obs = _execute_joint_plan(env, joint_plan, obs)
+        print(f"Step {step_offset + 8} done (arm → place).")
 
     # Restore mass so the cube settles under gravity.
     p.changeDynamics(oc_env._cubes[cube_name], -1, mass=0.1, physicsClientId=oc_env.physics_client_id)
@@ -587,6 +656,28 @@ def pick_and_place(cube_name: str, place_x: float, place_y: float, obs, step_off
     for _ in range(480):  # 2 s at 240 Hz
         p.stepSimulation(physicsClientId=oc_env.physics_client_id)
         time.sleep(1 / 240.0)
+
+    # Retract arm to home so the next base-planning call starts from a clean
+    # configuration (extended cabinet-reach arm causes self-collision in planner).
+    sim.set_state(obs)
+    _pp_retract = None
+    for _seed in range(10):
+        _pp_retract = run_motion_planning(
+            sim.robot.arm,
+            sim.robot.arm.get_joint_positions(),
+            extend_joints_to_include_fingers(sim.config.initial_joints),
+            collision_bodies={kitchen_id, base_id},
+            seed=_seed,
+            physics_client_id=sim.physics_client_id,
+        )
+        if _pp_retract is not None:
+            break
+    assert _pp_retract is not None, f"Post-place arm retract failed for {cube_name}"
+    _pp_retract = remap_joint_position_plan_to_constant_distance(
+        _pp_retract, sim.robot.arm, max_distance=config.max_action_mag / 2
+    )
+    obs = _execute_joint_plan(env, _pp_retract, obs)
+    print(f"Step {step_offset + 9} done (arm retracted after place).")
 
     return obs
 
@@ -627,28 +718,46 @@ def pick_and_place(cube_name: str, place_x: float, place_y: float, obs, step_off
 # ── Cabinet-door opening helper ──────────────────────────────────────────────
 
 def open_lower_cabinet_door(door_joint_name: str, handle_joint_name: str, obs,
-                            yaw_sign: float = 1.0):
+                            yaw_sign: float = 1.0,
+                            approach_from_front: bool = False):
     """Open a lower-cabinet door by name.
 
     Parameters
     ----------
-    door_joint_name  : URDF joint that rotates the door   (e.g. "cab_6_d_2")
-    handle_joint_name: URDF joint/link for the handle     (e.g. "cab_6_h_2")
-    obs              : current observation (updated through base planning)
-    yaw_sign         : +1 or -1; sign of gripper yaw rotation relative to door
-                       angle.  Doors with hinge on the right use +1; hinge on
-                       the left use -1.
+    door_joint_name    : URDF joint that rotates the door   (e.g. "cab_6_d_2")
+    handle_joint_name  : URDF joint/link for the handle     (e.g. "cab_6_h_2")
+    obs                : current observation (updated through base planning)
+    yaw_sign           : +1 or -1; sign of gripper yaw rotation relative to
+                         door angle.  Hinge on right → +1; hinge on left → -1.
+    approach_from_front: if True, pre-grasp is 15 cm in front of the handle
+                         (approach in +y) instead of 15 cm above (approach in
+                         -z).  Use when a top-down descent would clip the door
+                         panel.
 
     Returns
     -------
     obs after the base has been driven in front of the cabinet.
     (Subsequent steps use direct PyBullet calls and do not update obs.)
     """
-    _pc_id = oc_env.physics_client_id
-    _kg_id = oc_env._kitchen_id
+    _pc_id   = oc_env.physics_client_id
+    _kg_id   = oc_env._kitchen_id
+    _arm_gui = oc_env.robot.arm
     _CAB_OPEN_ANGLE = 1.5   # radians — joint upper limit
     _GRASP_QUAT = Pose.from_rpy((0, 0, 0), (np.pi, 0, 0)).orientation
     _N_OPEN = 80
+
+    # ── Pre-rotate gripper wrist to yaw 0 ────────────────────────────────────
+    _wrist_idx = _arm_gui.arm_joints.index(_arm_gui.joint_from_name("joint_7"))
+    _cur_joints = list(_arm_gui.get_joint_positions())
+    _target_wrist = list(_cur_joints)
+    _target_wrist[_wrist_idx] = 0.0
+    _N_PREROT = 20
+    for _i in range(_N_PREROT):
+        _frac = (_i + 1) / _N_PREROT
+        _interp = [(1 - _frac) * c + _frac * t
+                   for c, t in zip(_cur_joints, _target_wrist)]
+        _arm_gui.set_joints(_interp)
+        time.sleep(STEP_DELAY)
 
     # ── Locate joints by name ────────────────────────────────────────────────
     _num_j = p.getNumJoints(_kg_id, physicsClientId=_pc_id)
@@ -683,8 +792,12 @@ def open_lower_cabinet_door(door_joint_name: str, handle_joint_name: str, obs,
     obs = _execute_base_plan(env, _base_plan, obs)
     print(f"[{door_joint_name}] step a done (base → cabinet).")
 
-    # ── Step b: arm to pre-grasp (15 cm above handle) ────────────────────────
-    _pre_grasp_pos = np.array(_handle_closed) + np.array([0.0, 0.0, 0.15])
+    # ── Step b: arm to pre-grasp ──────────────────────────────────────────────
+    # approach_from_front=True: offset in -y so the arm moves forward to grip,
+    # never crossing the door panel.  False (default): offset in +z (top-down).
+    _pre_grasp_offset = np.array([0.0, -0.15, 0.0]) if approach_from_front \
+        else np.array([0.0, 0.0, 0.15])
+    _pre_grasp_pos = np.array(_handle_closed) + _pre_grasp_offset
     _pre_grasp_pose = Pose(tuple(_pre_grasp_pos), _GRASP_QUAT)
 
     sim.set_state(obs)
@@ -727,11 +840,32 @@ def open_lower_cabinet_door(door_joint_name: str, handle_joint_name: str, obs,
     _joint_plan_c = remap_joint_position_plan_to_constant_distance(
         _joint_plan_c, sim.robot.arm, max_distance=config.max_action_mag / 2
     )
-    obs = _execute_joint_plan(env, _joint_plan_c, obs)
-    print(f"[{door_joint_name}] step c done (EE at handle).")
+
+    # Execute directly on the GUI arm (set_joints → resetJointState, purely
+    # kinematic) so the counter can never stop the descent mid-path.
+    _arm_gui = oc_env.robot.arm
+    for _wp in _joint_plan_c:
+        _arm_gui.set_joints(list(np.asarray(_wp)[: len(_arm_gui.arm_joints)]))
+        time.sleep(STEP_DELAY)
+
+    # ── Fine-tune: small IK correction if motion plan fell short ─────────────
+    _ee_ls = p.getLinkState(_arm_gui.robot_id, _arm_gui.end_effector_id,
+                            physicsClientId=_pc_id)
+    _ee_dist = float(np.linalg.norm(np.array(_ee_ls[0]) - np.array(_handle_closed)))
+    print(f"[{door_joint_name}] step c done — EE-to-handle gap: {_ee_dist:.3f} m")
+    if _ee_dist < 0.08:
+        _ik_ft = p.calculateInverseKinematics(
+            _arm_gui.robot_id, _arm_gui.end_effector_id,
+            _handle_closed, _GRASP_QUAT, physicsClientId=_pc_id,
+        )
+        _ft_joints = list(_ik_ft[: len(_arm_gui.arm_joints)])
+        if _arm_gui.check_joint_limits(_ft_joints):
+            _arm_gui.set_joints(_ft_joints)
+            print(f"  fine-tuned {_ee_dist:.3f} m gap.")
+    else:
+        print(f"  WARNING: gap {_ee_dist:.3f} m too large — skipping fine-tune.")
 
     # ── Gradually close fingers ───────────────────────────────────────────────
-    _arm_gui = oc_env.robot.arm
     _closed_fingers = _arm_gui.finger_state_to_joints(_arm_gui.closed_fingers_state)
     _N_CLOSE = 20
     for _fi in range(_N_CLOSE):
@@ -783,12 +917,139 @@ def open_lower_cabinet_door(door_joint_name: str, handle_joint_name: str, obs,
         time.sleep(STEP_DELAY)
 
     print(f"[{door_joint_name}] door fully open!")
+
+    # ── Open fingers ─────────────────────────────────────────────────────────
+    _open_fingers = [0.0] * len(_arm_gui.finger_joint_names)
+    for _fn, _fp in zip(_arm_gui.finger_joint_names, _open_fingers):
+        p.resetJointState(_arm_gui.robot_id, _arm_gui.joint_from_name(_fn),
+                          _fp, physicsClientId=_pc_id)
+    time.sleep(STEP_DELAY)
+
+    # ── Retract arm to home joints (via env so obs stays current) ────────────
+    sim.set_state(obs)
+    _home_joints = extend_joints_to_include_fingers(sim.config.initial_joints)
+    _retract_plan = None
+    for _seed in range(10):
+        _retract_plan = run_motion_planning(
+            sim.robot.arm,
+            sim.robot.arm.get_joint_positions(),
+            _home_joints,
+            collision_bodies={kitchen_id, base_id},
+            seed=_seed,
+            physics_client_id=sim.physics_client_id,
+        )
+        if _retract_plan is not None:
+            break
+    assert _retract_plan is not None, f"[{door_joint_name}] arm retract plan failed"
+    _retract_plan = remap_joint_position_plan_to_constant_distance(
+        _retract_plan, sim.robot.arm, max_distance=config.max_action_mag / 2
+    )
+    obs = _execute_joint_plan(env, _retract_plan, obs)
+    print(f"[{door_joint_name}] arm retracted.")
+
+    # ── Drive base back to home pose ─────────────────────────────────────────
+    sim.set_state(obs)
+    _home_base_plan = None
+    for _seed in range(10):
+        _home_base_plan = run_single_arm_mobile_base_motion_planning(
+            sim.robot,
+            sim.robot.base.get_pose(),
+            config.robot_base_home_pose,
+            collision_bodies={kitchen_id},
+            seed=_seed,
+        )
+        if _home_base_plan is not None:
+            break
+    assert _home_base_plan is not None, f"[{door_joint_name}] base home plan failed"
+    obs = _execute_base_plan(env, _home_base_plan, obs)
+    print(f"[{door_joint_name}] base home. pose: {obs.base_pose}")
+
     return obs
 
 
+# ── Query closed-door handle positions BEFORE opening (doors still shut) ──────
+def _handle_world_pos(door_joint_name: str, handle_joint_name: str) -> tuple:
+    _kg  = oc_env._kitchen_id
+    _pc  = oc_env.physics_client_id
+    _nj  = p.getNumJoints(_kg, physicsClientId=_pc)
+    _dj  = next(i for i in range(_nj)
+                if p.getJointInfo(_kg, i, physicsClientId=_pc)[1].decode() == door_joint_name)
+    _hj  = next(i for i in range(_nj)
+                if p.getJointInfo(_kg, i, physicsClientId=_pc)[1].decode() == handle_joint_name)
+    p.resetJointState(_kg, _dj, 0.0, 0.0, physicsClientId=_pc)
+    return tuple(p.getLinkState(_kg, _hj, computeForwardKinematics=True,
+                                physicsClientId=_pc)[4])
+
+_h_r = _handle_world_pos("cab_6_d_2", "cab_6_h_2")
+_h_l = _handle_world_pos("cab_6_d_1", "cab_6_h_1")
+print(f"Cabinet handle positions — right: {_h_r}, left: {_h_l}")
+
 # ── Step 12: Open both lower cabinet doors ───────────────────────────────────
 obs = open_lower_cabinet_door("cab_6_d_2", "cab_6_h_2", obs, yaw_sign=+1.0)
-obs = open_lower_cabinet_door("cab_6_d_1", "cab_6_h_1", obs, yaw_sign=-1.0)
+obs = open_lower_cabinet_door("cab_6_d_1", "cab_6_h_1", obs, yaw_sign=-1.0,
+                              approach_from_front=True)
+
+# ── Steps 13–14: Place one cube inside each open cabinet ─────────────────────
+
+CAB_R_X = _h_r[0]          # x aligned with right handle
+CAB_L_X = _h_l[0]          # x aligned with left handle
+CAB_Y   = _h_r[1] + 0.30   # 30 cm past the handle face, into the interior
+CAB_Z   = 0.2              # EE z — arm-reachable height above cabinet floor
+
+obs = pick_and_place(
+    "cube1", CAB_R_X, CAB_Y, obs, step_offset=0,
+    place_base=SE2Pose(CAB_R_X, 0.3, np.pi / 2),
+    place_z_ee=CAB_Z,
+    place_collision_ids=set(),
+    place_direct=True,
+)
+
+# cube0 → left cabinet (cab_6_d_1 side).
+obs = pick_and_place(
+    "cube0", CAB_L_X, CAB_Y, obs, step_offset=9,
+    place_base=SE2Pose(CAB_L_X, 0.3, np.pi / 2),
+    place_z_ee=CAB_Z,
+    place_collision_ids=set(),
+    place_direct=True,
+)
+
+# ── Step 15: Retract arm to home joints ──────────────────────────────────────
+sim.set_state(obs)
+_retract_plan = None
+for _seed in range(10):
+    _retract_plan = run_motion_planning(
+        sim.robot.arm,
+        sim.robot.arm.get_joint_positions(),
+        extend_joints_to_include_fingers(sim.config.initial_joints),
+        collision_bodies={kitchen_id, base_id},
+        seed=_seed,
+        physics_client_id=sim.physics_client_id,
+    )
+    if _retract_plan is not None:
+        break
+assert _retract_plan is not None, "Arm retract plan failed"
+_retract_plan = remap_joint_position_plan_to_constant_distance(
+    _retract_plan, sim.robot.arm, max_distance=config.max_action_mag / 2
+)
+obs = _execute_joint_plan(env, _retract_plan, obs)
+print("Step 15 done (arm retracted).")
+
+# ── Step 16: Drive base home ──────────────────────────────────────────────────
+sim.set_state(obs)
+_home_base_plan = None
+for _seed in range(10):
+    _home_base_plan = run_single_arm_mobile_base_motion_planning(
+        sim.robot,
+        sim.robot.base.get_pose(),
+        config.robot_base_home_pose,
+        collision_bodies={kitchen_id},
+        seed=789 + _seed,
+    )
+    if _home_base_plan is not None:
+        break
+assert _home_base_plan is not None, "Base home plan failed"
+obs = _execute_base_plan(env, _home_base_plan, obs)
+print(f"Step 16 done (base home). Base: {obs.base_pose}")
 
 while not done:
     p.stepSimulation(physicsClientId=oc_env.physics_client_id)

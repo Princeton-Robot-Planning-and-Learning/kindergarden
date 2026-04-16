@@ -133,6 +133,7 @@ obs, info = env.reset(seed=42)
 | Transport3D | Kinematic3D | `kinder/Transport3D-o2-v0` |
 | BaseMotion3D | Kinematic3D | `kinder/BaseMotion3D-v0` |
 | Shelf3D | Kinematic3D | `kinder/Shelf3D-o10-v0` |
+| PrplLab3D | Kinematic3D | `kinder/PrplLab3D-o2-v0` |
 | ConstrainedCupboard3D | Dynamic3D | `kinder/ConstrainedCupboard3D-o6-v0` |
 | SortClutteredBlocks3D | Dynamic3D | `kinder/SortClutteredBlocks3D-o20-sort_the_cluttered_blocks_into_bowls-v0` |
 | Rearrange3D | Dynamic3D | `kinder/Rearrange3D-o2-put_the_boxed_drink_and_the_can_next_to_the_bowl-v0` |

@@ -358,6 +358,24 @@ def _register_kinematic3d() -> None:
         variant_ids=variant_ids,
     )
 
+    # PrplLab3D environment.
+    num_cubes = [1, 2]
+    variant_ids = []
+    for num_cube in num_cubes:
+        variant_id = f"kinder/PrplLab3D-o{num_cube}-v0"
+        _register(
+            id=variant_id,
+            entry_point="kinder.envs.kinematic3d.prpl3d:PrplLab3DEnv",
+            kwargs={"num_cubes": num_cube},
+        )
+        variant_ids.append(variant_id)
+    _register_env_class(
+        class_name="PrplLab3D",
+        entry_point="kinder.envs.kinematic3d.prpl3d:PrplLab3DEnv",
+        category="Kinematic3D",
+        variant_ids=variant_ids,
+    )
+
     # Obstructions3D environment with different numbers of obstructions.
     num_obstructions = [0, 1, 2, 3, 4]
     variant_ids = []

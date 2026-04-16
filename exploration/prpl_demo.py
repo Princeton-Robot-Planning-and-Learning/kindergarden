@@ -28,7 +28,7 @@ from kinder.envs.kinematic3d.prpl3d import (
 )
 from kinder.envs.kinematic3d.utils import extend_joints_to_include_fingers
 
-STEP_DELAY = 0.05
+STEP_DELAY = 0.03
 COUNTER_SURFACE_Z = 0.76  # z of the countertop resting surface
 
 
@@ -675,6 +675,7 @@ def open_lower_cabinet_door(door_joint_name: str, handle_joint_name: str, obs,
         _ik = p.calculateInverseKinematics(
             _arm_gui.robot_id, _arm_gui.end_effector_id,
             _handle_now, _tracking_quat, physicsClientId=_pc_id,
+            restPoses=list(_arm_gui.get_joint_positions()),
         )
         _arm_gui.set_joints(list(_ik[: len(_arm_gui.arm_joints)]))
         for _fn, _fp in zip(_arm_gui.finger_joint_names, _closed_fingers):
@@ -689,9 +690,30 @@ def open_lower_cabinet_door(door_joint_name: str, handle_joint_name: str, obs,
                           0.0, physicsClientId=_pc_id)
     time.sleep(STEP_DELAY)
 
-    # Sync obs with the actual post-door-open arm/base state so that retract
-    # planning starts from the correct configuration.
+    # Sync obs with the actual post-door-open arm/base state.
     obs = _sync_obs(env)
+
+    # ── Continue base away after release (arm joints frozen) ──────────────────
+    # Extrapolate the door-opening trajectory: same x direction, further in y.
+    # _execute_base_plan sends zero arm deltas so arm joints stay put.
+    sim.set_state(obs)
+    _retreat_base = SE2Pose(
+        _base_end_x + (_base_end_x - _base_target_x) * 0.5,
+        _base_end_y - 0.4,
+        np.pi / 2,
+    )
+    _retreat_plan = None
+    for _seed in range(10):
+        _retreat_plan = run_single_arm_mobile_base_motion_planning(
+            sim.robot, sim.robot.base.get_pose(),
+            _retreat_base,
+            collision_bodies=set(), seed=_seed,
+        )
+        if _retreat_plan is not None:
+            break
+    assert _retreat_plan is not None, f"[{door_joint_name}] post-release base retreat failed"
+    obs = _execute_base_plan(env, _retreat_plan, obs)
+    print(f"[{door_joint_name}] base retreated after release.")
 
     # ── Retract arm ───────────────────────────────────────────────────────────
     sim.set_state(obs)
@@ -851,6 +873,7 @@ def close_lower_cabinet_door(door_joint_name: str, handle_joint_name: str, obs,
         _ik = p.calculateInverseKinematics(
             _arm_gui.robot_id, _arm_gui.end_effector_id,
             _handle_now, _tracking_quat, physicsClientId=_pc_id,
+            restPoses=list(_arm_gui.get_joint_positions()),
         )
         _arm_gui.set_joints(list(_ik[: len(_arm_gui.arm_joints)]))
         for _fn, _fp in zip(_arm_gui.finger_joint_names, _closed_fingers):

@@ -5,18 +5,16 @@ and saves the result in the standard demos/ format so generate_demo_video.py can
 replay it into a GIF.
 
 Usage (from repo root):
-    python scripts/collect_prpl_lab_demo.py
-    python scripts/collect_prpl_lab_demo.py --seed 0 --demo-dir demos
+    python demos/PrplLab3D-o2/collect_prpl_lab_demo.py
+    python demos/PrplLab3D-o2/collect_prpl_lab_demo.py --seed 0
 """
+# pylint: disable=protected-access
 from __future__ import annotations
 
 import argparse
-import sys
 import time
 from pathlib import Path
-
-# Allow imports from scripts/ directory (for generate_env_docs / sanitize_env_id).
-sys.path.insert(0, str(Path(__file__).parent))
+from typing import cast
 
 import dill as pkl
 import numpy as np
@@ -30,6 +28,7 @@ from pybullet_helpers.motion_planning import (
     run_smooth_motion_planning_to_pose,
     smoothly_follow_end_effector_path,
 )
+from relational_structs.spaces import ObjectCentricBoxSpace
 
 import kinder
 from kinder.envs.kinematic3d.prpl3d import (
@@ -44,14 +43,22 @@ ENV_ID = "kinder/PrplLab3D-o2-v0"
 
 # ── Execution helpers ──────────────────────────────────────────────────────────
 
-def _execute_base_plan(environment, base_plan, obs, actions, rewards, observations):
+def _execute_base_plan(
+    environment: PrplLab3DEnv,
+    base_plan: list[SE2Pose],
+    obs: PrplLab3DObjectCentricState,
+    actions: list,
+    rewards: list[float],
+    observations: list,
+) -> PrplLab3DObjectCentricState:
+    obs_space = cast(ObjectCentricBoxSpace, environment.observation_space)
     for target_base_pose in base_plan[1:]:
         delta = target_base_pose - obs.base_pose
         action = np.array(
             [delta.x, delta.y, delta.rot] + [0.0] * 7 + [0.0], dtype=np.float32
         )
         vec_obs, reward, _, _, _ = environment.step(action)
-        oc_obs = environment.observation_space.devectorize(vec_obs)
+        oc_obs = obs_space.devectorize(vec_obs)
         obs = PrplLab3DObjectCentricState(oc_obs.data, oc_obs.type_features)
         actions.append(action)
         rewards.append(float(reward))
@@ -59,7 +66,15 @@ def _execute_base_plan(environment, base_plan, obs, actions, rewards, observatio
     return obs
 
 
-def _execute_joint_plan(environment, joint_plan, obs, actions, rewards, observations):
+def _execute_joint_plan(
+    environment: PrplLab3DEnv,
+    joint_plan: list[list[float]],
+    obs: PrplLab3DObjectCentricState,
+    actions: list,
+    rewards: list[float],
+    observations: list,
+) -> PrplLab3DObjectCentricState:
+    obs_space = cast(ObjectCentricBoxSpace, environment.observation_space)
     for target_joints in joint_plan[1:]:
         delta = [
             wrap_angle(a)
@@ -67,7 +82,7 @@ def _execute_joint_plan(environment, joint_plan, obs, actions, rewards, observat
         ]
         action = np.array([0.0] * 3 + delta + [0.0], dtype=np.float32)
         vec_obs, reward, _, _, _ = environment.step(action)
-        oc_obs = environment.observation_space.devectorize(vec_obs)
+        oc_obs = obs_space.devectorize(vec_obs)
         obs = PrplLab3DObjectCentricState(oc_obs.data, oc_obs.type_features)
         actions.append(action)
         rewards.append(float(reward))
@@ -77,17 +92,20 @@ def _execute_joint_plan(environment, joint_plan, obs, actions, rewards, observat
 
 # ── Main demo logic ────────────────────────────────────────────────────────────
 
-def collect_demo(seed: int = 0, demo_dir: Path = Path("demos")) -> Path:
+def collect_demo(seed: int = 0) -> Path:
+    """Collect a single pick-and-place demo and save it to the demos directory."""
     kinder.register_all_environments()
 
     env = PrplLab3DEnv(
         num_cubes=2, use_gui=False, render_mode="rgb_array", realistic_bg=False
     )
+    obs_space = cast(ObjectCentricBoxSpace, env.observation_space)
     vec_obs, _ = env.reset(seed=seed)
-    oc_obs = env.observation_space.devectorize(vec_obs)
+    oc_obs = obs_space.devectorize(vec_obs)
     obs = PrplLab3DObjectCentricState(oc_obs.data, oc_obs.type_features)
 
-    config = env.unwrapped._object_centric_env.config
+    prpl_env = cast(PrplLab3DEnv, env.unwrapped)
+    config = prpl_env._object_centric_env.config
     sim = ObjectCentricPrplLab3DEnv(
         num_cubes=2,
         config=config,
@@ -131,6 +149,7 @@ def collect_demo(seed: int = 0, demo_dir: Path = Path("demos")) -> Path:
         end_effector_frame_to_plan_frame=Pose.identity(),
         seed=123, max_candidate_plans=5,
     )
+    assert joint_plan is not None, "Pre-grasp plan (cube1) failed"
     joint_plan = remap_joint_position_plan_to_constant_distance(
         joint_plan, sim.robot.arm, max_distance=config.max_action_mag / 2
     )
@@ -147,7 +166,7 @@ def collect_demo(seed: int = 0, demo_dir: Path = Path("demos")) -> Path:
         joint_distance_fn=joint_distance_fn,
         max_smoothing_iters_per_step=1,
     )
-    assert joint_plan is not None
+    assert joint_plan is not None, "Grasp descent plan (cube1) failed"
     joint_plan = remap_joint_position_plan_to_constant_distance(
         joint_plan, sim.robot.arm, max_distance=config.max_action_mag / 2
     )
@@ -158,7 +177,7 @@ def collect_demo(seed: int = 0, demo_dir: Path = Path("demos")) -> Path:
     for _ in range(5):
         action = np.array([0.0] * 3 + [0.0] * 7 + [-1.0], dtype=np.float32)
         vec_obs, reward, _, _, _ = env.step(action)
-        oc_obs = env.observation_space.devectorize(vec_obs)
+        oc_obs = obs_space.devectorize(vec_obs)
         obs = PrplLab3DObjectCentricState(oc_obs.data, oc_obs.type_features)
         actions.append(action)
         rewards.append(float(reward))
@@ -178,6 +197,7 @@ def collect_demo(seed: int = 0, demo_dir: Path = Path("demos")) -> Path:
         held_object=sim._grasped_object_id,
         base_link_to_held_obj=sim._grasped_object_transform,
     )
+    assert joint_plan is not None, "Retract plan (cube1) failed"
     joint_plan = remap_joint_position_plan_to_constant_distance(
         joint_plan, sim.robot.arm, max_distance=config.max_action_mag / 2
     )
@@ -204,8 +224,7 @@ def collect_demo(seed: int = 0, demo_dir: Path = Path("demos")) -> Path:
     place_rpy = (-np.pi / 2, np.pi, 0)
     sim.set_state(obs)
 
-    # Release above the counter — goal_reached checks z > 0.5, not surface contact.
-    place_pose = Pose.from_rpy((counter_x, 1.6, 0.85), place_rpy)
+    place_pose = Pose.from_rpy((counter_x, 1.6, 1.0), place_rpy)
     joint_plan = None
     for s in range(20):
         joint_plan = run_smooth_motion_planning_to_pose(
@@ -218,7 +237,7 @@ def collect_demo(seed: int = 0, demo_dir: Path = Path("demos")) -> Path:
         )
         if joint_plan is not None:
             break
-    assert joint_plan is not None, "Place plan failed"
+    assert joint_plan is not None, "Place plan (cube1) failed"
     joint_plan = remap_joint_position_plan_to_constant_distance(
         joint_plan, sim.robot.arm, max_distance=config.max_action_mag / 2
     )
@@ -229,7 +248,7 @@ def collect_demo(seed: int = 0, demo_dir: Path = Path("demos")) -> Path:
     for _ in range(5):
         action = np.array([0.0] * 3 + [0.0] * 7 + [1.0], dtype=np.float32)
         vec_obs, reward, _, _, _ = env.step(action)
-        oc_obs = env.observation_space.devectorize(vec_obs)
+        oc_obs = obs_space.devectorize(vec_obs)
         obs = PrplLab3DObjectCentricState(oc_obs.data, oc_obs.type_features)
         actions.append(action)
         rewards.append(float(reward))
@@ -267,6 +286,7 @@ def collect_demo(seed: int = 0, demo_dir: Path = Path("demos")) -> Path:
         end_effector_frame_to_plan_frame=Pose.identity(),
         seed=123, max_candidate_plans=5,
     )
+    assert joint_plan is not None, "Pre-grasp plan (cube0) failed"
     joint_plan = remap_joint_position_plan_to_constant_distance(
         joint_plan, sim.robot.arm, max_distance=config.max_action_mag / 2
     )
@@ -283,7 +303,7 @@ def collect_demo(seed: int = 0, demo_dir: Path = Path("demos")) -> Path:
         joint_distance_fn=joint_distance_fn,
         max_smoothing_iters_per_step=1,
     )
-    assert joint_plan is not None
+    assert joint_plan is not None, "Grasp descent plan (cube0) failed"
     joint_plan = remap_joint_position_plan_to_constant_distance(
         joint_plan, sim.robot.arm, max_distance=config.max_action_mag / 2
     )
@@ -294,7 +314,7 @@ def collect_demo(seed: int = 0, demo_dir: Path = Path("demos")) -> Path:
     for _ in range(5):
         action = np.array([0.0] * 3 + [0.0] * 7 + [-1.0], dtype=np.float32)
         vec_obs, reward, _, _, _ = env.step(action)
-        oc_obs = env.observation_space.devectorize(vec_obs)
+        oc_obs = obs_space.devectorize(vec_obs)
         obs = PrplLab3DObjectCentricState(oc_obs.data, oc_obs.type_features)
         actions.append(action)
         rewards.append(float(reward))
@@ -314,6 +334,7 @@ def collect_demo(seed: int = 0, demo_dir: Path = Path("demos")) -> Path:
         held_object=sim._grasped_object_id,
         base_link_to_held_obj=sim._grasped_object_transform,
     )
+    assert joint_plan is not None, "Retract plan (cube0) failed"
     joint_plan = remap_joint_position_plan_to_constant_distance(
         joint_plan, sim.robot.arm, max_distance=config.max_action_mag / 2
     )
@@ -322,7 +343,7 @@ def collect_demo(seed: int = 0, demo_dir: Path = Path("demos")) -> Path:
     # ── Step 14: base → counter ───────────────────────────────────────────────
     print("Step 14: base → counter")
     sim.set_state(obs)
-    counter_x2 = 0.0  # place cube0 slightly to the left of cube1
+    counter_x2 = 0.0
     target_counter_base2 = SE2Pose(counter_x2, 0.7, np.pi / 2)
     base_plan = None
     for s in range(10):
@@ -364,11 +385,11 @@ def collect_demo(seed: int = 0, demo_dir: Path = Path("demos")) -> Path:
     for _ in range(5):
         action = np.array([0.0] * 3 + [0.0] * 7 + [1.0], dtype=np.float32)
         vec_obs, reward, terminated, _, _ = env.step(action)
-    oc_obs = env.observation_space.devectorize(vec_obs)
-    obs = PrplLab3DObjectCentricState(oc_obs.data, oc_obs.type_features)
-    actions.append(action)
-    rewards.append(float(reward))
-    observations.append(vec_obs)
+        oc_obs = obs_space.devectorize(vec_obs)
+        obs = PrplLab3DObjectCentricState(oc_obs.data, oc_obs.type_features)
+        actions.append(action)
+        rewards.append(float(reward))
+        observations.append(vec_obs)
 
     # ── Save demo ─────────────────────────────────────────────────────────────
     timestamp = int(time.time())
@@ -400,9 +421,8 @@ def collect_demo(seed: int = 0, demo_dir: Path = Path("demos")) -> Path:
 def _main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--demo-dir", type=Path, default=Path("demos"))
     args = parser.parse_args()
-    collect_demo(seed=args.seed, demo_dir=args.demo_dir)
+    collect_demo(seed=args.seed)
 
 
 if __name__ == "__main__":

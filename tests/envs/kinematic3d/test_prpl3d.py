@@ -57,7 +57,9 @@ def _execute_base_plan(environment, base_plan, obs):
 def _execute_joint_plan(environment, joint_plan, obs):
     """Execute a joint space plan and return the final observation."""
     for target_joints in joint_plan[1:]:
-        delta = [wrap_angle(a) for a in np.subtract(target_joints[:7], obs.joint_positions)]
+        delta = [
+            wrap_angle(a) for a in np.subtract(target_joints[:7], obs.joint_positions)
+        ]
         action = np.array([0.0] * 3 + delta + [0.0], dtype=np.float32)
         vec_obs, _, _, _, _ = environment.step(action)
         oc_obs = environment.observation_space.devectorize(vec_obs)

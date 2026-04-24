@@ -237,7 +237,8 @@ class PrplLab3DEnv(ConstantObjectKinDEREnv):
 
     def _create_reward_markdown_description(self) -> str:
         """Create reward description."""
-        return "The reward is -1 per timestep. The episode terminates successfully when all cubes are on the countertop."
+        return "The reward is -1 per timestep. The episode terminates successfully" \
+            "when all cubes are on the countertop."
 
     def _create_references_markdown_description(self) -> str:
         """Create references description."""

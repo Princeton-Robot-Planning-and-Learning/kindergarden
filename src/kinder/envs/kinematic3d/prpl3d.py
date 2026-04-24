@@ -1,8 +1,6 @@
 """PyBullet environment loaded from the PRPL lab URDF.
 
-The robot picks cubes from the floor and places them inside the lower
-cabinet doors.  The PRPL lab URDF provides visual geometry only; a thin proxy
-box approximates the countertop for collision planning.
+The robot picks cubes from the floor and places them on the countertop.
 """
 
 from __future__ import annotations
@@ -35,8 +33,7 @@ from kinder.envs.kinematic3d.utils import (
     sample_collision_free_object_poses,
 )
 
-# Path to the PRPL lab URDF (collision geometry stripped from cabinet links so
-# the arm can reach inside open doors without being falsely blocked).
+# Path to the PRPL lab URDF.
 _PRPL_LAB_URDF = (
     Path(__file__).parent.parent
     / "dynamic3d"
@@ -44,12 +41,8 @@ _PRPL_LAB_URDF = (
     / "assets"
     / "prpl_lab"
     / "urdf"
-    / "PRPL_lab_collision.urdf"
+    / "PRPL_lab_full_collision.urdf"
 )
-
-# Countertop surface height: the mesh sits at z≈0.729 from the URDF root plus
-# ~3 cm of mesh thickness.
-_COUNTER_SURFACE_Z = 0.76
 
 
 @dataclass(frozen=True)
@@ -74,16 +67,8 @@ class PrplLab3DEnvConfig(Kinematic3DEnvConfig, metaclass=FinalConfigMeta):
     # Robot home: centred in x on the cabinet run, facing +y toward the lab.
     robot_base_home_pose: SE2Pose = SE2Pose(0.3, 0.0, np.pi / 2)
 
-    # Create a physical floor plane so blocks settle under gravity instead of
-    # falling through the world.
-    floor_included_as_object: bool = True
-
-    # Invisible proxy box that represents the counter collision surface for
-    # planning (half-extents match the visual mesh footprint).
-    counter_proxy_half_extents: tuple[float, float, float] = (1.0, 0.35, 0.01)
-    counter_proxy_pose: Pose = Pose((0.3, 1.6, _COUNTER_SURFACE_Z - 0.01))
-
     def get_camera_kwargs(self) -> dict[str, Any]:
+        """Get kwargs to pass to PyBullet camera."""
         return {
             "camera_target": (0.0, -0.9, 0.8),
             "camera_yaw": -70,
@@ -109,12 +94,6 @@ class ObjectCentricPrplLab3DEnv(
     ) -> None:
         super().__init__(config=config, **kwargs)
         self._num_cubes = num_cubes
-        # Suppress the step-level collision-revert: getClosestPoints (used by
-        # check_body_collisions) ignores setCollisionFilterPair, so any arm
-        # move near the lab geometry would be reverted.  This is always True
-        # for this environment; the flag exists to let callers re-enable if
-        # needed.
-        self.disable_collision_checking: bool = True
 
         # Load PRPL lab URDF.
         self._lab_id = p.loadURDF(
@@ -123,19 +102,6 @@ class ObjectCentricPrplLab3DEnv(
             baseOrientation=list(config.lab_pose.orientation),
             physicsClientId=self.physics_client_id,
             useFixedBase=True,
-        )
-
-        # Invisible proxy box for counter collision (the URDF cabinet geometry
-        # has collision stripped; this box gives the planner the countertop).
-        self._counter_id = create_pybullet_block(
-            (0.0, 0.0, 0.0, 0.0),
-            config.counter_proxy_half_extents,
-            physics_client_id=self.physics_client_id,
-        )
-        set_pose(
-            self._counter_id,
-            config.counter_proxy_pose,
-            self.physics_client_id,
         )
 
         # Cubes (poses randomised in _reset_objects).
@@ -176,6 +142,7 @@ class ObjectCentricPrplLab3DEnv(
         )
 
     def _set_object_states(self, obs: PrplLab3DObjectCentricState) -> None:
+        assert isinstance(obs, PrplLab3DObjectCentricState)
         for cube_name, cube_id in self._cubes.items():
             set_pose(cube_id, obs.get_object_pose(cube_name), self.physics_client_id)
 
@@ -187,13 +154,7 @@ class ObjectCentricPrplLab3DEnv(
         raise ValueError(f"Unrecognized object name: {object_name}")
 
     def _get_collision_object_ids(self) -> set[int]:
-        if self.disable_collision_checking:
-            return set()
-        # Only the lab URDF participates in the env's step-level collision
-        # revert check.  The counter proxy is used only during arm planning
-        # (passed explicitly as collision_ids) so that the step function does
-        # not reject arm moves that sweep near the counter top.
-        return {self._lab_id}
+        return {self._lab_id} | set(self._cubes.values())
 
     def _get_movable_object_names(self) -> set[str]:
         return set(self._cubes.keys())
@@ -220,8 +181,19 @@ class ObjectCentricPrplLab3DEnv(
         assert isinstance(state, PrplLab3DObjectCentricState)
         return state
 
+    def _get_surfaces_supporting_object(self, _object_id: int) -> set[int]:
+        # Always allow release — no surface-contact requirement for this env.
+        return {self._lab_id}
+
     def goal_reached(self) -> bool:
-        return False
+        # All cubes must be above the counter (z > 0.5 distinguishes counter from floor).
+        for cube_id in self._cubes.values():
+            pos, _ = p.getBasePositionAndOrientation(
+                cube_id, physicsClientId=self.physics_client_id
+            )
+            if pos[2] < 0.5:
+                return False
+        return True
 
 
 class PrplLab3DEnv(ConstantObjectKinDEREnv):
@@ -246,10 +218,10 @@ class PrplLab3DEnv(ConstantObjectKinDEREnv):
         return constant_objects
 
     def _create_env_markdown_description(self) -> str:
+        """Create environment description."""
         return (
             "A 3D environment loaded from the PRPL lab URDF. "
-            "The robot picks cubes from the floor and places them inside "
-            "the open lower cabinet doors."
+            "The robot picks cubes from the floor and places them on the countertop."
         )
 
     def _create_variant_markdown_description(self) -> str:
@@ -260,11 +232,13 @@ class PrplLab3DEnv(ConstantObjectKinDEREnv):
 
     def _create_variant_specific_description(self) -> str:
         if self._num_cubes == 1:
-            return "This variant has 1 cube to place in the cabinet."
-        return f"This variant has {self._num_cubes} cubes to place in the cabinets."
+            return "This variant has 1 cube to place on the counter."
+        return f"This variant has {self._num_cubes} cubes to place on the counter."
 
     def _create_reward_markdown_description(self) -> str:
-        return "No reward defined for this demo environment."
+        """Create reward description."""
+        return "The reward is -1 per timestep. The episode terminates successfully when all cubes are on the countertop."
 
     def _create_references_markdown_description(self) -> str:
+        """Create references description."""
         return ""

@@ -145,10 +145,7 @@ def test_pick_place(env):  # pylint: disable=redefined-outer-name
     )
     sim.set_state(obs)
 
-    # Suppress step-level collision-revert so the arm can move freely near the
-    # lab geometry (getClosestPoints ignores setCollisionFilterPair).
     oc_env = env.unwrapped._object_centric_env
-    oc_env.disable_collision_checking = True
 
     if MAKE_VIDEOS:
         max_candidate_plans = 20
@@ -250,7 +247,7 @@ def test_pick_place(env):  # pylint: disable=redefined-outer-name
     sim.set_state(obs)
     # EE just above the counter so the cube rests on the surface.
     counter_surface_z = 0.76
-    place_z = counter_surface_z + config.block_half_extents[2] + 0.01
+    place_z = counter_surface_z + config.block_half_extents[2]
     place_pose = Pose.from_rpy((counter_x, 1.6, place_z), (-np.pi / 2, np.pi, 0))
 
     joint_plan = run_smooth_motion_planning_to_pose(

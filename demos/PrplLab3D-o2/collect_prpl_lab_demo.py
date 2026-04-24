@@ -31,8 +31,6 @@ from pybullet_helpers.motion_planning import (
     smoothly_follow_end_effector_path,
 )
 
-from generate_env_docs import sanitize_env_id
-
 import kinder
 from kinder.envs.kinematic3d.prpl3d import (
     ObjectCentricPrplLab3DEnv,
@@ -42,7 +40,6 @@ from kinder.envs.kinematic3d.prpl3d import (
 from kinder.envs.kinematic3d.utils import extend_joints_to_include_fingers
 
 ENV_ID = "kinder/PrplLab3D-o2-v0"
-COUNTER_SURFACE_Z = 0.76
 
 
 # ── Execution helpers ──────────────────────────────────────────────────────────
@@ -114,7 +111,7 @@ def collect_demo(seed: int = 0, demo_dir: Path = Path("demos")) -> Path:
     for s in range(20):
         base_plan = run_single_arm_mobile_base_motion_planning(
             sim.robot, sim.robot.base.get_pose(), target_base,
-            collision_bodies=set(), seed=s,
+            collision_bodies={sim._lab_id}, seed=s,
         )
         if base_plan is not None:
             break
@@ -130,7 +127,7 @@ def collect_demo(seed: int = 0, demo_dir: Path = Path("demos")) -> Path:
 
     joint_plan = run_smooth_motion_planning_to_pose(
         pre_grasp_pose, sim.robot.arm,
-        collision_ids=set(),
+        collision_ids={sim._lab_id},
         end_effector_frame_to_plan_frame=Pose.identity(),
         seed=123, max_candidate_plans=5,
     )
@@ -146,7 +143,7 @@ def collect_demo(seed: int = 0, demo_dir: Path = Path("demos")) -> Path:
         sim.robot.arm,
         [sim.robot.arm.get_end_effector_pose(), grasp_pose],
         sim.robot.arm.get_joint_positions(),
-        collision_ids=set(),
+        collision_ids={sim._lab_id},
         joint_distance_fn=joint_distance_fn,
         max_smoothing_iters_per_step=1,
     )
@@ -175,7 +172,7 @@ def collect_demo(seed: int = 0, demo_dir: Path = Path("demos")) -> Path:
         sim.robot.arm,
         sim.robot.arm.get_joint_positions(),
         extend_joints_to_include_fingers(sim.config.initial_joints),
-        collision_bodies=set(),
+        collision_bodies={sim._lab_id},
         seed=123,
         physics_client_id=sim.physics_client_id,
         held_object=sim._grasped_object_id,
@@ -195,7 +192,7 @@ def collect_demo(seed: int = 0, demo_dir: Path = Path("demos")) -> Path:
     for s in range(10):
         base_plan = run_single_arm_mobile_base_motion_planning(
             sim.robot, sim.robot.base.get_pose(), target_counter_base,
-            collision_bodies=set(), seed=456 + s,
+            collision_bodies={sim._lab_id}, seed=456 + s,
         )
         if base_plan is not None:
             break
@@ -204,15 +201,16 @@ def collect_demo(seed: int = 0, demo_dir: Path = Path("demos")) -> Path:
 
     # ── Step 7: arm → place on counter ───────────────────────────────────────
     print("Step 7: arm → place")
+    place_rpy = (-np.pi / 2, np.pi, 0)
     sim.set_state(obs)
-    place_z = COUNTER_SURFACE_Z + config.block_half_extents[2] + 0.01
-    place_pose = Pose.from_rpy((counter_x, 1.6, place_z), (-np.pi / 2, np.pi, 0))
 
+    # Release above the counter — goal_reached checks z > 0.5, not surface contact.
+    place_pose = Pose.from_rpy((counter_x, 1.6, 0.85), place_rpy)
     joint_plan = None
     for s in range(20):
         joint_plan = run_smooth_motion_planning_to_pose(
             place_pose, sim.robot.arm,
-            collision_ids=set(),
+            collision_ids={sim._lab_id},
             end_effector_frame_to_plan_frame=Pose.identity(),
             seed=s, max_time=5, max_candidate_plans=5,
             held_object=sim._grasped_object_id,
@@ -226,7 +224,7 @@ def collect_demo(seed: int = 0, demo_dir: Path = Path("demos")) -> Path:
     )
     obs = _execute_joint_plan(env, joint_plan, obs, actions, rewards, observations)
 
-    # ── Step 8: open gripper ──────────────────────────────────────────────────
+    # ── Step 8: open gripper to release cube1 ─────────────────────────────────
     print("Step 8: open gripper")
     for _ in range(5):
         action = np.array([0.0] * 3 + [0.0] * 7 + [1.0], dtype=np.float32)
@@ -236,11 +234,145 @@ def collect_demo(seed: int = 0, demo_dir: Path = Path("demos")) -> Path:
         actions.append(action)
         rewards.append(float(reward))
         observations.append(vec_obs)
+    assert obs.grasped_object is None, f"cube1 release failed: {obs.grasped_object}"
+
+    # ── Steps 9-16: pick cube0 and place next to cube1 ────────────────────────
+
+    # ── Step 9: base → cube0 ─────────────────────────────────────────────────
+    print("Step 9: base → cube0")
+    sim.set_state(obs)
+    cube_se2 = obs.get_object_pose("cube0").to_se2()
+    target_base = SE2Pose(cube_se2.x, cube_se2.y - 0.5, np.pi / 2)
+    base_plan = None
+    for s in range(20):
+        base_plan = run_single_arm_mobile_base_motion_planning(
+            sim.robot, sim.robot.base.get_pose(), target_base,
+            collision_bodies={sim._lab_id}, seed=s,
+        )
+        if base_plan is not None:
+            break
+    assert base_plan is not None, "Base plan to cube0 failed"
+    obs = _execute_base_plan(env, base_plan, obs, actions, rewards, observations)
+
+    # ── Step 10: arm → pre-grasp ─────────────────────────────────────────────
+    print("Step 10: arm → pre-grasp")
+    sim.set_state(obs)
+    x, y, z = obs.get_object_pose("cube0").position
+    pre_grasp_pose = Pose.from_rpy((x, y, z + 0.05), (np.pi, 0, np.pi / 2))
+    grasp_pose = Pose.from_rpy((x, y, z + 0.005), (np.pi, 0, np.pi / 2))
+
+    joint_plan = run_smooth_motion_planning_to_pose(
+        pre_grasp_pose, sim.robot.arm,
+        collision_ids={sim._lab_id},
+        end_effector_frame_to_plan_frame=Pose.identity(),
+        seed=123, max_candidate_plans=5,
+    )
+    joint_plan = remap_joint_position_plan_to_constant_distance(
+        joint_plan, sim.robot.arm, max_distance=config.max_action_mag / 2
+    )
+    obs = _execute_joint_plan(env, joint_plan, obs, actions, rewards, observations)
+
+    # ── Step 11: arm → grasp ─────────────────────────────────────────────────
+    print("Step 11: arm → grasp")
+    sim.set_state(obs)
+    joint_plan = smoothly_follow_end_effector_path(
+        sim.robot.arm,
+        [sim.robot.arm.get_end_effector_pose(), grasp_pose],
+        sim.robot.arm.get_joint_positions(),
+        collision_ids={sim._lab_id},
+        joint_distance_fn=joint_distance_fn,
+        max_smoothing_iters_per_step=1,
+    )
+    assert joint_plan is not None
+    joint_plan = remap_joint_position_plan_to_constant_distance(
+        joint_plan, sim.robot.arm, max_distance=config.max_action_mag / 2
+    )
+    obs = _execute_joint_plan(env, joint_plan, obs, actions, rewards, observations)
+
+    # ── Step 12: close gripper ────────────────────────────────────────────────
+    print("Step 12: close gripper")
+    for _ in range(5):
+        action = np.array([0.0] * 3 + [0.0] * 7 + [-1.0], dtype=np.float32)
+        vec_obs, reward, _, _, _ = env.step(action)
+        oc_obs = env.observation_space.devectorize(vec_obs)
+        obs = PrplLab3DObjectCentricState(oc_obs.data, oc_obs.type_features)
+        actions.append(action)
+        rewards.append(float(reward))
+        observations.append(vec_obs)
+    assert obs.grasped_object == "cube0", f"Grasp failed: {obs.grasped_object}"
+
+    # ── Step 13: retract arm ──────────────────────────────────────────────────
+    print("Step 13: retract arm")
+    sim.set_state(obs)
+    joint_plan = run_motion_planning(
+        sim.robot.arm,
+        sim.robot.arm.get_joint_positions(),
+        extend_joints_to_include_fingers(sim.config.initial_joints),
+        collision_bodies={sim._lab_id},
+        seed=123,
+        physics_client_id=sim.physics_client_id,
+        held_object=sim._grasped_object_id,
+        base_link_to_held_obj=sim._grasped_object_transform,
+    )
+    joint_plan = remap_joint_position_plan_to_constant_distance(
+        joint_plan, sim.robot.arm, max_distance=config.max_action_mag / 2
+    )
+    obs = _execute_joint_plan(env, joint_plan, obs, actions, rewards, observations)
+
+    # ── Step 14: base → counter ───────────────────────────────────────────────
+    print("Step 14: base → counter")
+    sim.set_state(obs)
+    counter_x2 = 0.0  # place cube0 slightly to the left of cube1
+    target_counter_base2 = SE2Pose(counter_x2, 0.7, np.pi / 2)
+    base_plan = None
+    for s in range(10):
+        base_plan = run_single_arm_mobile_base_motion_planning(
+            sim.robot, sim.robot.base.get_pose(), target_counter_base2,
+            collision_bodies={sim._lab_id}, seed=456 + s,
+        )
+        if base_plan is not None:
+            break
+    assert base_plan is not None, "Base plan to counter (cube0) failed"
+    obs = _execute_base_plan(env, base_plan, obs, actions, rewards, observations)
+
+    # ── Step 15: arm → place on counter ──────────────────────────────────────
+    print("Step 15: arm → place")
+    sim.set_state(obs)
+
+    place_pose2 = Pose.from_rpy((counter_x2, 1.6, 1.0), place_rpy)
+    joint_plan = None
+    for s in range(20):
+        joint_plan = run_smooth_motion_planning_to_pose(
+            place_pose2, sim.robot.arm,
+            collision_ids={sim._lab_id},
+            end_effector_frame_to_plan_frame=Pose.identity(),
+            seed=s, max_time=5, max_candidate_plans=5,
+            held_object=sim._grasped_object_id,
+            base_link_to_held_obj=sim._grasped_object_transform,
+        )
+        if joint_plan is not None:
+            break
+    assert joint_plan is not None, "Place plan (cube0) failed"
+    joint_plan = remap_joint_position_plan_to_constant_distance(
+        joint_plan, sim.robot.arm, max_distance=config.max_action_mag / 2
+    )
+    obs = _execute_joint_plan(env, joint_plan, obs, actions, rewards, observations)
+
+    # ── Step 16: open gripper to release cube0 ────────────────────────────────
+    print("Step 16: open gripper")
+    terminated = False
+    for _ in range(5):
+        action = np.array([0.0] * 3 + [0.0] * 7 + [1.0], dtype=np.float32)
+        vec_obs, reward, terminated, _, _ = env.step(action)
+    oc_obs = env.observation_space.devectorize(vec_obs)
+    obs = PrplLab3DObjectCentricState(oc_obs.data, oc_obs.type_features)
+    actions.append(action)
+    rewards.append(float(reward))
+    observations.append(vec_obs)
 
     # ── Save demo ─────────────────────────────────────────────────────────────
     timestamp = int(time.time())
-    sanitized = sanitize_env_id(ENV_ID)
-    demo_subdir = demo_dir / sanitized / str(seed)
+    demo_subdir = Path(__file__).parent / str(seed)
     demo_subdir.mkdir(parents=True, exist_ok=True)
     demo_path = demo_subdir / f"{timestamp}.p"
 
@@ -251,7 +383,7 @@ def collect_demo(seed: int = 0, demo_dir: Path = Path("demos")) -> Path:
         "observations": observations,
         "actions": actions,
         "rewards": rewards,
-        "terminated": False,
+        "terminated": terminated,
         "truncated": False,
     }
     with open(demo_path, "wb") as f:

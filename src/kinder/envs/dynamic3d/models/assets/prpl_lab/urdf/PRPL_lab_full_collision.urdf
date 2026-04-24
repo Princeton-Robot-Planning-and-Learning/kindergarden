@@ -406,6 +406,13 @@
         <mesh filename="../meshes/stl/Cabinet1.005.stl" scale="1.00000 1.00000 1.00000" />
       </geometry>
     </visual>
+  
+    <collision>
+      <origin rpy="0.00000 0.00000 -0.00000" xyz="0.00000 0.00000 0.00000" />
+      <geometry>
+        <mesh filename="../meshes/stl/Cabinet1.005.stl" scale="1.00000 1.00000 1.00000" />
+      </geometry>
+    </collision>
   </link>
   <link name="Cabinet1_link">
     <visual name="Cabinet1">
@@ -415,6 +422,13 @@
         <mesh filename="../meshes/stl/Cabinet1.004.stl" scale="1.00000 1.00000 1.00000" />
       </geometry>
     </visual>
+  
+    <collision>
+      <origin rpy="0.00000 0.00000 0.00000" xyz="-0.00000 0.00000 -0.03794" />
+      <geometry>
+        <mesh filename="../meshes/stl/Cabinet1.004.stl" scale="1.00000 1.00000 1.00000" />
+      </geometry>
+    </collision>
   </link>
   <link name="Drawer.005_link">
     <visual name="Drawer.005">
@@ -424,6 +438,13 @@
         <mesh filename="../meshes/stl/Drawer.014.stl" scale="1.00000 1.00000 1.00000" />
       </geometry>
     </visual>
+  
+    <collision>
+      <origin rpy="-1.57080 -0.00000 0.00000" xyz="0.00901 -0.00000 -0.01306" />
+      <geometry>
+        <mesh filename="../meshes/stl/Drawer.014.stl" scale="1.00000 1.00000 1.00000" />
+      </geometry>
+    </collision>
   </link>
   <link name="Drawer.004_link">
     <visual name="Drawer.004">
@@ -433,6 +454,13 @@
         <mesh filename="../meshes/stl/Drawer.013.stl" scale="1.00000 1.00000 1.00000" />
       </geometry>
     </visual>
+  
+    <collision>
+      <origin rpy="-1.57080 -0.00000 0.00000" xyz="0.00901 0.00000 -0.01306" />
+      <geometry>
+        <mesh filename="../meshes/stl/Drawer.013.stl" scale="1.00000 1.00000 1.00000" />
+      </geometry>
+    </collision>
   </link>
   <link name="Drawer.003_link">
     <visual name="Drawer.003">
@@ -442,6 +470,13 @@
         <mesh filename="../meshes/stl/Drawer.012.stl" scale="1.00000 1.00000 1.00000" />
       </geometry>
     </visual>
+  
+    <collision>
+      <origin rpy="-1.57080 -0.00000 0.00000" xyz="0.00901 -0.00000 -0.01306" />
+      <geometry>
+        <mesh filename="../meshes/stl/Drawer.012.stl" scale="1.00000 1.00000 1.00000" />
+      </geometry>
+    </collision>
   </link>
   <link name="Cabinet1.002_link">
     <visual name="Cabinet1.002">
@@ -451,6 +486,13 @@
         <mesh filename="../meshes/stl/Cabinet1.002.stl" scale="1.00000 1.00000 1.00000" />
       </geometry>
     </visual>
+  
+    <collision>
+      <origin rpy="0.00000 0.00000 -0.00000" xyz="-0.00000 0.00000 -0.00000" />
+      <geometry>
+        <mesh filename="../meshes/stl/Cabinet1.002.stl" scale="1.00000 1.00000 1.00000" />
+      </geometry>
+    </collision>
   </link>
   <link name="Cabinet1_Door.002_link">
     <visual name="Cabinet1_Door.002">
@@ -460,6 +502,13 @@
         <mesh filename="../meshes/stl/Cabinet1_Door.002.stl" scale="1.00000 1.00000 1.00000" />
       </geometry>
     </visual>
+  
+    <collision>
+      <origin rpy="0.00000 0.00000 -0.00000" xyz="0.00000 -0.00000 0.00000" />
+      <geometry>
+        <mesh filename="../meshes/stl/Cabinet1_Door.002.stl" scale="1.00000 1.00000 1.00000" />
+      </geometry>
+    </collision>
   </link>
   <link name="Handle.001_link">
     <visual name="Handle.001">
@@ -469,6 +518,13 @@
         <mesh filename="../meshes/stl/Handle.004.stl" scale="1.00000 1.00000 1.00000" />
       </geometry>
     </visual>
+  
+    <collision>
+      <origin rpy="0.00000 -0.00000 -0.00000" xyz="0.00000 0.00000 0.00000" />
+      <geometry>
+        <mesh filename="../meshes/stl/Handle.004.stl" scale="1.00000 1.00000 1.00000" />
+      </geometry>
+    </collision>
   </link>
   <link name="Cabinet2_Door.001_link">
     <visual name="Cabinet2_Door.001">
@@ -478,6 +534,13 @@
         <mesh filename="../meshes/stl/Cabinet2_Door.003.stl" scale="1.00000 1.00000 1.00000" />
       </geometry>
     </visual>
+  
+    <collision>
+      <origin rpy="0.00000 0.00000 -0.00000" xyz="-0.00000 -0.00000 0.00000" />
+      <geometry>
+        <mesh filename="../meshes/stl/Cabinet2_Door.003.stl" scale="1.00000 1.00000 1.00000" />
+      </geometry>
+    </collision>
   </link>
   <link name="Handle.002_link">
     <visual name="Handle.002">
@@ -487,6 +550,13 @@
         <mesh filename="../meshes/stl/Handle.005.stl" scale="1.00000 1.00000 1.00000" />
       </geometry>
     </visual>
+  
+    <collision>
+      <origin rpy="0.00000 0.00000 0.00000" xyz="0.00000 0.00000 0.00000" />
+      <geometry>
+        <mesh filename="../meshes/stl/Handle.005.stl" scale="1.00000 1.00000 1.00000" />
+      </geometry>
+    </collision>
   </link>
   <link name="Cabinet1.004_link">
     <visual name="Cabinet1.004">
@@ -496,6 +566,13 @@
         <mesh filename="../meshes/stl/Cabinet1.003.stl" scale="1.00000 1.00000 1.00000" />
       </geometry>
     </visual>
+  
+    <collision>
+      <origin rpy="0.00000 0.00000 0.00000" xyz="-0.00000 -0.00000 -0.00000" />
+      <geometry>
+        <mesh filename="../meshes/stl/Cabinet1.003.stl" scale="1.00000 1.00000 1.00000" />
+      </geometry>
+    </collision>
   </link>
   <link name="Cabinet1_Door.004_link">
     <visual name="Cabinet1_Door.004">
@@ -505,6 +582,13 @@
         <mesh filename="../meshes/stl/Cabinet1_Door.005.stl" scale="1.00000 1.00000 1.00000" />
       </geometry>
     </visual>
+  
+    <collision>
+      <origin rpy="0.00000 0.00000 -0.00000" xyz="0.00000 0.00000 0.00000" />
+      <geometry>
+        <mesh filename="../meshes/stl/Cabinet1_Door.005.stl" scale="1.00000 1.00000 1.00000" />
+      </geometry>
+    </collision>
   </link>
   <link name="Cabinet1_Door_link">
     <visual name="Cabinet1_Door">
@@ -514,6 +598,13 @@
         <mesh filename="../meshes/stl/Cabinet1_Door.003.stl" scale="1.00000 1.00000 1.00000" />
       </geometry>
     </visual>
+  
+    <collision>
+      <origin rpy="1.85332 -1.57080 2.85907" xyz="-0.00100 -0.33394 0.00000" />
+      <geometry>
+        <mesh filename="../meshes/stl/Cabinet1_Door.003.stl" scale="1.00000 1.00000 1.00000" />
+      </geometry>
+    </collision>
   </link>
   <link name="Handle.005_link">
     <visual name="Handle.005">
@@ -523,6 +614,13 @@
         <mesh filename="../meshes/stl/Handle.006.stl" scale="1.00000 1.00000 1.00000" />
       </geometry>
     </visual>
+  
+    <collision>
+      <origin rpy="-0.00000 0.00000 -0.00000" xyz="0.00000 -0.00000 -0.00000" />
+      <geometry>
+        <mesh filename="../meshes/stl/Handle.006.stl" scale="1.00000 1.00000 1.00000" />
+      </geometry>
+    </collision>
   </link>
   <link name="Cabinet2_Door.003_link">
     <visual name="Cabinet2_Door.003">
@@ -532,6 +630,13 @@
         <mesh filename="../meshes/stl/Cabinet2_Door.005.stl" scale="1.00000 1.00000 1.00000" />
       </geometry>
     </visual>
+  
+    <collision>
+      <origin rpy="0.00000 0.00000 -0.00000" xyz="-0.00000 0.00000 0.00000" />
+      <geometry>
+        <mesh filename="../meshes/stl/Cabinet2_Door.005.stl" scale="1.00000 1.00000 1.00000" />
+      </geometry>
+    </collision>
   </link>
   <link name="Handle.006_link">
     <visual name="Handle.006">
@@ -541,6 +646,13 @@
         <mesh filename="../meshes/stl/Handle.007.stl" scale="1.00000 1.00000 1.00000" />
       </geometry>
     </visual>
+  
+    <collision>
+      <origin rpy="-0.00000 0.00000 0.00000" xyz="-0.00000 0.00000 -0.00000" />
+      <geometry>
+        <mesh filename="../meshes/stl/Handle.007.stl" scale="1.00000 1.00000 1.00000" />
+      </geometry>
+    </collision>
   </link>
   <link name="Cabinet1.005_link" />
   <link name="Cabinet1_Door.005_link">
@@ -551,6 +663,13 @@
         <mesh filename="../meshes/stl/Cabinet1_Door.008.stl" scale="1.00000 1.00000 1.00000" />
       </geometry>
     </visual>
+  
+    <collision>
+      <origin rpy="0.00000 0.00000 0.00000" xyz="-0.00000 0.01927 -0.00000" />
+      <geometry>
+        <mesh filename="../meshes/stl/Cabinet1_Door.008.stl" scale="1.00000 1.00000 1.00000" />
+      </geometry>
+    </collision>
   </link>
   <link name="Handle.007_link">
     <visual name="Handle.007">
@@ -560,6 +679,13 @@
         <mesh filename="../meshes/stl/Handle.011.stl" scale="1.00000 1.00000 1.00000" />
       </geometry>
     </visual>
+  
+    <collision>
+      <origin rpy="-0.00000 -0.00000 0.00000" xyz="-0.00000 -0.00000 0.00000" />
+      <geometry>
+        <mesh filename="../meshes/stl/Handle.011.stl" scale="1.00000 1.00000 1.00000" />
+      </geometry>
+    </collision>
   </link>
   <link name="Cabinet2_Door.004_link">
     <visual name="Cabinet2_Door.004">
@@ -569,6 +695,13 @@
         <mesh filename="../meshes/stl/Cabinet2_Door.007.stl" scale="1.00000 1.00000 1.00000" />
       </geometry>
     </visual>
+  
+    <collision>
+      <origin rpy="0.00000 0.00000 0.00000" xyz="0.00000 0.01927 -0.00000" />
+      <geometry>
+        <mesh filename="../meshes/stl/Cabinet2_Door.007.stl" scale="1.00000 1.00000 1.00000" />
+      </geometry>
+    </collision>
   </link>
   <link name="Handle.008_link">
     <visual name="Handle.008">
@@ -578,6 +711,13 @@
         <mesh filename="../meshes/stl/Handle.012.stl" scale="1.00000 1.00000 1.00000" />
       </geometry>
     </visual>
+  
+    <collision>
+      <origin rpy="-0.00000 -0.00000 0.00000" xyz="-0.00000 -0.00000 0.00000" />
+      <geometry>
+        <mesh filename="../meshes/stl/Handle.012.stl" scale="1.00000 1.00000 1.00000" />
+      </geometry>
+    </collision>
   </link>
   <link name="lab_in_progress_align_sink.155_link">
     <visual name="lab_in_progress_align_sink.155">
@@ -617,6 +757,13 @@
         <mesh filename="../meshes/stl/Handle.008.stl" scale="1.00000 1.00000 1.00000" />
       </geometry>
     </visual>
+  
+    <collision>
+      <origin rpy="-0.00000 0.00000 0.00000" xyz="0.00000 -0.00000 -0.00000" />
+      <geometry>
+        <mesh filename="../meshes/stl/Handle.008.stl" scale="1.00000 1.00000 1.00000" />
+      </geometry>
+    </collision>
   </link>
   <link name="Countertop1_link">
     <visual name="Countertop1">
@@ -664,6 +811,13 @@
         <mesh filename="../meshes/stl/Drawer.003.stl" scale="1.00000 1.00000 1.00000" />
       </geometry>
     </visual>
+  
+    <collision>
+      <origin rpy="-1.57080 -0.00000 0.00000" xyz="0.00000 -0.00000 -0.00000" />
+      <geometry>
+        <mesh filename="../meshes/stl/Drawer.003.stl" scale="1.00000 1.00000 1.00000" />
+      </geometry>
+    </collision>
   </link>
   <link name="Handle.009_link" />
   <link name="Drawer.002_link">
@@ -674,6 +828,13 @@
         <mesh filename="../meshes/stl/Drawer.005.stl" scale="1.00000 1.00000 1.00000" />
       </geometry>
     </visual>
+  
+    <collision>
+      <origin rpy="-1.57080 -0.00000 0.00000" xyz="0.00000 0.00000 0.00000" />
+      <geometry>
+        <mesh filename="../meshes/stl/Drawer.005.stl" scale="1.00000 1.00000 1.00000" />
+      </geometry>
+    </collision>
   </link>
   <link name="Handle.011_link" />
   <link name="Drawer.001_link">
@@ -684,6 +845,13 @@
         <mesh filename="../meshes/stl/Drawer.004.stl" scale="1.00000 1.00000 1.00000" />
       </geometry>
     </visual>
+  
+    <collision>
+      <origin rpy="-1.57080 -0.00000 0.00000" xyz="0.00000 -0.00000 -0.00000" />
+      <geometry>
+        <mesh filename="../meshes/stl/Drawer.004.stl" scale="1.00000 1.00000 1.00000" />
+      </geometry>
+    </collision>
   </link>
   <link name="Handle.010_link" />
   <link name="Cabinet1.007_link">
@@ -694,6 +862,13 @@
         <mesh filename="../meshes/stl/Cabinet1.001.stl" scale="1.00000 1.00000 1.00000" />
       </geometry>
     </visual>
+  
+    <collision>
+      <origin rpy="0.00000 0.00000 -0.00000" xyz="0.00000 -0.00000 -0.00000" />
+      <geometry>
+        <mesh filename="../meshes/stl/Cabinet1.001.stl" scale="1.00000 1.00000 1.00000" />
+      </geometry>
+    </collision>
   </link>
   <link name="Baseboard2.001_link">
     <visual name="Baseboard2.001">
@@ -703,6 +878,13 @@
         <mesh filename="../meshes/stl/Baseboard2.001.stl" scale="1.00000 1.00000 1.00000" />
       </geometry>
     </visual>
+  
+    <collision>
+      <origin rpy="0.00000 0.00000 -0.00000" xyz="0.00000 0.00000 -0.00000" />
+      <geometry>
+        <mesh filename="../meshes/stl/Baseboard2.001.stl" scale="1.00000 1.00000 1.00000" />
+      </geometry>
+    </collision>
   </link>
   <link name="Cabinet1_Door.006_link">
     <visual name="Cabinet1_Door.006">
@@ -712,6 +894,13 @@
         <mesh filename="../meshes/stl/Cabinet1_Door.006.stl" scale="1.00000 1.00000 1.00000" />
       </geometry>
     </visual>
+  
+    <collision>
+      <origin rpy="0.00000 0.00000 0.00000" xyz="-0.00000 -0.00000 -0.00000" />
+      <geometry>
+        <mesh filename="../meshes/stl/Cabinet1_Door.006.stl" scale="1.00000 1.00000 1.00000" />
+      </geometry>
+    </collision>
   </link>
   <link name="Handle.012_link">
     <visual name="Handle.012">
@@ -721,6 +910,13 @@
         <mesh filename="../meshes/stl/Handle.009.stl" scale="1.00000 1.00000 1.00000" />
       </geometry>
     </visual>
+  
+    <collision>
+      <origin rpy="0.00000 -0.00000 0.00000" xyz="-0.00000 -0.00000 0.00000" />
+      <geometry>
+        <mesh filename="../meshes/stl/Handle.009.stl" scale="1.00000 1.00000 1.00000" />
+      </geometry>
+    </collision>
   </link>
   <link name="Cabinet2_Door.005_link">
     <visual name="Cabinet2_Door.005">
@@ -730,6 +926,13 @@
         <mesh filename="../meshes/stl/Cabinet2_Door.004.stl" scale="1.00000 1.00000 1.00000" />
       </geometry>
     </visual>
+  
+    <collision>
+      <origin rpy="0.00000 0.00000 0.00000" xyz="-0.00000 -0.00000 -0.00000" />
+      <geometry>
+        <mesh filename="../meshes/stl/Cabinet2_Door.004.stl" scale="1.00000 1.00000 1.00000" />
+      </geometry>
+    </collision>
   </link>
   <link name="Handle.013_link">
     <visual name="Handle.013">
@@ -739,6 +942,13 @@
         <mesh filename="../meshes/stl/Handle.010.stl" scale="1.00000 1.00000 1.00000" />
       </geometry>
     </visual>
+  
+    <collision>
+      <origin rpy="0.00000 -0.00000 0.00000" xyz="-0.00000 0.00000 -0.00000" />
+      <geometry>
+        <mesh filename="../meshes/stl/Handle.010.stl" scale="1.00000 1.00000 1.00000" />
+      </geometry>
+    </collision>
   </link>
   <link name="new_link">
     <visual name="stoveCube">
@@ -838,6 +1048,13 @@
         <mesh filename="../meshes/stl/Cabinet1_Door.001.stl" scale="1.00000 1.00000 1.00000" />
       </geometry>
     </visual>
+  
+    <collision>
+      <origin rpy="0.00000 0.00000 0.00000" xyz="-0.00000 -0.00000 -0.00000" />
+      <geometry>
+        <mesh filename="../meshes/stl/Cabinet1_Door.001.stl" scale="1.00000 1.00000 1.00000" />
+      </geometry>
+    </collision>
   </link>
   <link name="base.002_link">
     <visual name="base.002">
@@ -997,6 +1214,13 @@
         <mesh filename="../meshes/stl/Handle.002.stl" scale="1.00000 1.00000 1.00000" />
       </geometry>
     </visual>
+  
+    <collision>
+      <origin rpy="0.00000 -0.00000 0.00000" xyz="-0.00000 -0.00000 0.00000" />
+      <geometry>
+        <mesh filename="../meshes/stl/Handle.002.stl" scale="1.00000 1.00000 1.00000" />
+      </geometry>
+    </collision>
   </link>
   <link name="Cabinet1_Door.001_link">
     <visual name="Cabinet1_Door.001">
@@ -1006,6 +1230,13 @@
         <mesh filename="../meshes/stl/Cabinet1_Door.004.stl" scale="1.00000 1.00000 1.00000" />
       </geometry>
     </visual>
+  
+    <collision>
+      <origin rpy="0.00000 0.00000 -0.00000" xyz="0.41650 -0.01540 -0.00000" />
+      <geometry>
+        <mesh filename="../meshes/stl/Cabinet1_Door.004.stl" scale="1.00000 1.00000 1.00000" />
+      </geometry>
+    </collision>
   </link>
   <link name="Cabinet2_Door_link">
     <visual name="Cabinet2_Door">
@@ -1015,6 +1246,13 @@
         <mesh filename="../meshes/stl/Cabinet2_Door.002.stl" scale="1.00000 1.00000 1.00000" />
       </geometry>
     </visual>
+  
+    <collision>
+      <origin rpy="0.00000 0.00000 -0.00000" xyz="-0.41650 0.00000 -0.00000" />
+      <geometry>
+        <mesh filename="../meshes/stl/Cabinet2_Door.002.stl" scale="1.00000 1.00000 1.00000" />
+      </geometry>
+    </collision>
   </link>
   <link name="Cabinet2_Door.002_link">
     <visual name="Cabinet2_Door.002">
@@ -1024,6 +1262,13 @@
         <mesh filename="../meshes/stl/Cabinet2_Door.001.stl" scale="1.00000 1.00000 1.00000" />
       </geometry>
     </visual>
+  
+    <collision>
+      <origin rpy="0.00000 0.00000 0.00000" xyz="-0.00100 -0.03200 -0.00000" />
+      <geometry>
+        <mesh filename="../meshes/stl/Cabinet2_Door.001.stl" scale="1.00000 1.00000 1.00000" />
+      </geometry>
+    </collision>
   </link>
   <link name="Handle.004_link">
     <visual name="Handle.004">
@@ -1033,6 +1278,13 @@
         <mesh filename="../meshes/stl/Handle.003.stl" scale="1.00000 1.00000 1.00000" />
       </geometry>
     </visual>
+  
+    <collision>
+      <origin rpy="0.00000 -0.00000 0.00000" xyz="-0.00000 -0.00000 0.00000" />
+      <geometry>
+        <mesh filename="../meshes/stl/Handle.003.stl" scale="1.00000 1.00000 1.00000" />
+      </geometry>
+    </collision>
   </link>
   <link name="Cabinet1.003_link">
     <visual name="Cabinet1.003">
@@ -1042,5 +1294,12 @@
         <mesh filename="../meshes/stl/Cabinet1.009.stl" scale="1.00000 1.00000 1.00000" />
       </geometry>
     </visual>
+  
+    <collision>
+      <origin rpy="0.00000 0.00000 -0.00000" xyz="-0.00000 0.01927 -0.00000" />
+      <geometry>
+        <mesh filename="../meshes/stl/Cabinet1.009.stl" scale="1.00000 1.00000 1.00000" />
+      </geometry>
+    </collision>
   </link>
 </robot>

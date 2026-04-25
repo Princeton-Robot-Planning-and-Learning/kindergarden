@@ -114,6 +114,20 @@ class ObjectCentricPrplLab3DEnv(
             )
             self._cubes[f"cube{idx}"] = cube_id
 
+        # Top surface of the countertop, derived from the AABB of the
+        # Countertop1_link once the URDF is loaded.
+        self._counter_top_z: float = self._compute_counter_top_z()
+
+    def _compute_counter_top_z(self) -> float:
+        """Return the world-space z of the countertop top surface via AABB."""
+        num_joints = p.getNumJoints(self._lab_id, physicsClientId=self.physics_client_id)
+        for i in range(num_joints):
+            info = p.getJointInfo(self._lab_id, i, physicsClientId=self.physics_client_id)
+            if info[12].decode() == "Countertop1_link":
+                aabb = p.getAABB(self._lab_id, i, physicsClientId=self.physics_client_id)
+                return float(aabb[1][2])  # max z
+        raise RuntimeError("Countertop1_link not found in PRPL lab URDF")
+
     # ── Abstract-method implementations ──────────────────────────────────────
 
     @property
@@ -186,12 +200,15 @@ class ObjectCentricPrplLab3DEnv(
         return {self._lab_id}
 
     def goal_reached(self) -> bool:
-        # All cubes must be above the counter (z > 0.5 distinguishes counter from floor).
-        for cube_id in self._cubes.values():
+        # Cubes must be resting on the counter and not held.
+        min_z = self._counter_top_z - 0.05
+        for cube_name, cube_id in self._cubes.items():
             pos, _ = p.getBasePositionAndOrientation(
                 cube_id, physicsClientId=self.physics_client_id
             )
-            if pos[2] < 0.5:
+            if pos[2] < min_z:
+                return False
+            if self._grasped_object == cube_name:
                 return False
         return True
 

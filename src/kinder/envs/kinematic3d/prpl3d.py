@@ -5,6 +5,11 @@ The robot picks cubes from the floor and places them on the countertop.
 
 from __future__ import annotations
 
+import contextlib
+import os
+import re
+import sys
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -43,6 +48,53 @@ _PRPL_LAB_URDF = (
     / "urdf"
     / "PRPL_lab_full_collision.urdf"
 )
+
+
+def _filter_inertial_warnings(text: str) -> str:
+    """Remove 'No inertial data for link' warning lines and their link-name lines."""
+    filtered = []
+    skip_next = False
+    for line in text.split("\n"):
+        if skip_next:
+            skip_next = False
+            continue
+        if "No inertial data for link" in line:
+            skip_next = True  # next line is the link name — also discard it
+            continue
+        if line.startswith("b3Warning[") and "BulletUrdfImporter" in line:
+            continue
+        filtered.append(line)
+    return "\n".join(filtered)
+
+
+@contextlib.contextmanager
+def _suppress_urdf_warnings():
+    """Capture URDF-load stdout and strip 'No inertial data' warning pairs."""
+    read_fd, write_fd = os.pipe()
+    old_stdout = os.dup(1)
+    os.dup2(write_fd, 1)
+    os.close(write_fd)
+
+    chunks: list[bytes] = []
+
+    def _drain() -> None:
+        with os.fdopen(read_fd, "rb", buffering=0) as pipe:
+            while chunk := pipe.read(4096):
+                chunks.append(chunk)
+
+    drainer = threading.Thread(target=_drain, daemon=True)
+    drainer.start()
+    try:
+        yield
+    finally:
+        sys.stdout.flush()
+        os.dup2(old_stdout, 1)
+        os.close(old_stdout)
+        drainer.join()
+        text = b"".join(chunks).decode("utf-8", errors="replace")
+        filtered = _filter_inertial_warnings(text)
+        if filtered.strip():
+            sys.stdout.write(filtered)
 
 
 @dataclass(frozen=True)
@@ -92,17 +144,19 @@ class ObjectCentricPrplLab3DEnv(
         config: PrplLab3DEnvConfig = PrplLab3DEnvConfig(),
         **kwargs,
     ) -> None:
-        super().__init__(config=config, **kwargs)
+        with _suppress_urdf_warnings():
+            super().__init__(config=config, **kwargs)
         self._num_cubes = num_cubes
 
         # Load PRPL lab URDF.
-        self._lab_id = p.loadURDF(
-            str(_PRPL_LAB_URDF),
-            basePosition=list(config.lab_pose.position),
-            baseOrientation=list(config.lab_pose.orientation),
-            physicsClientId=self.physics_client_id,
-            useFixedBase=True,
-        )
+        with _suppress_urdf_warnings():
+            self._lab_id = p.loadURDF(
+                str(_PRPL_LAB_URDF),
+                basePosition=list(config.lab_pose.position),
+                baseOrientation=list(config.lab_pose.orientation),
+                physicsClientId=self.physics_client_id,
+                useFixedBase=True,
+            )
 
         # Cubes (poses randomised in _reset_objects).
         self._cubes: dict[str, int] = {}

@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import contextlib
 import os
-import re
 import sys
 import threading
 from dataclasses import dataclass
@@ -78,6 +77,7 @@ def _suppress_urdf_warnings():
     chunks: list[bytes] = []
 
     def _drain() -> None:
+        """Read all bytes from the pipe until it is closed."""
         with os.fdopen(read_fd, "rb", buffering=0) as pipe:
             while chunk := pipe.read(4096):
                 chunks.append(chunk)

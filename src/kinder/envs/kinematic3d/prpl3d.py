@@ -122,7 +122,9 @@ class ObjectCentricPrplLab3DEnv(
         """Return the world-space z of the countertop top surface via AABB."""
         num_joints = p.getNumJoints(self._lab_id, physicsClientId=self.physics_client_id)
         for i in range(num_joints):
-            info = p.getJointInfo(self._lab_id, i, physicsClientId=self.physics_client_id)
+            info = p.getJointInfo(
+                self._lab_id, i, physicsClientId=self.physics_client_id
+            )
             if info[12].decode() == "Countertop1_link":
                 aabb = p.getAABB(self._lab_id, i, physicsClientId=self.physics_client_id)
                 return float(aabb[1][2])  # max z

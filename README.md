@@ -144,6 +144,12 @@ obs, info = env.reset(seed=42)
 | BalanceBeam3D | Dynamic3D | `kinder/BalanceBeam3D-o3-v0` |
 | SweepIntoDrawer3D | Dynamic3D | `kinder/SweepIntoDrawer3D-o5-v0` |
 
+## Acknowledgements
+
+We thank the authors of following projects for open-sourcing their code, whose assets we utilized in KinDER:
+- [RoboCasa](https://github.com/robocasa/robocasa) - for object assets in Dynamic3D envs
+- [MimicLabs](https://github.com/Gatech-RL2/mimiclabs) - for scene assets in Dynamic3D envs
+
 ## Contributing
 
 ### General Guidelines

@@ -494,7 +494,6 @@ def _register_env_class(
 def _ensure_assets_for_env(env_id: str) -> None:
     """Auto-download MimicLabs assets once, only for Dynamic3D environments."""
     dynamic3d_env_ids = {
-        # vid.removesuffix("-v0")
         vid
         for cls in get_env_categories().get("Dynamic3D", [])
         for vid in ENV_CLASSES[cls]["variants"]
@@ -510,12 +509,12 @@ def _ensure_assets_for_env(env_id: str) -> None:
         )
         return
 
-    _package_root = Path(__file__).parent
+    package_root = Path(__file__).parent
     mimiclabs_scenes_dir = (
-        _package_root / "envs" / "dynamic3d" / "models" / "assets" / "mimiclabs_scenes"
+        package_root / "envs" / "dynamic3d" / "models" / "assets" / "mimiclabs_scenes"
     )
     mimiclabs_download_script = (
-        _package_root.parent.parent / "scripts" / "download_mimiclabs_assets.py"
+        package_root.parent.parent / "scripts" / "download_mimiclabs_assets.py"
     )
 
     # If assets are already present, skip download.
@@ -525,11 +524,10 @@ def _ensure_assets_for_env(env_id: str) -> None:
     module_name = "kinder_mimiclabs_asset_downloader"
     spec = util.spec_from_file_location(module_name, mimiclabs_download_script)
     if spec is None or spec.loader is None:
-        warnings.warn(
+        raise FileNotFoundError(
             "MimicLabs assets are missing and auto-download could not be initialized. "
-            "Run scripts/download_mimiclabs_assets.py manually."
+            "Download mimiclabs assets manually."
         )
-        return
 
     module = util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -538,11 +536,11 @@ def _ensure_assets_for_env(env_id: str) -> None:
         print("Auto-downloading MimicLabs assets for Dynamic3D environments...")
         module.download_mimiclabs_assets(non_interactive=True)
     except Exception as err:  # pylint: disable=broad-except
-        warnings.warn(
+        raise RuntimeError(
             "Auto-download of MimicLabs assets failed. "
             "Run scripts/download_mimiclabs_assets.py manually. "
             f"Error: {err}"
-        )
+        ) from err
 
 
 def make(*args, **kwargs) -> gymnasium.Env:

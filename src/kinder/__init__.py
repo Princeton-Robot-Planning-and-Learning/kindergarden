@@ -7,11 +7,6 @@ from importlib import util
 from pathlib import Path
 from typing import Any
 
-from kinder.macros import (  # noqa: E402  # pylint: disable=wrong-import-position
-    DISABLE_AUTO_DYNAMIC3D_SCENES_DOWNLOAD,
-    is_truthy_env_var,
-)
-
 # Silence warnings from third-party packages
 warnings.filterwarnings("ignore", category=DeprecationWarning, module="kortex_api")
 warnings.filterwarnings("ignore", category=UserWarning, module="phoenix6")
@@ -19,11 +14,14 @@ warnings.filterwarnings("ignore", category=DeprecationWarning, module="pkg_resou
 
 # Need to import after silencing warnings
 import gymnasium  # pylint: disable=wrong-import-position
-from gymnasium.envs.registration import (  # pylint: disable=wrong-import-position
-    register,
-)
 
-from kinder.wrappers import (  # noqa: E402  # pylint: disable=wrong-import-position,unused-import
+from gymnasium.envs.registration import register  # pylint: disable=wrong-import-position
+
+from kinder.macros import (  # pylint: disable=wrong-import-position
+    DISABLE_AUTO_DYNAMIC3D_SCENES_DOWNLOAD,
+    is_truthy_env_var,
+)
+from kinder.wrappers import (  # pylint: disable=wrong-import-position,unused-import
     NoisyAction,
     NoisyObservation,
 )

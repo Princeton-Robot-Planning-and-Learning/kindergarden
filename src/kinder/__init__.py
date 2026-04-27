@@ -533,7 +533,10 @@ def _ensure_assets_for_env(env_id: str) -> None:
     spec.loader.exec_module(module)
 
     try:
-        print("Auto-downloading MimicLabs assets for Dynamic3D environments...")
+        print(
+            "Auto-downloading MimicLabs assets for Dynamic3D environments "
+            "(this may take a few minutes)..."
+        )
         module.download_mimiclabs_assets(non_interactive=True)
     except Exception as err:  # pylint: disable=broad-except
         raise RuntimeError(

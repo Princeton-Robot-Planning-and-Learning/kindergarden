@@ -119,31 +119,34 @@ obs, info = env.reset(seed=42)
 | Environment | Category | Example Environment ID |
 |---|---|---|
 | ClutteredRetrieval2D | Kinematic2D | `kinder/ClutteredRetrieval2D-o10-v0` |
-| Motion2D | Kinematic2D | `kinder/Motion2D-p5-v0` |
-| Obstruction2D | Kinematic2D | `kinder/Obstruction2D-o4-v0` |
+| ClutteredStorage2D | Kinematic2D | `kinder/ClutteredStorage2D-b7-v0` |
+| Motion2D | Kinematic2D | `kinder/Motion2D-p3-v0` |
+| Obstruction2D | Kinematic2D | `kinder/Obstruction2D-o2-v0` |
 | PushPullHook2D | Kinematic2D | `kinder/PushPullHook2D-v0` |
-| ClutteredStorage2D | Kinematic2D | `kinder/ClutteredStorage2D-b15-v0` |
-| StickButton2D | Kinematic2D | `kinder/StickButton2D-b10-v0` |
-| DynObstruction2D | Dynamic2D | `kinder/DynObstruction2D-o3-v0` |
-| DynPushPullHook2D | Dynamic2D | `kinder/DynPushPullHook2D-o5-v0` |
-| DynPushT2D | Dynamic2D | `kinder/DynPushT2D-t1-v0` |
-| DynScoopPour2D | Dynamic2D | `kinder/DynScoopPour2D-o50-v0` |
-| Obstruction3D | Kinematic3D | `kinder/Obstruction3D-o4-v0` |
-| Packing3D | Kinematic3D | `kinder/Packing3D-p3-v0` |
-| Table3D | Kinematic3D | `kinder/Table3D-o3-v0` |
-| Transport3D | Kinematic3D | `kinder/Transport3D-o2-v0` |
+| StickButton2D | Kinematic2D | `kinder/StickButton2D-b3-v0` |
 | BaseMotion3D | Kinematic3D | `kinder/BaseMotion3D-v0` |
-| Shelf3D | Kinematic3D | `kinder/Shelf3D-o10-v0` |
+| Ground3D | Kinematic3D | `kinder/Ground3D-o2-v0` |
+| KinematicShelf3D | Kinematic3D | `kinder/KinematicShelf3D-o3-v0` |
+| Motion3D | Kinematic3D | `kinder/Motion3D-v0` |
+| Obstruction3D | Kinematic3D | `kinder/Obstruction3D-o2-v0` |
+| Packing3D | Kinematic3D | `kinder/Packing3D-p2-v0` |
 | PrplLab3D | Kinematic3D | `kinder/PrplLab3D-o2-v0` |
-| ConstrainedCupboard3D | Dynamic3D | `kinder/ConstrainedCupboard3D-o6-v0` |
-| SortClutteredBlocks3D | Dynamic3D | `kinder/SortClutteredBlocks3D-o20-sort_the_cluttered_blocks_into_bowls-v0` |
-| Rearrange3D | Dynamic3D | `kinder/Rearrange3D-o2-put_the_boxed_drink_and_the_can_next_to_the_bowl-v0` |
-| SweepSimple3D | Dynamic3D | `kinder/SweepSimple3D-o50-sweep_the_blocks_to_the_left_side_of_the_kitchen_island-v0` |
-| Dynamo3D | Dynamic3D | `kinder/Dynamo3D-o1-v0` |
-| Tossing3D | Dynamic3D | `kinder/Tossing3D-o1-v0` |
-| ScoopPour3D | Dynamic3D | `kinder/ScoopPour3D-o10-v0` |
+| Table3D | Kinematic3D | `kinder/Table3D-o2-v0` |
+| Transport3D | Kinematic3D | `kinder/Transport3D-o2-v0` |
+| DynObstruction2D | Dynamic2D | `kinder/DynObstruction2D-o2-v0` |
+| DynPushPullHook2D | Dynamic2D | `kinder/DynPushPullHook2D-o1-v0` |
+| DynPushT2D | Dynamic2D | `kinder/DynPushT2D-t1-v0` |
+| DynScoopPour2D | Dynamic2D | `kinder/DynScoopPour2D-o30-v0` |
 | BalanceBeam3D | Dynamic3D | `kinder/BalanceBeam3D-o3-v0` |
+| ConstrainedCupboard3D | Dynamic3D | `kinder/ConstrainedCupboard3D-o1-v0` |
+| Dynamo3D | Dynamic3D | `kinder/Dynamo3D-o3-v0` |
+| Rearrange3D | Dynamic3D | `kinder/Rearrange3D-o2-put_the_boxed_drink_on_the_left_and_the_can_on_the_right_side_of_the_bowl-v0` |
+| ScoopPour3D | Dynamic3D | `kinder/ScoopPour3D-o100-v0` |
+| Shelf3D | Dynamic3D | `kinder/Shelf3D-o2-v0` |
+| SortClutteredBlocks3D | Dynamic3D | `kinder/SortClutteredBlocks3D-o4-sort_the_cluttered_blocks_into_bins-v0` |
 | SweepIntoDrawer3D | Dynamic3D | `kinder/SweepIntoDrawer3D-o5-v0` |
+| SweepSimple3D | Dynamic3D | `kinder/SweepSimple3D-o50-sweep_the_blocks_to_the_right_side_of_the_kitchen_island-v0` |
+| Tossing3D | Dynamic3D | `kinder/Tossing3D-o1-v0` |
 
 ## Acknowledgements
 

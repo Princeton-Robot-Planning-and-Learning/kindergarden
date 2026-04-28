@@ -3,7 +3,6 @@
 import os
 import sys
 import warnings
-from importlib import util
 from pathlib import Path
 from typing import Any
 
@@ -514,35 +513,25 @@ def _ensure_assets_for_env(env_id: str) -> None:
         package_root / "envs" / "dynamic3d" / "models"
         / "assets" / "mimiclabs_scenes" / "meshes"
     )
-    mimiclabs_download_script = (
-        package_root.parent.parent / "scripts" / "download_mimiclabs_assets.py"
-    )
 
     # If assets are already present, skip download.
     if mimiclabs_scenes_dir.exists():
         return
 
-    module_name = "kinder_mimiclabs_asset_downloader"
-    spec = util.spec_from_file_location(module_name, mimiclabs_download_script)
-    if spec is None or spec.loader is None:
-        raise FileNotFoundError(
-            "MimicLabs assets are missing and auto-download could not be initialized. "
-            "Download mimiclabs assets manually."
-        )
-
-    module = util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    from kinder.utils import (  # pylint: disable=import-outside-toplevel
+        download_mimiclabs_assets,
+    )
 
     try:
         print(
             "Auto-downloading MimicLabs assets for Dynamic3D environments "
             "(this may take a few minutes)..."
         )
-        module.download_mimiclabs_assets(non_interactive=True)
+        download_mimiclabs_assets(non_interactive=True)
     except Exception as err:  # pylint: disable=broad-except
         raise RuntimeError(
             "Auto-download of MimicLabs assets failed. "
-            "Run scripts/download_mimiclabs_assets.py manually. "
+            "Call kinder.utils.download_mimiclabs_assets() manually. "
             f"Error: {err}"
         ) from err
 

@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 import imageio.v2 as iio
-from generate_env_docs import sanitize_env_id
+from kindergarden.scripts.docs.generate_env_docs import sanitize_env_id
 
 import kinder
 from kinder.gif_utils import optimize_gif

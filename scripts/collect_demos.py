@@ -16,7 +16,7 @@ except ImportError:
     print("Install it with: pip install pygame")
     sys.exit(1)
 
-from generate_env_docs import sanitize_env_id
+from kindergarden.scripts.docs.generate_env_docs import sanitize_env_id
 
 import kinder
 

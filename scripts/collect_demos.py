@@ -16,9 +16,8 @@ except ImportError:
     print("Install it with: pip install pygame")
     sys.exit(1)
 
-from .docs.generate_env_docs import sanitize_env_id
-
 import kinder
+from docs.generate_env_docs import sanitize_env_id
 
 
 class AnalogStick:

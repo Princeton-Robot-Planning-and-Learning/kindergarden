@@ -27,11 +27,11 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 import imageio.v2 as iio
-from .docs.generate_env_docs import sanitize_env_id
 
 import kinder
 from kinder.gif_utils import optimize_gif
 from kinder.utils import load_demo
+from docs.generate_env_docs import sanitize_env_id
 
 
 def discover_all_demos(demos_dir: Path = Path("demos")) -> List[Path]:

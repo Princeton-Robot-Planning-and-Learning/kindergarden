@@ -270,9 +270,7 @@ def test_pick_place(env):  # pylint: disable=redefined-outer-name
 
     assert obs.grasped_object == "cube1"
 
-    # Step 8: Release the cube directly (the PRPL lab counter is not a kinder
-    # surface object, so the standard open-gripper release path is not used here;
-    # the demo likewise releases via direct state manipulation).
+    # Step 8: Release the cube directly.
     oc_env._grasped_object = None
     oc_env._grasped_object_transform = None
     oc_env.robot.arm.open_fingers()

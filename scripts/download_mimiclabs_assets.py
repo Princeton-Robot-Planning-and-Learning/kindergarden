@@ -110,7 +110,9 @@ def download_mimiclabs_assets(non_interactive: bool = False) -> None:
             print(f"{indent_str}Removed existing {MIMICLABS_SCENES_DIR}")
         else:
             print(f"\nWarning: Directory {MIMICLABS_SCENES_DIR} already exists.")
-            inp = input(f"{indent_str}Would you like to remove it and re-download? y/n\n")
+            inp = input(
+                f"{indent_str}Would you like to remove it and re-download? y/n\n"
+            )
             if inp.lower() in ["y", "yes"]:
                 shutil.rmtree(MIMICLABS_SCENES_DIR)
                 print(f"{indent_str}Removed existing {MIMICLABS_SCENES_DIR}")

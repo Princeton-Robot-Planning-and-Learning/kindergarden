@@ -68,7 +68,8 @@ def download_file_from_gdrive(
             print(f"{indent_str}Overwritten {dst_path}")
         else:
             inp = input(
-                f"{indent_str}File {dst_path} already exists. Would you like to overwrite it? y/n\n"
+                f"{indent_str}File {dst_path} already exists. "
+                "Would you like to overwrite it? y/n\n"
             )
             if inp.lower() in ["y", "yes"]:
                 shutil.move(str(tmp_path), str(dst_path))

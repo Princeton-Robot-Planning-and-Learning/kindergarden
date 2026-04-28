@@ -3,6 +3,7 @@
 import os
 import sys
 import warnings
+from importlib import util
 from pathlib import Path
 from typing import Any
 
@@ -13,11 +14,14 @@ warnings.filterwarnings("ignore", category=DeprecationWarning, module="pkg_resou
 
 # Need to import after silencing warnings
 import gymnasium  # pylint: disable=wrong-import-position
-from gymnasium.envs.registration import (  # pylint: disable=wrong-import-position
-    register,
-)
 
-from kinder.wrappers import (  # noqa: E402  # pylint: disable=wrong-import-position,unused-import
+from gymnasium.envs.registration import register  # pylint: disable=wrong-import-position
+
+from kinder.macros import (  # pylint: disable=wrong-import-position
+    DISABLE_AUTO_DYNAMIC3D_SCENES_DOWNLOAD,
+    is_truthy_env_var,
+)
+from kinder.wrappers import (  # pylint: disable=wrong-import-position,unused-import
     NoisyAction,
     NoisyObservation,
 )
@@ -487,8 +491,68 @@ def _register_env_class(
     }
 
 
+def _ensure_assets_for_env(env_id: str) -> None:
+    """Auto-download MimicLabs assets once, only for Dynamic3D environments."""
+    dynamic3d_env_ids = {
+        vid
+        for cls in get_env_categories().get("Dynamic3D", [])
+        for vid in ENV_CLASSES[cls]["variants"]
+    }
+    if env_id not in dynamic3d_env_ids:
+        return
+
+    if is_truthy_env_var(DISABLE_AUTO_DYNAMIC3D_SCENES_DOWNLOAD):
+        print(
+            f"Auto-download of MimicLabs assets is disabled via "
+            f"{DISABLE_AUTO_DYNAMIC3D_SCENES_DOWNLOAD} environment variable. "
+            "If you want to enable it, unset this variable or set it to a falsy value."
+        )
+        return
+
+    package_root = Path(__file__).parent
+    mimiclabs_scenes_dir = (
+        package_root / "envs" / "dynamic3d" / "models" / "assets" / "mimiclabs_scenes"
+    )
+    mimiclabs_download_script = (
+        package_root.parent.parent / "scripts" / "download_mimiclabs_assets.py"
+    )
+
+    # If assets are already present, skip download.
+    if mimiclabs_scenes_dir.exists():
+        return
+
+    module_name = "kinder_mimiclabs_asset_downloader"
+    spec = util.spec_from_file_location(module_name, mimiclabs_download_script)
+    if spec is None or spec.loader is None:
+        raise FileNotFoundError(
+            "MimicLabs assets are missing and auto-download could not be initialized. "
+            "Download mimiclabs assets manually."
+        )
+
+    module = util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    try:
+        print(
+            "Auto-downloading MimicLabs assets for Dynamic3D environments "
+            "(this may take a few minutes)..."
+        )
+        module.download_mimiclabs_assets(non_interactive=True)
+    except Exception as err:  # pylint: disable=broad-except
+        raise RuntimeError(
+            "Auto-download of MimicLabs assets failed. "
+            "Run scripts/download_mimiclabs_assets.py manually. "
+            f"Error: {err}"
+        ) from err
+
+
 def make(*args, **kwargs) -> gymnasium.Env:
     """Create a registered environment from its name."""
+    env_id = kwargs.get("id")
+    if env_id is None and args:
+        env_id = args[0]
+    if isinstance(env_id, str):
+        _ensure_assets_for_env(env_id)
     return gymnasium.make(*args, **kwargs)
 
 

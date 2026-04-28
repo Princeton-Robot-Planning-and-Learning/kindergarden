@@ -27,13 +27,19 @@ ASSETS_URL = (
 )
 
 
-def download_file_from_gdrive(url: str, download_dir: Path, dst_filename: str) -> None:
+def download_file_from_gdrive(
+    url: str,
+    download_dir: Path,
+    dst_filename: str,
+    non_interactive: bool = False,
+) -> None:
     """Download a file from Google Drive using gdown.
 
     Args:
         url: Google Drive sharing URL
         download_dir: Directory to download to
         dst_filename: Destination filename
+        non_interactive: If True, avoid prompts and overwrite existing files
     """
     tmp_dir = download_dir / "tmp"
     tmp_dir.mkdir(exist_ok=True, parents=True)
@@ -52,14 +58,19 @@ def download_file_from_gdrive(url: str, download_dir: Path, dst_filename: str) -
     # Move downloaded file to destination
     dst_path = download_dir / dst_filename
     if dst_path.exists():
-        inp = input(
-            f"File {dst_path} already exists. Would you like to overwrite it? y/n\n"
-        )
-        if inp.lower() in ["y", "yes"]:
+        if non_interactive:
+            os.remove(dst_path)
             shutil.move(str(tmp_path), str(dst_path))
             print(f"Overwritten {dst_path}")
         else:
-            print(f"File {dst_path} not overwritten.")
+            inp = input(
+                f"File {dst_path} already exists. Would you like to overwrite it? y/n\n"
+            )
+            if inp.lower() in ["y", "yes"]:
+                shutil.move(str(tmp_path), str(dst_path))
+                print(f"Overwritten {dst_path}")
+            else:
+                print(f"File {dst_path} not overwritten.")
     else:
         shutil.move(str(tmp_path), str(dst_path))
         print(f"Downloaded to {dst_path}")
@@ -69,19 +80,25 @@ def download_file_from_gdrive(url: str, download_dir: Path, dst_filename: str) -
         shutil.rmtree(tmp_dir)
 
 
-def download_mimiclabs_assets() -> None:
+def download_mimiclabs_assets(non_interactive: bool = False) -> None:
     """Download the MimicLabs scene assets from Google Drive.
 
     This will:
     1. Download assets.zip from Google Drive
     2. Extract it to kinder/src/kinder/envs/dynamic3d/models/assets/mimiclabs_scenes/
     3. Clean up the zip file
+
+    Args:
+        non_interactive: If True, avoid prompts and keep existing scene directory.
     """
     # Ensure assets directory exists
     ASSETS_DIR.mkdir(exist_ok=True, parents=True)
 
     # Check if mimiclabs_scenes already exists
     if MIMICLABS_SCENES_DIR.exists():
+        if non_interactive:
+            print(f"MimicLabs scenes already exist at {MIMICLABS_SCENES_DIR}")
+            return
         print(f"\nWarning: Directory {MIMICLABS_SCENES_DIR} already exists.")
         inp = input("Would you like to remove it and re-download? y/n\n")
         if inp.lower() in ["y", "yes"]:
@@ -96,7 +113,12 @@ def download_mimiclabs_assets() -> None:
 
     # Download the assets zip file
     zip_filename = "assets.zip"
-    download_file_from_gdrive(ASSETS_URL, ASSETS_DIR, zip_filename)
+    download_file_from_gdrive(
+        ASSETS_URL,
+        ASSETS_DIR,
+        zip_filename,
+        non_interactive=non_interactive,
+    )
 
     # Unzip the assets
     zip_path = ASSETS_DIR / zip_filename

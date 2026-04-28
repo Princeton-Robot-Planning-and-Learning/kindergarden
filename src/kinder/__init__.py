@@ -511,7 +511,8 @@ def _ensure_assets_for_env(env_id: str) -> None:
 
     package_root = Path(__file__).parent
     mimiclabs_scenes_dir = (
-        package_root / "envs" / "dynamic3d" / "models" / "assets" / "mimiclabs_scenes"
+        package_root / "envs" / "dynamic3d" / "models"
+        / "assets" / "mimiclabs_scenes" / "meshes"
     )
     mimiclabs_download_script = (
         package_root.parent.parent / "scripts" / "download_mimiclabs_assets.py"

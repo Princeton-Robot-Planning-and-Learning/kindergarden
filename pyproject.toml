@@ -28,6 +28,7 @@ dependencies = [
    "pymunk==7.1.0",
    "mujoco~=3.3.0",
    "opencv-python>=4.9.0",
+   "gdown",
    "pybullet-arm64>=3.2.8",
    "tomsgeoms2d>=0.0.1",
    "pybullet_helpers>=0.1.0",

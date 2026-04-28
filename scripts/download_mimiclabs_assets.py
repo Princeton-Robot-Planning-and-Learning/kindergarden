@@ -41,13 +41,17 @@ def download_file_from_gdrive(
         dst_filename: Destination filename
         non_interactive: If True, avoid prompts and overwrite existing files
     """
+    indent_str = ""
+    if non_interactive:
+        indent_str = "    "
+
     tmp_dir = download_dir / "tmp"
     tmp_dir.mkdir(exist_ok=True, parents=True)
 
     # Download file
     curr_dir = os.getcwd()
     os.chdir(tmp_dir)
-    print(f"Downloading from Google Drive to {tmp_dir}")
+    print(f"{indent_str}Downloading from Google Drive to {tmp_dir}")
     gdown.download(url, str(tmp_dir), quiet=False)
     tmp_files = list(tmp_dir.iterdir())
     if not tmp_files:
@@ -61,19 +65,19 @@ def download_file_from_gdrive(
         if non_interactive:
             os.remove(dst_path)
             shutil.move(str(tmp_path), str(dst_path))
-            print(f"Overwritten {dst_path}")
+            print(f"{indent_str}Overwritten {dst_path}")
         else:
             inp = input(
-                f"File {dst_path} already exists. Would you like to overwrite it? y/n\n"
+                f"{indent_str}File {dst_path} already exists. Would you like to overwrite it? y/n\n"
             )
             if inp.lower() in ["y", "yes"]:
                 shutil.move(str(tmp_path), str(dst_path))
-                print(f"Overwritten {dst_path}")
+                print(f"{indent_str}Overwritten {dst_path}")
             else:
-                print(f"File {dst_path} not overwritten.")
+                print(f"{indent_str}File {dst_path} not overwritten.")
     else:
         shutil.move(str(tmp_path), str(dst_path))
-        print(f"Downloaded to {dst_path}")
+        print(f"{indent_str}Downloaded to {dst_path}")
 
     # Clean up tmp directory
     if tmp_dir.exists():
@@ -94,22 +98,27 @@ def download_mimiclabs_assets(non_interactive: bool = False) -> None:
     # Ensure assets directory exists
     ASSETS_DIR.mkdir(exist_ok=True, parents=True)
 
+    indent_str = ""
+    if non_interactive:
+        indent_str = "    "
+
     # Check if mimiclabs_scenes already exists
     if MIMICLABS_SCENES_DIR.exists():
         if non_interactive:
-            print(f"MimicLabs scenes already exist at {MIMICLABS_SCENES_DIR}")
-            return
-        print(f"\nWarning: Directory {MIMICLABS_SCENES_DIR} already exists.")
-        inp = input("Would you like to remove it and re-download? y/n\n")
-        if inp.lower() in ["y", "yes"]:
             shutil.rmtree(MIMICLABS_SCENES_DIR)
-            print(f"Removed existing {MIMICLABS_SCENES_DIR}")
+            print(f"{indent_str}Removed existing {MIMICLABS_SCENES_DIR}")
         else:
-            print("Keeping existing assets. Exiting.")
-            return
+            print(f"\nWarning: Directory {MIMICLABS_SCENES_DIR} already exists.")
+            inp = input(f"{indent_str}Would you like to remove it and re-download? y/n\n")
+            if inp.lower() in ["y", "yes"]:
+                shutil.rmtree(MIMICLABS_SCENES_DIR)
+                print(f"{indent_str}Removed existing {MIMICLABS_SCENES_DIR}")
+            else:
+                print(f"{indent_str}Keeping existing assets. Exiting.")
+                return
 
-    print(f"\nDownloading MimicLabs scene assets to {MIMICLABS_SCENES_DIR}")
-    print("This may take a few minutes (assets are ~1GB)...\n")
+    print(f"\n{indent_str}Downloading MimicLabs scene assets to {MIMICLABS_SCENES_DIR}")
+    print(f"{indent_str}This may take a few minutes (assets are ~1GB)...\n")
 
     # Download the assets zip file
     zip_filename = "assets.zip"
@@ -122,7 +131,7 @@ def download_mimiclabs_assets(non_interactive: bool = False) -> None:
 
     # Unzip the assets
     zip_path = ASSETS_DIR / zip_filename
-    print(f"\nExtracting {zip_path}...")
+    print(f"\n{indent_str}Extracting {zip_path}...")
     shutil.unpack_archive(str(zip_path), str(ASSETS_DIR))
 
     # The unzipped folder is named "assets"
@@ -135,28 +144,28 @@ def download_mimiclabs_assets(non_interactive: bool = False) -> None:
             # Move all contents
             for item in scenes_folder.iterdir():
                 shutil.move(str(item), str(MIMICLABS_SCENES_DIR / item.name))
-            print(f"Extracted assets to {MIMICLABS_SCENES_DIR}")
+            print(f"{indent_str}Extracted assets to {MIMICLABS_SCENES_DIR}")
         else:
             print(
-                f"Warning: Expected scenes/mimiclabs_scenes not found in "
+                f"{indent_str}Warning: Expected scenes/mimiclabs_scenes not found in "
                 f"{unzipped_folder}"
             )
 
         # Clean up unzipped folder
         shutil.rmtree(unzipped_folder)
     else:
-        print("Warning: Unzipped folder 'assets' not found")
+        print(f"{indent_str}Warning: Unzipped folder 'assets' not found")
 
     # Remove the zip file
     if zip_path.exists():
         os.remove(zip_path)
-        print(f"Removed {zip_filename}")
+        print(f"{indent_str}Removed {zip_filename}")
 
-    print("\n✓ MimicLabs scene assets successfully downloaded to:")
-    print(f"  {MIMICLABS_SCENES_DIR}")
+    print(f"\n{indent_str}✓ MimicLabs scene assets successfully downloaded to:")
+    print(f"{indent_str}  {MIMICLABS_SCENES_DIR}")
     print(
-        "\nAvailable scenes: lab2.xml, lab3.xml, lab4.xml, lab5.xml, "
-        "lab6.xml, lab7.xml, lab8.xml"
+        f"\n{indent_str}Available scenes: lab2.xml, lab3.xml, lab4.xml, lab5.xml, "
+        f"lab6.xml, lab7.xml, lab8.xml"
     )
 
 

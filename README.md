@@ -1,6 +1,7 @@
 # KinDER
 
-A physical reasoning benchmark for robot learning and planning.
+A physical reasoning benchmark for robot learning and planning.  
+**Robotics: Science and Systems (RSS), 2026**
 
 ## Website
 
@@ -8,7 +9,7 @@ See [https://prpl-group.com/kinder-site/](https://prpl-group.com/kinder-site/) f
 
 ### Requirements
 1. Python >=3.10, <3.13
-2. Tested on MacOS 13-15, Ubuntu 22.04, Ubuntu 24.04, and Windows 10 (but we aim to support most platforms)
+2. Tested on MacOS 13-15, Ubuntu 20.04, Ubuntu 22.04, Ubuntu 24.04, and Windows 10 (but we aim to support most platforms)
 
 ## Installation
 
@@ -143,6 +144,12 @@ obs, info = env.reset(seed=42)
 | ScoopPour3D | Dynamic3D | `kinder/ScoopPour3D-o10-v0` |
 | BalanceBeam3D | Dynamic3D | `kinder/BalanceBeam3D-o3-v0` |
 | SweepIntoDrawer3D | Dynamic3D | `kinder/SweepIntoDrawer3D-o5-v0` |
+
+## Acknowledgements
+
+We thank the authors of following projects for open-sourcing their code, whose assets we utilized in KinDER:
+- [RoboCasa](https://github.com/robocasa/robocasa) - for object assets in Dynamic3D envs
+- [MimicLabs](https://github.com/Gatech-RL2/mimiclabs) - for scene assets in Dynamic3D envs
 
 ## Contributing
 

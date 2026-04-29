@@ -1294,19 +1294,15 @@ class TidyBot3DEnv(ConstantObjectKinDEREnv):
 
     def _create_env_markdown_description(self) -> str:
         """Create environment description (policy-agnostic)."""
-        scene_description = ""
         env = self._object_centric_env
         assert isinstance(env, ObjectCentricTidyBot3DEnv)
-        if env.scene_type == "ground":
-            scene_description = (
-                " In the 'ground' scene, objects are placed randomly on a flat "
-                "ground plane."
-            )
-
-        return f"""A 3D mobile manipulation environment using the TidyBot platform.
+        intro = env.task_config.get(
+            "description",
+            "A 3D mobile manipulation environment using the TidyBot platform.",
+        )
+        return f"""{intro}
 
 The robot has a holonomic mobile base with powered casters and a Kinova Gen3 arm.
-Scene type: {env.scene_type} with {env.num_objects} objects.{scene_description}
 
 The robot can control:
 - Base pose (x, y, theta)
@@ -1316,8 +1312,13 @@ The robot can control:
 """
 
     def _create_variant_markdown_description(self) -> str:
+        env = self._object_centric_env
+        assert isinstance(env, ObjectCentricTidyBot3DEnv)
         # pylint: disable=line-too-long
-        return "This environment has variants that differ in scene type and number of objects. Scene types include 'ground', 'cabinet', etc. The number of objects varies across variants."
+        return env.task_config.get(
+            "variant_description",
+            "This environment has variants that differ in scene type and number of objects. Scene types include 'ground', 'cabinet', etc. The number of objects varies across variants.",
+        )
 
     def _create_variant_specific_description(self) -> str:
         env = self._object_centric_env
@@ -1438,19 +1439,15 @@ class RBY1A3DEnv(ConstantObjectKinDEREnv):
 
     def _create_env_markdown_description(self) -> str:
         """Create environment description (policy-agnostic)."""
-        scene_description = ""
         env = self._object_centric_env
         assert isinstance(env, ObjectCentricRBY1A3DEnv)
-        if env.scene_type == "ground":
-            scene_description = (
-                " In the 'ground' scene, objects are placed randomly on a flat "
-                "ground plane."
-            )
-
-        return f"""A 3D mobile manipulation environment using the RBY1A platform.
+        intro = env.task_config.get(
+            "description",
+            "A 3D mobile manipulation environment using the RBY1A platform.",
+        )
+        return f"""{intro}
 
 The robot has a holonomic mobile base with powered casters and a Kinova Gen3 arm.
-Scene type: {env.scene_type} with {env.num_objects} objects.{scene_description}
 
 The robot can control:
 - Base pose (x, y, theta)
@@ -1460,8 +1457,13 @@ The robot can control:
 """
 
     def _create_variant_markdown_description(self) -> str:
+        env = self._object_centric_env
+        assert isinstance(env, ObjectCentricRBY1A3DEnv)
         # pylint: disable=line-too-long
-        return "This environment has variants that differ in scene type and number of objects. Scene types include 'ground', 'cabinet', etc. The number of objects varies across variants."
+        return env.task_config.get(
+            "variant_description",
+            "This environment has variants that differ in scene type and number of objects. Scene types include 'ground', 'cabinet', etc. The number of objects varies across variants.",
+        )
 
     def _create_variant_specific_description(self) -> str:
         env = self._object_centric_env

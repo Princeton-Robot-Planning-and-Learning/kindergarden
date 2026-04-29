@@ -1,4 +1,6 @@
 {
+    "description": "A 3D navigation-among-movable-objects task where the robot must reach a goal region on the floor while several chair obstacles are placed in the workspace and may need to be moved out of the way.",
+    "variant_description": "The variants differ in the number of obstacle chairs placed in the workspace.",
     "robots": {
         "tidybot": {
             "robot": {}

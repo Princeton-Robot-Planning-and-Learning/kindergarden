@@ -5,10 +5,9 @@
 **Random Action Stats**: Total Reward: -25.00, Success: No, Steps: 25
 
 ## Description
-A 3D mobile manipulation environment using the TidyBot platform.
+A 3D task where the robot must rearrange objects into different spatial arrangements with respect to other objects.
 
 The robot has a holonomic mobile base with powered casters and a Kinova Gen3 arm.
-Scene type: ground with 3 objects. In the 'ground' scene, objects are placed randomly on a flat ground plane.
 
 The robot can control:
 - Base pose (x, y, theta)
@@ -18,7 +17,7 @@ The robot can control:
 
 
 ## Available Variants
-This environment has variants that differ in scene type and number of objects. Scene types include 'ground', 'cabinet', etc. The number of objects varies across variants.
+Each variant requires the robot to put one or more objects on the left, right, front, behind, or next to another object.
 
 - [`kinder/Rearrange3D-o1-put_the_boxed_drink_on_the_right_side_of_the_bowl-v0`](variants/Rearrange3D/Rearrange3D-o1-put_the_boxed_drink_on_the_right_side_of_the_bowl.md) (o1-put_the_boxed_drink_on_the_right_side_of_the_bowl)
 - [`kinder/Rearrange3D-o2-put_the_boxed_drink_in_front_of_and_the_can_behind_the_bowl-v0`](variants/Rearrange3D/Rearrange3D-o2-put_the_boxed_drink_in_front_of_and_the_can_behind_the_bowl.md) (o2-put_the_boxed_drink_in_front_of_and_the_can_behind_the_bowl)

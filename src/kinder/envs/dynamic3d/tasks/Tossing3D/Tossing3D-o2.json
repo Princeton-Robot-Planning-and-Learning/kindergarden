@@ -1,4 +1,6 @@
 {
+    "description": "A 3D task where an object that is initially on the floor must be transferred to the bin. The robot must toss the object into a bin, since it cannot reach the goal position due to an immovable obstacle.",
+    "variant_description": "The variants require tossing different numbers of objects into the bin.",
     "robots": {
         "tidybot": {
             "robot": {}

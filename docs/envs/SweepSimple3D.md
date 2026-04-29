@@ -5,10 +5,9 @@
 **Random Action Stats**: Total Reward: -25.00, Success: No, Steps: 25
 
 ## Description
-A 3D mobile manipulation environment using the TidyBot platform.
+A 3D task where the robot must sweep objects that are spread out on the floor into different regions around fixtures in the room. A broom tool is available that may be used for sweeping.
 
 The robot has a holonomic mobile base with powered casters and a Kinova Gen3 arm.
-Scene type: ground with 3 objects. In the 'ground' scene, objects are placed randomly on a flat ground plane.
 
 The robot can control:
 - Base pose (x, y, theta)
@@ -18,7 +17,7 @@ The robot can control:
 
 
 ## Available Variants
-This environment has variants that differ in scene type and number of objects. Scene types include 'ground', 'cabinet', etc. The number of objects varies across variants.
+These variants have different numbers of objects to sweep, and multiple goal locations.
 
 - [`kinder/SweepSimple3D-o10-sweep_the_blocks_to_the_left_side_of_the_kitchen_island-v0`](variants/SweepSimple3D/SweepSimple3D-o10-sweep_the_blocks_to_the_left_side_of_the_kitchen_island.md) (o10-sweep_the_blocks_to_the_left_side_of_the_kitchen_island)
 - [`kinder/SweepSimple3D-o50-sweep_the_blocks_to_the_left_side_of_the_kitchen_island-v0`](variants/SweepSimple3D/SweepSimple3D-o50-sweep_the_blocks_to_the_left_side_of_the_kitchen_island.md) (o50-sweep_the_blocks_to_the_left_side_of_the_kitchen_island)

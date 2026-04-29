@@ -18,7 +18,7 @@ class TidyBotRewardCalculator:
     def calculate_reward(self, obs: dict[str, Any]) -> float:
         """Calculate reward based on current observation."""
         self.episode_step += 1
-        base_reward = -0.01  # Small negative reward per timestep
+        base_reward = -1.0  # Small negative reward per timestep
 
         # Add task-specific rewards
         task_reward = self._calculate_task_reward(obs)

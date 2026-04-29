@@ -3,6 +3,7 @@
 ## Usage
 ```python
 import kinder
+kinder.register_all_environments()
 env = kinder.make("kinder/SweepIntoDrawer3D-o5-v0")
 ```
 
@@ -15,7 +16,7 @@ This variant uses the 'ground' scene type with 3 objects.
 ## Random Action Behavior
 ![random action GIF](../../assets/random_action_gifs/variants/SweepIntoDrawer3D-o5.gif)
 
-**Random Action Stats**: Total Reward: -0.25, Success: No, Steps: 25
+**Random Action Stats**: Total Reward: -25.00, Success: No, Steps: 25
 
 ## Example Demonstration
 *(No demonstration GIFs available)*

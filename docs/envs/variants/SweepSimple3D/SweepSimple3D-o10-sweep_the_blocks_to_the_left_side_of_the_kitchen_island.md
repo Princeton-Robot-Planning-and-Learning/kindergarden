@@ -3,6 +3,7 @@
 ## Usage
 ```python
 import kinder
+kinder.register_all_environments()
 env = kinder.make("kinder/SweepSimple3D-o10-sweep_the_blocks_to_the_left_side_of_the_kitchen_island-v0")
 ```
 
@@ -15,7 +16,7 @@ This variant uses the 'ground' scene type with 3 objects.
 ## Random Action Behavior
 ![random action GIF](../../assets/random_action_gifs/variants/SweepSimple3D-o10-sweep_the_blocks_to_the_left_side_of_the_kitchen_island.gif)
 
-**Random Action Stats**: Total Reward: -0.25, Success: No, Steps: 25
+**Random Action Stats**: Total Reward: -25.00, Success: No, Steps: 25
 
 ## Example Demonstration
 *(No demonstration GIFs available)*

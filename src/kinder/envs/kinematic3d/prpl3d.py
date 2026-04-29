@@ -174,13 +174,17 @@ class ObjectCentricPrplLab3DEnv(
 
     def _compute_counter_top_z(self) -> float:
         """Return the world-space z of the countertop top surface via AABB."""
-        num_joints = p.getNumJoints(self._lab_id, physicsClientId=self.physics_client_id)
+        num_joints = p.getNumJoints(
+            self._lab_id, physicsClientId=self.physics_client_id
+        )
         for i in range(num_joints):
             info = p.getJointInfo(
                 self._lab_id, i, physicsClientId=self.physics_client_id
             )
             if info[12].decode() == "Countertop1_link":
-                aabb = p.getAABB(self._lab_id, i, physicsClientId=self.physics_client_id)
+                aabb = p.getAABB(
+                    self._lab_id, i, physicsClientId=self.physics_client_id
+                )
                 return float(aabb[1][2])  # max z
         raise RuntimeError("Countertop1_link not found in PRPL lab URDF")
 
@@ -310,8 +314,10 @@ class PrplLab3DEnv(ConstantObjectKinDEREnv):
 
     def _create_reward_markdown_description(self) -> str:
         """Create reward description."""
-        return "The reward is -1 per timestep. The episode terminates successfully" \
+        return (
+            "The reward is -1 per timestep. The episode terminates successfully"
             "when all cubes are on the countertop."
+        )
 
     def _create_references_markdown_description(self) -> str:
         """Create references description."""

@@ -21,11 +21,11 @@ def test_reward_calculator_base_behavior():
     obs = {}
     # First call: should increment episode_step and return base reward
     reward = calc.calculate_reward(obs)
-    assert reward == -0.01, "Base reward should be -0.01 when no task reward"
+    assert reward == -1.0, "Base reward should be -1.0 when no task reward"
     assert calc.episode_step == 1
     # Second call: episode_step increments again
     reward2 = calc.calculate_reward(obs)
-    assert reward2 == -0.01
+    assert reward2 == -1.0
     assert calc.episode_step == 2
     # is_terminated should be False by default
     assert not calc.is_terminated(obs)

@@ -1,6 +1,10 @@
 # KinDER
 
-A physical reasoning benchmark for robot learning and planning.  
+<p align="center">
+  <img src="media/kinder-logo.png" alt="KinDER Logo" width="800"/>
+</p>
+
+KinDER: A physical reasoning benchmark for robot learning and planning.  
 **Robotics: Science and Systems (RSS), 2026**
 
 ## Website

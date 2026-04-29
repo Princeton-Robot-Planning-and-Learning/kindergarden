@@ -7,8 +7,8 @@ import pytest
 from gymnasium.wrappers import RecordVideo
 
 import kinder
-from kinder.envs.dynamic3d.objects.fixtures import Cupboard
 from kinder.envs.dynamic3d.envs import ObjectCentricTidyBot3DEnv
+from kinder.envs.dynamic3d.objects.fixtures import Cupboard
 from tests.conftest import MAKE_VIDEOS
 
 # Path to MimicLabs scenes

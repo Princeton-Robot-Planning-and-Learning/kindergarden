@@ -74,29 +74,22 @@ def download_mimiclabs_assets(non_interactive: bool = False) -> None:
     3. Clean up the zip file
 
     Args:
-        non_interactive: If True, avoid prompts and keep existing scene directory.
+        non_interactive: If True, skip the overwrite prompt and proceed.
     """
     _ASSETS_DIR.mkdir(exist_ok=True, parents=True)
 
     indent_str = "    " if non_interactive else ""
 
-    if _MIMICLABS_SCENES_DIR.exists():
-        if non_interactive:
-            shutil.rmtree(_MIMICLABS_SCENES_DIR)
-            print(f"{indent_str}Removed existing {_MIMICLABS_SCENES_DIR}")
-        else:
-            print(f"\nWarning: Directory {_MIMICLABS_SCENES_DIR} already exists.")
-            inp = input(
-                f"{indent_str}Would you like to remove it and re-download? y/n\n"
-            )
-            if inp.lower() in ["y", "yes"]:
-                shutil.rmtree(_MIMICLABS_SCENES_DIR)
-                print(f"{indent_str}Removed existing {_MIMICLABS_SCENES_DIR}")
-            else:
-                print(f"{indent_str}Keeping existing assets. Exiting.")
-                return
+    if _MIMICLABS_SCENES_DIR.exists() and not non_interactive:
+        print(f"\nWarning: Directory {_MIMICLABS_SCENES_DIR} already exists.")
+        inp = input(f"{indent_str}Would you like to remove it and re-download? y/n\n")
+        if inp.lower() not in ["y", "yes"]:
+            print(f"{indent_str}Keeping existing assets. Exiting.")
+            return
 
-    print(f"\n{indent_str}Downloading MimicLabs scene assets to {_MIMICLABS_SCENES_DIR}")
+    print(
+        f"\n{indent_str}Downloading MimicLabs scene assets to {_MIMICLABS_SCENES_DIR}"
+    )
     print(f"{indent_str}This may take a few minutes (assets are ~1GB)...\n")
 
     zip_filename = "assets.zip"
@@ -109,28 +102,28 @@ def download_mimiclabs_assets(non_interactive: bool = False) -> None:
 
     zip_path = _ASSETS_DIR / zip_filename
     print(f"\n{indent_str}Extracting {zip_path}...")
-    shutil.unpack_archive(str(zip_path), str(_ASSETS_DIR))
-
     unzipped_folder = _ASSETS_DIR / "assets"
-    if unzipped_folder.exists():
+    try:
+        shutil.unpack_archive(str(zip_path), str(_ASSETS_DIR))
         scenes_folder = unzipped_folder / "scenes" / "mimiclabs_scenes"
-        if scenes_folder.exists():
-            _MIMICLABS_SCENES_DIR.mkdir(exist_ok=True, parents=True)
-            for item in scenes_folder.iterdir():
-                shutil.move(str(item), str(_MIMICLABS_SCENES_DIR / item.name))
-            print(f"{indent_str}Extracted assets to {_MIMICLABS_SCENES_DIR}")
-        else:
-            print(
-                f"{indent_str}Warning: Expected scenes/mimiclabs_scenes not found in "
-                f"{unzipped_folder}"
+        if not scenes_folder.exists():
+            raise RuntimeError(
+                f"Expected scenes/mimiclabs_scenes not found in {unzipped_folder}; "
+                f"existing assets at {_MIMICLABS_SCENES_DIR} preserved."
             )
-        shutil.rmtree(unzipped_folder)
-    else:
-        print(f"{indent_str}Warning: Unzipped folder 'assets' not found")
-
-    if zip_path.exists():
-        os.remove(zip_path)
-        print(f"{indent_str}Removed {zip_filename}")
+        if _MIMICLABS_SCENES_DIR.exists():
+            shutil.rmtree(_MIMICLABS_SCENES_DIR)
+            print(f"{indent_str}Removed existing {_MIMICLABS_SCENES_DIR}")
+        _MIMICLABS_SCENES_DIR.mkdir(exist_ok=True, parents=True)
+        for item in scenes_folder.iterdir():
+            shutil.move(str(item), str(_MIMICLABS_SCENES_DIR / item.name))
+        print(f"{indent_str}Extracted assets to {_MIMICLABS_SCENES_DIR}")
+    finally:
+        if unzipped_folder.exists():
+            shutil.rmtree(unzipped_folder)
+        if zip_path.exists():
+            os.remove(zip_path)
+            print(f"{indent_str}Removed {zip_filename}")
 
     print(f"\n{indent_str}✓ MimicLabs scene assets successfully downloaded to:")
     print(f"{indent_str}  {_MIMICLABS_SCENES_DIR}")

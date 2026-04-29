@@ -22,12 +22,11 @@ import imageio.v2 as iio
 import kinder
 from kinder.gif_utils import optimize_gif
 
-OUTPUT_DIR = Path(__file__).parent.parent / "docs" / "envs"
+REPO_ROOT = Path(__file__).parents[2]
+OUTPUT_DIR = REPO_ROOT / "docs" / "envs"
 
 # Dynamically read all folder names from the tasks directory
-DYNAMIC3D_TASKS_DIR = (
-    Path(__file__).parent.parent / "src" / "kinder" / "envs" / "dynamic3d" / "tasks"
-)
+DYNAMIC3D_TASKS_DIR = REPO_ROOT / "src" / "kinder" / "envs" / "dynamic3d" / "tasks"
 DYNAMIC3D_ENVS = sorted([d.name for d in DYNAMIC3D_TASKS_DIR.iterdir() if d.is_dir()])
 
 
@@ -48,10 +47,9 @@ def get_changed_files() -> set[Path]:
     changed_files = set()
     for line in result.stdout.strip().split("\n"):
         if line.strip():
-            if not line.startswith("kinder/"):
+            if not line.startswith("src/kinder/"):
                 continue
-            line = line[len("kinder/") :]
-            changed_files.add(Path(line.strip()).resolve())
+            changed_files.add((REPO_ROOT / line.strip()).resolve())
 
     return changed_files
 
@@ -310,6 +308,7 @@ def generate_variant_markdown(
     md += "## Usage\n"
     md += "```python\n"
     md += "import kinder\n"
+    md += "kinder.register_all_environments()\n"
     md += f'env = kinder.make("{variant_id}")\n'
     md += "```\n\n"
 
@@ -507,7 +506,7 @@ def _main() -> None:
     elif args.env:
         print(f"Generating docs for environments: {', '.join(args.env)}")
     elif args.env_category:
-        env_cats = ', '.join(args.env_category)
+        env_cats = ", ".join(args.env_category)
         print(f"Generating docs for environment categories: {env_cats}")
     else:
         print("Checking for changes using git diff origin/main...")

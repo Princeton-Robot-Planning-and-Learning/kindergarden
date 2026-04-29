@@ -13,8 +13,9 @@ warnings.filterwarnings("ignore", category=DeprecationWarning, module="pkg_resou
 
 # Need to import after silencing warnings
 import gymnasium  # pylint: disable=wrong-import-position
-
-from gymnasium.envs.registration import register  # pylint: disable=wrong-import-position
+from gymnasium.envs.registration import (  # pylint: disable=wrong-import-position
+    register,
+)
 
 from kinder.macros import (  # pylint: disable=wrong-import-position
     DISABLE_AUTO_DYNAMIC3D_SCENES_DOWNLOAD,
@@ -510,8 +511,13 @@ def _ensure_assets_for_env(env_id: str) -> None:
 
     package_root = Path(__file__).parent
     mimiclabs_scenes_dir = (
-        package_root / "envs" / "dynamic3d" / "models"
-        / "assets" / "mimiclabs_scenes" / "meshes"
+        package_root
+        / "envs"
+        / "dynamic3d"
+        / "models"
+        / "assets"
+        / "mimiclabs_scenes"
+        / "meshes"
     )
 
     # If assets are already present, skip download.

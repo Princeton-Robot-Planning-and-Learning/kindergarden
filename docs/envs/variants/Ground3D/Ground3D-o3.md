@@ -3,6 +3,7 @@
 ## Usage
 ```python
 import kinder
+kinder.register_all_environments()
 env = kinder.make("kinder/Ground3D-o3-v0")
 ```
 
@@ -18,7 +19,9 @@ This variant has 3 cubes on the ground.
 **Random Action Stats**: Total Reward: -25.00, Success: No, Steps: 25
 
 ## Example Demonstration
-*(No demonstration GIFs available)*
+![demo GIF](../../assets/demo_gifs/Ground3D-o3/Ground3D-o3_1770240455.gif)
+
+**Demo Stats**: Total Reward: -115.00, Success: No, Steps: 115
 
 ## Observation Space
 The entries of an array in this Box space correspond to the following object features:

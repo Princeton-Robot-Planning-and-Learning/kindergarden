@@ -12,9 +12,8 @@ import numpy as np
 from numpy.typing import NDArray
 from relational_structs import Object, ObjectCentricState
 
-from kinder.envs.dynamic3d.objects.generated_objects import GeneratedSeesaw
 from kinder.envs.dynamic3d.envs import ObjectCentricTidyBot3DEnv
-
+from kinder.envs.dynamic3d.objects.generated_objects import GeneratedSeesaw
 
 _TEST_TASKS = Path(__file__).parent / "test_tasks"
 

@@ -3,6 +3,7 @@
 ## Usage
 ```python
 import kinder
+kinder.register_all_environments()
 env = kinder.make("kinder/Packing3D-p3-v0")
 ```
 

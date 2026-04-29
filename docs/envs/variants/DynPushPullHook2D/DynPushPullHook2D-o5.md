@@ -3,6 +3,7 @@
 ## Usage
 ```python
 import kinder
+kinder.register_all_environments()
 env = kinder.make("kinder/DynPushPullHook2D-o5-v0")
 ```
 

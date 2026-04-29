@@ -34,7 +34,7 @@ def _download_file_from_gdrive(
     curr_dir = os.getcwd()
     os.chdir(tmp_dir)
     print(f"{indent_str}Downloading from Google Drive to {tmp_dir}")
-    gdown.download(url, str(tmp_dir), quiet=False)
+    gdown.download(url, str(tmp_dir), quiet=False, fuzzy=True)
     tmp_files = list(tmp_dir.iterdir())
     if not tmp_files:
         raise FileNotFoundError("No file downloaded from Google Drive")

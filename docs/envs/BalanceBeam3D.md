@@ -2,7 +2,7 @@
 
 ![random action GIF](assets/random_action_gifs/BalanceBeam3D.gif)
 
-**Random Action Stats**: Total Reward: -0.01, Success: Yes, Steps: 1
+**Random Action Stats**: Total Reward: -1.00, Success: Yes, Steps: 1
 
 ## Description
 A 3D mobile manipulation environment using the TidyBot platform.

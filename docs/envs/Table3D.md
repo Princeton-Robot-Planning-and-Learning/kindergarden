@@ -18,7 +18,7 @@ The number of cubes differs between environment variants. For example, Table3D-o
 ![initial state GIF](assets/initial_state_gifs/Table3D.gif)
 
 ## Example Demonstration
-*(No demonstration GIFs available)*
+![demo GIF](assets/group_gifs/Table3D.gif)
 
 ## Observation Space
 *(Differs per variant, see individual variant pages)*

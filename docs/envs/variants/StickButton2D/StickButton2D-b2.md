@@ -3,6 +3,7 @@
 ## Usage
 ```python
 import kinder
+kinder.register_all_environments()
 env = kinder.make("kinder/StickButton2D-b2-v0")
 ```
 

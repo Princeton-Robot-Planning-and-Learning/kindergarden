@@ -3,6 +3,7 @@
 ## Usage
 ```python
 import kinder
+kinder.register_all_environments()
 env = kinder.make("kinder/Packing3D-p2-v0")
 ```
 
@@ -18,7 +19,9 @@ This variant has 2 parts to pack into the rack.
 **Random Action Stats**: Total Reward: -25.00, Success: No, Steps: 25
 
 ## Example Demonstration
-*(No demonstration GIFs available)*
+![demo GIF](../../assets/demo_gifs/Packing3D-p2/Packing3D-p2_1770245366.gif)
+
+**Demo Stats**: Total Reward: -89.00, Success: Yes, Steps: 106
 
 ## Observation Space
 The entries of an array in this Box space correspond to the following object features:

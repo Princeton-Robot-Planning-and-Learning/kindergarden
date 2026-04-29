@@ -3,6 +3,7 @@
 ## Usage
 ```python
 import kinder
+kinder.register_all_environments()
 env = kinder.make("kinder/Obstruction3D-o0-v0")
 ```
 
@@ -18,7 +19,9 @@ This variant has no obstructions.
 **Random Action Stats**: Total Reward: -25.00, Success: No, Steps: 25
 
 ## Example Demonstration
-*(No demonstration GIFs available)*
+![demo GIF](../../assets/demo_gifs/Obstruction3D-o0/Obstruction3D-o0_1770245184.gif)
+
+**Demo Stats**: Total Reward: -46.00, Success: Yes, Steps: 61
 
 ## Observation Space
 The entries of an array in this Box space correspond to the following object features:

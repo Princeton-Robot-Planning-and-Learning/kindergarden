@@ -3,6 +3,7 @@
 ## Usage
 ```python
 import kinder
+kinder.register_all_environments()
 env = kinder.make("kinder/Table3D-o2-v0")
 ```
 
@@ -18,7 +19,9 @@ This variant has 2 cubes on the table.
 **Random Action Stats**: Total Reward: -25.00, Success: No, Steps: 25
 
 ## Example Demonstration
-*(No demonstration GIFs available)*
+![demo GIF](../../assets/demo_gifs/Table3D-o2/Table3D-o2_1770158668.gif)
+
+**Demo Stats**: Total Reward: -37.00, Success: No, Steps: 37
 
 ## Observation Space
 The entries of an array in this Box space correspond to the following object features:

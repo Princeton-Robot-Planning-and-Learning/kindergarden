@@ -5,10 +5,9 @@
 **Random Action Stats**: Total Reward: -25.00, Success: No, Steps: 25
 
 ## Description
-A 3D mobile manipulation environment using the TidyBot platform.
+A 3D task where an object that is initially on the floor must be transferred to the bin. The robot must toss the object into a bin, since it cannot reach the goal position due to an immovable obstacle.
 
 The robot has a holonomic mobile base with powered casters and a Kinova Gen3 arm.
-Scene type: ground with 3 objects. In the 'ground' scene, objects are placed randomly on a flat ground plane.
 
 The robot can control:
 - Base pose (x, y, theta)
@@ -18,7 +17,7 @@ The robot can control:
 
 
 ## Available Variants
-This environment has variants that differ in scene type and number of objects. Scene types include 'ground', 'cabinet', etc. The number of objects varies across variants.
+The variants require tossing different numbers of objects into the bin.
 
 - [`kinder/Tossing3D-o2-v0`](variants/Tossing3D/Tossing3D-o2.md) (o2)
 - [`kinder/Tossing3D-o1-v0`](variants/Tossing3D/Tossing3D-o1.md) (o1)

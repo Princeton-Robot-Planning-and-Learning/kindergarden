@@ -1,4 +1,6 @@
 {
+    "description": "A 3D task where the robot must transfer a pile of objects from one bin to another. There is a tool available that may be used for scooping and pouring.",
+    "variant_description": "The variants require scooping and pouring different numbers of objects.",
     "robots": {
         "tidybot": {
             "robot": {}

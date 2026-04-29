@@ -5,10 +5,9 @@
 **Random Action Stats**: Total Reward: -25.00, Success: No, Steps: 25
 
 ## Description
-A 3D mobile manipulation environment using the TidyBot platform.
+A 3D navigation-among-movable-objects task where the robot must reach a goal region on the floor while several chair obstacles are placed in the workspace and may need to be moved out of the way.
 
 The robot has a holonomic mobile base with powered casters and a Kinova Gen3 arm.
-Scene type: ground with 3 objects. In the 'ground' scene, objects are placed randomly on a flat ground plane.
 
 The robot can control:
 - Base pose (x, y, theta)
@@ -18,7 +17,7 @@ The robot can control:
 
 
 ## Available Variants
-This environment has variants that differ in scene type and number of objects. Scene types include 'ground', 'cabinet', etc. The number of objects varies across variants.
+The variants differ in the number of obstacle chairs placed in the workspace.
 
 - [`kinder/Dynamo3D-o12-v0`](variants/Dynamo3D/Dynamo3D-o12.md) (o12)
 - [`kinder/Dynamo3D-o3-v0`](variants/Dynamo3D/Dynamo3D-o3.md) (o3)

@@ -1,4 +1,6 @@
 {
+    "description": "A 3D task where the robot must balance multiple objects onto a balance beam, which requires understanding of spatial relationships between objects of different sizes, and the rotational forces they induce.",
+    "variant_description": "This task has one variant with three objects to balance.",
     "robots": {
         "tidybot": {
             "robot": {}

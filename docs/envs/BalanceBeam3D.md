@@ -5,10 +5,9 @@
 **Random Action Stats**: Total Reward: -1.00, Success: Yes, Steps: 1
 
 ## Description
-A 3D mobile manipulation environment using the TidyBot platform.
+A 3D task where the robot must balance multiple objects onto a balance beam, which requires understanding of spatial relationships between objects of different sizes, and the rotational forces they induce.
 
 The robot has a holonomic mobile base with powered casters and a Kinova Gen3 arm.
-Scene type: ground with 3 objects. In the 'ground' scene, objects are placed randomly on a flat ground plane.
 
 The robot can control:
 - Base pose (x, y, theta)
@@ -18,7 +17,7 @@ The robot can control:
 
 
 ## Available Variants
-This environment has variants that differ in scene type and number of objects. Scene types include 'ground', 'cabinet', etc. The number of objects varies across variants.
+This task has one variant with three objects to balance.
 
 - [`kinder/BalanceBeam3D-o3-v0`](variants/BalanceBeam3D/BalanceBeam3D-o3.md) (o3)
 

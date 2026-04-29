@@ -68,9 +68,9 @@ def test_pick_place_on_rack() -> None:
     )
     assert isinstance(env.observation_space, ObjectCentricBoxSpace)
     obs_space = env.observation_space
-    config = cast(
-        Packing3DEnv, env.unwrapped
-    )._object_centric_env.config  # pylint: disable=protected-access
+    config = (
+        cast(Packing3DEnv, env.unwrapped)._object_centric_env.config  # pylint: disable=protected-access
+    )
     if MAKE_VIDEOS:
         env = RecordVideo(env, "unit_test_videos")  # type: ignore[assignment]
 

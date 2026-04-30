@@ -53,6 +53,14 @@ ORANGE: tuple[float, float, float] = (1.0, 165 / 255, 0.0)
 class RobotActionSpace(Box):
     """A space for robot actions."""
 
+    def __init__(self, low, high, dtype=np.float32, **kwargs) -> None:
+        super().__init__(
+            np.asarray(low, dtype=dtype),
+            np.asarray(high, dtype=dtype),
+            dtype=dtype,
+            **kwargs,
+        )
+
     @abc.abstractmethod
     def create_markdown_description(self) -> str:
         """Create a markdown description of this space."""

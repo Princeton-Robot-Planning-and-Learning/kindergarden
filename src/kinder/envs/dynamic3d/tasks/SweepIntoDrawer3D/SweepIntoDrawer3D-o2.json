@@ -1,0 +1,65 @@
+{
+    "robots": {
+        "tidybot": {
+            "robot": {}
+        }
+    },
+    "scene": "lab2_kitchen_gray",
+    "regions": {
+        "blocks_init_region": {
+            "target": "kitchen_island",
+            "shelf": 2,
+            "ranges": [[0.0, 0.125, 0.2, 0.325]],
+            "yaw_ranges": [[0, 360]],
+            "rgba": [0.8, 0.8, 0.2, 0.0]
+        },
+        "wiper_init_region": {
+            "target": "kitchen_island",
+            "shelf": 2,
+            "ranges": [[0.2, 0.2, 0.5, 0.5]],
+            "yaw_ranges": [[0,0]],
+            "rgba": [0.5, 0.5, 0.5, 0.0]
+        },
+        "robot_kitchen_init_region": {
+            "target": "ground",
+            "ranges": [[1.2, -0.5, 1.7, 0.0]],
+            "yaw_ranges": [[175, 185]],
+            "rgba": [0.0, 0.0, 1.0, 0.0]
+        }
+    },
+    "objects": {
+        "wiper": {
+            "wiper_0": {
+                "handle_height": 0.20,
+                "handle_width": 0.015,
+                "head_length": 0.20,
+                "head_height": 0.03,
+                "upright": false,
+                "handle_rgba": [0.9, 0.9, 0.9, 1.0],
+                "head_rgba": [0.1, 0.1, 0.1, 1.0]
+            }
+        },
+        "fastener_screw_simple": {
+            "screw_0": {"scale": 1.0},
+            "screw_1": {"scale": 1.0}
+        }
+    },
+    "cameras": {
+        "task_view": {
+            "position": [2.5, -2.5, 3.5],
+            "lookat": [0.5, 0.0, 1.0],
+            "fovy": 42,
+            "resolution": [640, 480]
+        }
+    },
+    "initial_state": [
+        ["in", "wiper_0", "wiper_init_region"],
+        ["in", "screw_0", "blocks_init_region"],
+        ["in", "screw_1", "blocks_init_region"],
+        ["on", "robot", "robot_kitchen_init_region"]
+    ],
+    "goal_state": [
+        ["on", "screw_0", "kitchen_island_shelf_1_partition_1_region"],
+        ["on", "screw_1", "kitchen_island_shelf_1_partition_1_region"]
+    ]
+}

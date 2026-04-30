@@ -1,7 +1,7 @@
 """Object definitions for TidyBot environments."""
 
-# Import robocasa_objects to trigger auto-registration of RoboCasa object classes
-from kinder.envs.dynamic3d.objects import generated_objects, robocasa_objects
+# Import these modules to trigger auto-registration of all object classes
+from kinder.envs.dynamic3d.objects import generated_objects, other_objects, robocasa_objects
 from kinder.envs.dynamic3d.objects.base import (
     MujocoFixture,
     MujocoGround,
@@ -33,5 +33,6 @@ __all__ = [
     "GeneratedBowl",
     "GeneratedSeesaw",
     "generated_objects",
+    "other_objects",
     "robocasa_objects",
 ]

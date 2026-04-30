@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mujoco model="flathead_machine_philips">
+  <asset>
+    <texture type="2d" file="textures/metal.png" name="metal_tex"/>
+    <material name="metal_mat" texture="metal_tex" specular="0.9" shininess="0.7" reflectance="0.25"/>
+    <mesh name="flathead_machine_philips_mesh" file="meshes/flathead_machine_philips.stl"/>
+  </asset>
+  <worldbody>
+    <body name="flathead_machine_philips" pos="0 0 0">
+      <freejoint name="flathead_machine_philips_joint"/>
+      <geom name="flathead_machine_philips_visual" type="mesh" mesh="flathead_machine_philips_mesh"
+            material="metal_mat" group="1" contype="0" conaffinity="0"/>
+      <geom name="flathead_machine_philips_col" type="cylinder" group="3"
+            size="0.00851656 0.0107394"
+            pos="0 0 0.00114834" quat="1 0 0 0"
+            mass="0.001" friction="1.0 0.05 0.001" condim="4"/>
+    </body>
+  </worldbody>
+</mujoco>

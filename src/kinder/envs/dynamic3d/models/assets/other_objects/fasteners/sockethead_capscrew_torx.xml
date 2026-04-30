@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mujoco model="sockethead_capscrew_torx">
+  <asset>
+    <texture type="2d" file="textures/metal.png" name="metal_tex"/>
+    <material name="metal_mat" texture="metal_tex" specular="0.9" shininess="0.7" reflectance="0.25"/>
+    <mesh name="sockethead_capscrew_torx_mesh" file="meshes/sockethead_capscrew_torx.stl"/>
+  </asset>
+  <worldbody>
+    <body name="sockethead_capscrew_torx" pos="0 0 0">
+      <freejoint name="sockethead_capscrew_torx_joint"/>
+      <geom name="sockethead_capscrew_torx_visual" type="mesh" mesh="sockethead_capscrew_torx_mesh"
+            material="metal_mat" group="1" contype="0" conaffinity="0"/>
+      <geom name="sockethead_capscrew_torx_col" type="cylinder" group="3"
+            size="0.00687712 0.014892"
+            pos="0 0 0.0031406" quat="1 0 0 0"
+            mass="0.001" friction="1.0 0.05 0.001" condim="4"/>
+    </body>
+  </worldbody>
+</mujoco>

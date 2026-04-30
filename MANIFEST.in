@@ -7,3 +7,6 @@ prune tests
 prune notebooks
 prune scripts
 prune pylint_plugins
+prune src/kinder/envs/dynamic3d/models/assets/mimiclabs_scenes
+prune src/kinder/envs/dynamic3d/models/assets/.tmp
+prune src/kinder/envs/dynamic3d/models/assets/__MACOSX

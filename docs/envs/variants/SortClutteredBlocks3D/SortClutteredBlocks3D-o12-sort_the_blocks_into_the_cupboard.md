@@ -8,7 +8,7 @@ env = kinder.make("kinder/SortClutteredBlocks3D-o12-sort_the_blocks_into_the_cup
 ```
 
 ## Description
-This variant uses the 'ground' scene type with 3 objects.
+Sort 9 cubes and 3 cuboids by color into the matching shelves of a single cupboard.
 
 ## Initial State Distribution
 ![initial state GIF](../../assets/initial_state_gifs/variants/SortClutteredBlocks3D-o12-sort_the_blocks_into_the_cupboard.gif)

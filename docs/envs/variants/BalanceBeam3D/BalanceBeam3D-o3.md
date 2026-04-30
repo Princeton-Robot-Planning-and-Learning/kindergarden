@@ -8,7 +8,7 @@ env = kinder.make("kinder/BalanceBeam3D-o3-v0")
 ```
 
 ## Description
-This variant uses the 'ground' scene type with 3 objects.
+Place three cubes onto a seesaw without tipping it past the balance threshold.
 
 ## Initial State Distribution
 ![initial state GIF](../../assets/initial_state_gifs/variants/BalanceBeam3D-o3.gif)

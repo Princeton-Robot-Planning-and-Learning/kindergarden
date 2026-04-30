@@ -8,7 +8,7 @@ env = kinder.make("kinder/SortClutteredBlocks3D-o20-sort_the_cluttered_blocks_in
 ```
 
 ## Description
-This variant uses the 'ground' scene type with 3 objects.
+Sort 20 cubes by color into 4 colored bowls on a table.
 
 ## Initial State Distribution
 ![initial state GIF](../../assets/initial_state_gifs/variants/SortClutteredBlocks3D-o20-sort_the_cluttered_blocks_into_bowls.gif)

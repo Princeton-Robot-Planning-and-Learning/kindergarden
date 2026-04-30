@@ -8,7 +8,7 @@ env = kinder.make("kinder/ScoopPour3D-o100-v0")
 ```
 
 ## Description
-This variant uses the 'ground' scene type with 3 objects.
+Use a scoop to transfer 100 cubes from a source bin to a target bin on the kitchen island.
 
 ## Initial State Distribution
 ![initial state GIF](../../assets/initial_state_gifs/variants/ScoopPour3D-o100.gif)

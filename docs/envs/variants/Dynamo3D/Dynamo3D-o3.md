@@ -8,7 +8,7 @@ env = kinder.make("kinder/Dynamo3D-o3-v0")
 ```
 
 ## Description
-This variant uses the 'ground' scene type with 3 objects.
+Navigate to a goal region while avoiding three chair obstacles of varying styles.
 
 ## Initial State Distribution
 ![initial state GIF](../../assets/initial_state_gifs/variants/Dynamo3D-o3.gif)

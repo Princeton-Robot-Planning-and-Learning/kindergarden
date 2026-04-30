@@ -1,6 +1,7 @@
 {
     "description": "A 3D task where the robot must sort a pile of objects into different receptacles based on their color. The objects may be initially in contact with each other, requiring singulation before grasping.",
     "variant_description": "The variants differ in the number of objects to sort and in the types of receptacles (a cupboard or bins).",
+    "variant_specific_description": "Sort 4 cubes by color into 4 colored bins on a table.",
     "robots": {
         "tidybot": {
             "robot": {}

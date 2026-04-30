@@ -1,6 +1,7 @@
 {
     "description": "A 3D task where the robot must rearrange objects into different spatial arrangements with respect to other objects.",
     "variant_description": "Each variant requires the robot to put one or more objects on the left, right, front, behind, or next to another object.",
+    "variant_specific_description": "Place the boxed drink on the left side of the bowl on the kitchen counter.",
     "robots": {
         "tidybot": {
             "robot": {}

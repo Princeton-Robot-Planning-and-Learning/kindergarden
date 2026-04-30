@@ -1,6 +1,7 @@
 {
     "description": "A 3D task where the robot must open a drawer and sweep a pile of objects into the drawer. A brush tool is available that may be used for sweeping.",
     "variant_description": "This task has one variant requiring a fixed number of objects needed to be sweeped into the drawer.",
+    "variant_specific_description": "Open a kitchen-island drawer and use a brush to sweep five cubes into it.",
     "robots": {
         "tidybot": {
             "robot": {}

@@ -1323,10 +1323,10 @@ The robot can control:
     def _create_variant_specific_description(self) -> str:
         env = self._object_centric_env
         assert isinstance(env, ObjectCentricTidyBot3DEnv)
-        scene_type = env.scene_type
-        num_objects = env.num_objects
-        obj_str = "1 object" if num_objects == 1 else f"{num_objects} objects"
-        return f"This variant uses the '{scene_type}' scene type with {obj_str}."
+        return env.task_config.get(
+            "variant_specific_description",
+            "No variant-specific description available.",
+        )
 
     def _create_obs_markdown_description(self) -> str:
         """Create observation space description."""
@@ -1468,10 +1468,10 @@ The robot can control:
     def _create_variant_specific_description(self) -> str:
         env = self._object_centric_env
         assert isinstance(env, ObjectCentricRBY1A3DEnv)
-        scene_type = env.scene_type
-        num_objects = env.num_objects
-        obj_str = "1 object" if num_objects == 1 else f"{num_objects} objects"
-        return f"This variant uses the '{scene_type}' scene type with {obj_str}."
+        return env.task_config.get(
+            "variant_specific_description",
+            "No variant-specific description available.",
+        )
 
     def _create_obs_markdown_description(self) -> str:
         """Create observation space description."""

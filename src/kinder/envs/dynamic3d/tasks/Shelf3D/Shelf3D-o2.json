@@ -1,6 +1,7 @@
 {
     "description": "A 3D task where the robot must pick up objects from the ground and place them onto a space-constrained shelf in a cupboard with three layers.",
     "variant_description": "The variants require picking and placing different numbers of objects.",
+    "variant_specific_description": "Pick up two cubes from the floor and place them onto a space-constrained cupboard shelf.",
     "robots": {
         "tidybot": {
             "robot": {}

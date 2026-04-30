@@ -1,6 +1,7 @@
 {
     "description": "A 3D task where the robot must sweep objects that are spread out on the floor into different regions around fixtures in the room. A broom tool is available that may be used for sweeping.",
     "variant_description": "These variants have different numbers of objects to sweep, and multiple goal locations.",
+    "variant_specific_description": "Use a brush to sweep one cube to the left side of the kitchen island.",
     "robots": {
         "tidybot": {
             "robot": {}

@@ -57,6 +57,29 @@ def get_target_object_from_obs(
     return obs.get_object_from_name(target_part_name)
 
 
+def test_triangle_part_set_state_does_not_drift() -> None:
+    """Repeated state restoration should not move triangular parts."""
+    env = ObjectCentricPacking3DEnv(
+        num_parts=1,
+        realistic_bg=False,
+        allow_state_access=True,
+    )
+    obs, _ = env.reset(seed=123)
+    assert isinstance(obs, Packing3DObjectCentricState)
+
+    part = obs.get_object_from_name("part0")
+    initial_pose = (obs.get(part, "pose_x"), obs.get(part, "pose_y"))
+    for _ in range(3):
+        env.set_state(obs)
+        obs = env.get_state()
+        assert isinstance(obs, Packing3DObjectCentricState)
+
+    part = obs.get_object_from_name("part0")
+    final_pose = (obs.get(part, "pose_x"), obs.get(part, "pose_y"))
+    np.testing.assert_allclose(final_pose, initial_pose)
+    env.close()
+
+
 def test_pick_place_on_rack() -> None:
     """Test that picking and placing can be executed for any object."""
     # Create the real environment.

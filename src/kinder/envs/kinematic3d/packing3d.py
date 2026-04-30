@@ -650,9 +650,28 @@ class ObjectCentricPacking3DEnv(
         # Update parts
         for i in range(self._num_parts):
             name = list(parts.keys())[i]
-            pose = obs.get_object_pose(name)
+            pose = self._get_pybullet_pose_from_state(obs, name)
             part_id = self._object_name_to_pybullet_id(name)
             set_pose(part_id, pose, self.physics_client_id)
+
+    def _get_pybullet_pose_from_state(
+        self, obs: Packing3DObjectCentricState, name: str
+    ) -> Pose:
+        """Get the raw PyBullet pose from state features for state restoration."""
+        obj = obs.get_object_from_name(name)
+        return Pose(
+            (
+                obs.get(obj, "pose_x"),
+                obs.get(obj, "pose_y"),
+                obs.get(obj, "pose_z"),
+            ),
+            (
+                obs.get(obj, "pose_qx"),
+                obs.get(obj, "pose_qy"),
+                obs.get(obj, "pose_qz"),
+                obs.get(obj, "pose_qw"),
+            ),
+        )
 
     def _object_name_to_pybullet_id(self, object_name: str) -> int:
         if object_name == "rack":

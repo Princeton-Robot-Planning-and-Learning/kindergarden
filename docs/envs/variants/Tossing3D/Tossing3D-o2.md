@@ -8,7 +8,7 @@ env = kinder.make("kinder/Tossing3D-o2-v0")
 ```
 
 ## Description
-This variant uses the 'ground' scene type with 3 objects.
+Toss two cubes into the bin from beyond the robot's reachable distance.
 
 ## Initial State Distribution
 ![initial state GIF](../../assets/initial_state_gifs/variants/Tossing3D-o2.gif)

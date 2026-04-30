@@ -8,7 +8,7 @@ env = kinder.make("kinder/SweepIntoDrawer3D-o5-v0")
 ```
 
 ## Description
-This variant uses the 'ground' scene type with 3 objects.
+Open a kitchen-island drawer and use a brush to sweep five cubes into it.
 
 ## Initial State Distribution
 ![initial state GIF](../../assets/initial_state_gifs/variants/SweepIntoDrawer3D-o5.gif)

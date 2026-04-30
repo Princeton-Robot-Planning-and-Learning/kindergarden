@@ -8,7 +8,7 @@ env = kinder.make("kinder/ConstrainedCupboard3D-o1-v0")
 ```
 
 ## Description
-This variant uses the 'ground' scene type with 3 objects.
+Place one rod onto an open shelf across three small cupboards with varying shelf heights.
 
 ## Initial State Distribution
 ![initial state GIF](../../assets/initial_state_gifs/variants/ConstrainedCupboard3D-o1.gif)

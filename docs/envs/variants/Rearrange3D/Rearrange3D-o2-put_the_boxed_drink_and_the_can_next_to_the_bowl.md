@@ -8,7 +8,7 @@ env = kinder.make("kinder/Rearrange3D-o2-put_the_boxed_drink_and_the_can_next_to
 ```
 
 ## Description
-This variant uses the 'ground' scene type with 3 objects.
+Place both the boxed drink and the can next to the bowl on the kitchen counter.
 
 ## Initial State Distribution
 ![initial state GIF](../../assets/initial_state_gifs/variants/Rearrange3D-o2-put_the_boxed_drink_and_the_can_next_to_the_bowl.gif)

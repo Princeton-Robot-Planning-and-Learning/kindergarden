@@ -1,6 +1,7 @@
 {
     "description": "A 3D task where the robot is supposed to fit multiple long rods into constrained spaces in a cupboard. The cupboard has varying numbers and sizes of rows and columns.",
     "variant_description": "The variants require fitting different number of objects into cupboards of different sizes with varying arrangement of feasible regions at each reset.",
+    "variant_specific_description": "Place six rods onto open shelves across eleven small cupboards with varying shelf configurations.",
     "robots": {
         "tidybot": {
             "robot": {}

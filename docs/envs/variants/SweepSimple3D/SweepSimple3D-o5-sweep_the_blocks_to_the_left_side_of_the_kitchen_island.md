@@ -8,7 +8,7 @@ env = kinder.make("kinder/SweepSimple3D-o5-sweep_the_blocks_to_the_left_side_of_
 ```
 
 ## Description
-This variant uses the 'ground' scene type with 3 objects.
+Use a brush to sweep five cubes to the left side of the kitchen island.
 
 ## Initial State Distribution
 ![initial state GIF](../../assets/initial_state_gifs/variants/SweepSimple3D-o5-sweep_the_blocks_to_the_left_side_of_the_kitchen_island.gif)

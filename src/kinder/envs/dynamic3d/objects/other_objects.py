@@ -6,6 +6,8 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import ClassVar
 
+import numpy as np
+from numpy.typing import NDArray
 from relational_structs import Object
 
 from kinder.envs.dynamic3d.mujoco_utils import MujocoEnv
@@ -130,6 +132,68 @@ class FastenerObject(RoboCasaObject):
             new_body.append(new_geom)
 
         return new_body
+
+    def _calculate_bounding_box(self) -> tuple[float, float, float]:
+        """Compute bounding box from the collision cylinder geom in the XML.
+
+        Returns (width, depth, height) representing the object footprint and
+        height above its resting surface.  The cylinder's size attribute encodes
+        (radius, half-height), both scaled by self.scale.
+        """
+        worldbody = self.model_root.find("worldbody")
+        if worldbody is not None:
+            for geom in worldbody.iter("geom"):
+                if geom.get("type") == "cylinder" and "size" in geom.attrib:
+                    r, half_h = (float(v) for v in geom.attrib["size"].split())
+                    r *= self.scale
+                    h = half_h * 2 * self.scale
+                    return (r * 2, r * 2, h)
+        fallback = 0.05 * self.scale
+        return (fallback, fallback, fallback * 2)
+
+    @classmethod
+    def get_bounding_box_from_config(
+        cls,
+        pos: NDArray[np.float32],
+        object_config: dict[str, str | float],
+    ) -> list[float]:
+        """Return a bottom-referenced bounding box for placement sampling.
+
+        z_min is set to pos[2] (object base rests on the surface) so that the
+        bottom-corner check inside sample_collision_free_position passes for
+        fixture shelf regions whose z range starts exactly at the shelf surface.
+        """
+        scale = float(object_config.get("scale", 1.0))
+        xml_path = FASTENERS_DIR / f"{cls.fastener_name}.xml"
+        try:
+            root = ET.parse(str(xml_path)).getroot()
+            for geom in root.iter("geom"):
+                if geom.get("type") == "cylinder" and "size" in geom.attrib:
+                    r, half_h = (float(v) for v in geom.attrib["size"].split())
+                    r *= scale
+                    half_h *= scale
+                    # z_min = -half_h so the sampler requires candidate_z >= shelf_z +
+                    # half_h, placing the body centre half_h above the surface and the
+                    # cylinder bottom exactly at the surface (no clipping).
+                    return [
+                        float(pos[0]) - r,
+                        float(pos[1]) - r,
+                        float(pos[2]) - half_h,
+                        float(pos[0]) + r,
+                        float(pos[1]) + r,
+                        float(pos[2]) + half_h,
+                    ]
+        except (OSError, ET.ParseError):
+            pass
+        hw = 0.05 * scale
+        return [
+            float(pos[0]) - hw,
+            float(pos[1]) - hw,
+            float(pos[2]) - hw,
+            float(pos[0]) + hw,
+            float(pos[1]) + hw,
+            float(pos[2]) + hw,
+        ]
 
     def __str__(self) -> str:
         return (

@@ -1,0 +1,64 @@
+{
+    "robots": {
+        "tidybot": {
+            "robot": {}
+        }
+    },
+    "scene": "lab2",
+    "fixtures": {
+        "cupboard": {
+            "cupboard_1": {
+                "length": 0.60198,
+                "depth": 0.254,
+                "shelf_heights": [0.254, 0.254, 0.254],
+                "shelf_partitions": [[], [], []],
+                "shelf_thickness": 0.0127,
+                "side_and_back_open": false
+            }
+        }
+    },
+    "regions": {
+        "ground_cupboard_init_region": {
+            "target": "ground",
+            "ranges": [[1.5, 0.0, 1.5, 0.0]],
+            "yaw_ranges": [[90, 90]]
+        },
+        "ground_1_object_init_region": {
+            "target": "ground",
+            "ranges": [[0.6, 0.1, 0.8, 0.5]],
+            "yaw_ranges": [[0, 0]]
+        },
+        "ground_2_object_init_region": {
+            "target": "ground",
+            "ranges": [[0.1, 0.7, 0.3, 1.0]],
+            "yaw_ranges": [[0, 0]]
+        }
+    },
+    "objects": {
+        "fastener_screw_simple": {
+            "cube1": {"scale": 3.0}
+        },
+        "fastener_hexhead_screw": {
+            "cube2": {"scale": 1.0}
+        }
+    },
+    "cameras": {
+        "agentview_1": {
+            "position": [1, 1, 2],
+            "lookat": [0, 0, 0],
+            "fovy": 42,
+            "resolution": [640, 480]
+        },
+        "task_view": {
+            "position": [-1, 1, 2],
+            "lookat": [2, 0, 0],
+            "fovy": 42,
+            "resolution": [640, 480]
+        }
+    },
+    "initial_state": [
+        ["on", "cupboard_1", "ground_cupboard_init_region"],
+        ["on", "cube1", "ground_1_object_init_region"],
+        ["on", "cube2", "ground_2_object_init_region"]
+    ]
+}

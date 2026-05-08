@@ -1,0 +1,76 @@
+{
+    "robots": {
+        "tidybot": {
+            "robot": {}
+        }
+    },
+    "scene": "lab2",
+    "regions": {
+        "bin_init_region": {
+            "target": "ground",
+            "ranges": [[2.23, -0.0005, 2.231, 0.0005]],
+            "yaw_ranges": [[0, 0]]
+        },
+        "blocks_init_region": {
+            "target": "ground",
+            "ranges": [[0.5, -0.25, 0.75, 0.25]],
+            "yaw_ranges": [[-45, 45]],
+            "rgba": [0.2, 0.6, 0.2, 0.0]
+        },
+        "blocks_goal_region": {
+            "target": "ground",
+            "ranges": [[1.90, -0.10, 0.0, 2.10, 0.10, 0.10]],
+            "yaw_ranges": [[-360, 360]],
+            "rgba": [0.2, 0.6, 0.2, 0.0]
+        },
+        "barrier_init_region": {
+            "target": "ground",
+            "ranges": [[1.3, 0.0, 1.301, 0.001]],
+            "yaw_ranges": [[0, 0]]
+        },
+        "robot_init_region": {
+            "target": "ground",
+            "ranges": [[-0.05, -0.05, 0.05, 0.05]],
+            "yaw_ranges": [[-5, 5]],
+            "rgba": [0.2, 0.6, 0.2, 0.0]
+        }
+    },
+    "objects": {
+        "fastener_screw_simple": {
+            "cube_0": {"scale": 3.0}
+        },
+        "cuboid": {
+            "cuboid_barrier": {
+                "size": [0.03, 5.0, 0.10],
+                "rgba": [0.918, 0.894, 0.835, 1.0],
+                "mass": 10.0
+            }
+        },
+        "bin": {
+            "bin_0": {
+                "length": 0.3,
+                "width": 0.3,
+                "height": 0.2,
+                "wall_thickness": 0.02,
+                "rgba": [0.8, 0.8, 0.0, 1.0]
+            }
+        }
+    },
+    "cameras": {
+        "task_view": {
+            "position": [1, -2, 2],
+            "lookat": [1, 0, 0],
+            "fovy": 42,
+            "resolution": [640, 480]
+        }
+    },
+    "initial_state": [
+        ["on", "robot", "robot_init_region"],
+        ["on", "cube_0", "blocks_init_region"],
+        ["on", "bin_0", "bin_init_region"],
+        ["on", "cuboid_barrier", "barrier_init_region"]
+    ],
+    "goal_state": [
+        ["on", "cube_0", "blocks_goal_region"]
+    ]
+}

@@ -13,7 +13,6 @@ kinder.register_all_environments()
 
 def test_object_centric_motion2d_env():
     """Tests for ObjectCentricMotion2DEnv()."""
-
     # Test env creation and random actions.
     env = ObjectCentricMotion2DEnv(num_passages=5)
 

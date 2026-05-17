@@ -122,6 +122,44 @@ def test_check_mobile_base_collisions_is_called(
         )
 
 
+def test_base_motion3d_can_cross_bounds_with_many_small_base_actions():
+    """Reproduces that BaseMotion3D can drift far outside its intended bounds."""
+    environment = BaseMotion3DEnv(
+        render_mode="rgb_array", use_gui=False, realistic_bg=True
+    )
+    if MAKE_VIDEOS:
+        environment = RecordVideo(environment, "unit_test_videos")
+    try:
+        vec_obs, _ = environment.reset(seed=123)
+        oc_obs = environment.observation_space.devectorize(vec_obs)
+        obs = BaseMotion3DObjectCentricState(oc_obs.data, oc_obs.type_features)
+        start_y = obs.base_pose.y
+        config = (
+            environment.unwrapped._object_centric_env.config  # pylint: disable=protected-access
+        )
+
+        desired_distance = 100.0
+        step_distance = 0.1
+        num_steps = int(desired_distance / step_distance)
+        action = np.array(
+            [0.0, -step_distance, 0.0] + [0.0] * 7 + [0.0], dtype=np.float32
+        )
+
+        terminated = False
+        for _ in range(num_steps):
+            vec_obs, _, terminated, _, _ = environment.step(action)
+            assert not terminated
+
+        oc_obs = environment.observation_space.devectorize(vec_obs)
+        obs = BaseMotion3DObjectCentricState(oc_obs.data, oc_obs.type_features)
+
+        assert obs.base_pose.y < config.robot_base_pose_lower_bound.y
+        assert obs.base_pose.y < start_y - desired_distance + step_distance
+        assert not terminated
+    finally:
+        environment.close()
+
+
 def test_reset_with_init_state():
     """Test that reset accepts init_state via options and restores state correctly."""
     kinder.register_all_environments()

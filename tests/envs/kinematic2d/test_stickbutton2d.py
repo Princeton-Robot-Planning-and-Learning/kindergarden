@@ -11,7 +11,6 @@ from tests.conftest import MAKE_VIDEOS
 
 def test_object_centric_stickbutton2d_env():
     """Tests for ObjectCentricMotion2DEnv()."""
-
     # Test env creation and random actions.
     env = ObjectCentricStickButton2DEnv(num_buttons=5)
 
@@ -56,7 +55,6 @@ def test_stickbutton2d_action_space():
 
 def test_stickbutton2d_termination():
     """Tests that the environment terminates when all buttons are pressed."""
-
     env = ObjectCentricStickButton2DEnv(num_buttons=5)
     state, _ = env.reset()
 

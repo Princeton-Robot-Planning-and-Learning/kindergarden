@@ -57,7 +57,7 @@ def test_packing3d_goal():
         realistic_bg=False,
         allow_state_access=True,
     )
-    
+
     obs, _ = env.reset(seed=0)
     part = obs.get_object_from_name("part0")
     assert part.type == Kinematic3DTriangleType
@@ -145,9 +145,9 @@ def test_pick_place_on_rack() -> None:
     )
     assert isinstance(env.observation_space, ObjectCentricBoxSpace)
     obs_space = env.observation_space
-    config = cast(
-        Packing3DEnv, env.unwrapped
-    )._object_centric_env.config  # pylint: disable=protected-access
+    unwrapped_env = cast(Packing3DEnv, env.unwrapped)
+    # pylint: disable-next=protected-access
+    config = unwrapped_env._object_centric_env.config
     if MAKE_VIDEOS:
         env = RecordVideo(env, "unit_test_videos")  # type: ignore[assignment]
 

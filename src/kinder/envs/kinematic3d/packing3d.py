@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
+from typing import cast
 from typing import Type as TypingType
 
 import numpy as np
@@ -249,7 +250,7 @@ class Packing3DObjectCentricState(Kinematic3DObjectCentricState):
             ]
         )
         world_corners = (rot @ local_corners.T).T + pos
-        return Polygon(world_corners[:, :2]).convex_hull
+        return cast(Polygon, Polygon(world_corners[:, :2]).convex_hull)
 
     def _get_triangle_xy_polygon(self, name: str) -> Polygon:
         obj = self.get_object_from_name(name)

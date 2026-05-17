@@ -12,15 +12,19 @@ from pybullet_helpers.motion_planning import (
     run_smooth_motion_planning_to_pose,
     smoothly_follow_end_effector_path,
 )
+from pybullet_helpers.utils import get_triangle_vertices
 from relational_structs import Object
 from relational_structs.spaces import ObjectCentricBoxSpace
+from shapely.geometry import Polygon
 
+from kinder.envs.kinematic3d.object_types import Kinematic3DTriangleType
 from kinder.envs.kinematic3d.packing3d import (
     ObjectCentricPacking3DEnv,
     Packing3DEnv,
     Packing3DObjectCentricState,
 )
 from kinder.envs.kinematic3d.save_utils import DEFAULT_DEMOS_DIR, save_demo
+from kinder.envs.kinematic3d.utils import is_inside
 from tests.conftest import MAKE_VIDEOS
 
 # Flag to enable trajectory saving (can be controlled like MAKE_VIDEOS)
@@ -43,6 +47,79 @@ def test_packing3d_env_basic():
             obs, _, _, _, _ = env.step(act)
 
         env.close()
+
+
+def test_packing3d_goal():
+    """Test the current triangle containment issue in Packing3D goal checks."""
+    env = ObjectCentricPacking3DEnv(
+        num_parts=1,
+        use_gui=False,
+        realistic_bg=False,
+        allow_state_access=True,
+    )
+
+    obs, _ = env.reset(seed=0)
+    part = obs.get_object_from_name("part0")
+    assert part.type == Kinematic3DTriangleType
+    assert obs.get(part, "triangle_type") == 1
+
+    rack_pose = obs.rack_pose
+    rack_half_extents = obs.rack_half_extents
+    side_a, side_b, _, triangle_type = obs.get_object_triangle_features("part0")
+    assert triangle_type == 1
+
+    triangle_vertices = get_triangle_vertices("right", (side_a, side_b))
+    centroid_x = sum(v[0] for v in triangle_vertices) / 3.0
+    centroid_y = sum(v[1] for v in triangle_vertices) / 3.0
+    part_x = rack_pose.position[0] - rack_half_extents[0]
+    part_y = rack_pose.position[1] - side_b / 2
+
+    obs.set(part, "pose_x", part_x - centroid_x)
+    obs.set(part, "pose_y", part_y - centroid_y)
+    obs.set(part, "pose_z", rack_pose.position[2])
+    obs.set(part, "pose_qx", 0.0)
+    obs.set(part, "pose_qy", 0.0)
+    obs.set(part, "pose_qz", 0.0)
+    obs.set(part, "pose_qw", 1.0)
+    obs.set(part, "grasp_active", 0.0)
+    env.set_state(obs)
+
+    rack_polygon = Polygon(
+        [
+            (
+                rack_pose.position[0] - rack_half_extents[0],
+                rack_pose.position[1] - rack_half_extents[1],
+            ),
+            (
+                rack_pose.position[0] + rack_half_extents[0],
+                rack_pose.position[1] - rack_half_extents[1],
+            ),
+            (
+                rack_pose.position[0] + rack_half_extents[0],
+                rack_pose.position[1] + rack_half_extents[1],
+            ),
+            (
+                rack_pose.position[0] - rack_half_extents[0],
+                rack_pose.position[1] + rack_half_extents[1],
+            ),
+        ]
+    )
+    triangle_polygon = Polygon(
+        [(part_x + vx, part_y + vy) for vx, vy, _ in triangle_vertices]
+    )
+
+    assert rack_polygon.covers(triangle_polygon)
+
+    updated_obs = env.get_state()
+    assert not is_inside(
+        updated_obs.rack_pose,
+        updated_obs.rack_half_extents,
+        updated_obs.get_object_pose("part0"),
+        updated_obs.get_object_half_extents_packing3d("part0")[:3],
+    )
+    assert env.goal_reached()
+
+    env.close()
 
 
 def get_target_object_from_obs(
@@ -68,9 +145,9 @@ def test_pick_place_on_rack() -> None:
     )
     assert isinstance(env.observation_space, ObjectCentricBoxSpace)
     obs_space = env.observation_space
-    config = (
-        cast(Packing3DEnv, env.unwrapped)._object_centric_env.config  # pylint: disable=protected-access
-    )
+    unwrapped_env = cast(Packing3DEnv, env.unwrapped)
+    # pylint: disable-next=protected-access
+    config = unwrapped_env._object_centric_env.config
     if MAKE_VIDEOS:
         env = RecordVideo(env, "unit_test_videos")  # type: ignore[assignment]
 

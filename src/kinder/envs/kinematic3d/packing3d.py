@@ -19,6 +19,8 @@ from pybullet_helpers.utils import (
 )
 from relational_structs import Object, ObjectCentricState, Type
 from relational_structs.utils import create_state_from_dict
+from scipy.spatial.transform import Rotation
+from shapely.geometry import Polygon
 
 from kinder.core import ConstantObjectKinDEREnv, FinalConfigMeta
 from kinder.envs.kinematic3d.base_env import (
@@ -230,6 +232,64 @@ class Packing3DObjectCentricState(Kinematic3DObjectCentricState):
             self.get(obj, "depth"),
             self.get(obj, "triangle_type"),
         )
+
+    @staticmethod
+    def _get_box_xy_polygon(
+        pose: Pose,
+        half_extents: tuple[float, float, float],
+    ) -> Polygon:
+        pos = np.array(pose.position)
+        rot = Rotation.from_quat(pose.orientation).as_matrix()
+        local_corners = np.array(
+            [
+                [sx * half_extents[0], sy * half_extents[1], sz * half_extents[2]]
+                for sx in [-1, 1]
+                for sy in [-1, 1]
+                for sz in [-1, 1]
+            ]
+        )
+        world_corners = (rot @ local_corners.T).T + pos
+        return Polygon(world_corners[:, :2]).convex_hull
+
+    def _get_triangle_xy_polygon(self, name: str) -> Polygon:
+        obj = self.get_object_from_name(name)
+        position = np.array(
+            [
+                self.get(obj, "pose_x"),
+                self.get(obj, "pose_y"),
+                self.get(obj, "pose_z"),
+            ]
+        )
+        orientation = (
+            self.get(obj, "pose_qx"),
+            self.get(obj, "pose_qy"),
+            self.get(obj, "pose_qz"),
+            self.get(obj, "pose_qw"),
+        )
+        side_a, side_b, _, triangle_type = self.get_object_triangle_features(name)
+        local_vertices = np.array(
+            get_triangle_vertices(
+                {0: "equilateral", 1: "right"}[int(triangle_type)],
+                (side_a, side_b),
+            )
+        )
+        rot = Rotation.from_quat(orientation).as_matrix()
+        world_vertices = (rot @ local_vertices.T).T + position
+        return Polygon(world_vertices[:, :2])
+
+    def is_part_inside_rack(self, part_name: str) -> bool:
+        """Check whether a part's true footprint is inside the rack footprint."""
+        part = self.get_object_from_name(part_name)
+        rack_polygon = self._get_box_xy_polygon(self.rack_pose, self.rack_half_extents)
+        if part.type == Kinematic3DCuboidType:
+            part_polygon = self._get_box_xy_polygon(
+                self.get_object_pose(part_name),
+                self.get_object_half_extents_packing3d(part_name)[:3],
+            )
+        else:
+            assert part.type == Kinematic3DTriangleType
+            part_polygon = self._get_triangle_xy_polygon(part_name)
+        return rack_polygon.buffer(1e-9).contains(part_polygon)
 
     @property
     def objects(self) -> list[Object]:
@@ -725,14 +785,10 @@ class ObjectCentricPacking3DEnv(
         # Goal: no parts are grasped and all parts are supported by the rack.
         if self._grasped_object is not None:
             return False
+        obs = self._get_obs()
         for i in range(self._num_parts):
             part_name = f"part{i}"
-            if not is_inside(
-                self._get_obs().rack_pose,
-                self._get_obs().rack_half_extents,
-                self._get_obs().get_object_pose(part_name),
-                self._get_obs().get_object_half_extents_packing3d(part_name)[:3],
-            ):
+            if not obs.is_part_inside_rack(part_name):
                 return False
 
         return True

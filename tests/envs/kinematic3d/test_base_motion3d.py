@@ -122,8 +122,8 @@ def test_check_mobile_base_collisions_is_called(
         )
 
 
-def test_base_motion3d_can_cross_bounds_with_many_small_base_actions():
-    """Reproduces that BaseMotion3D can drift far outside its intended bounds."""
+def test_base_motion3d_stays_in_bounds_with_many_small_base_actions():
+    """BaseMotion3D should not drift outside its intended bounds."""
     environment = BaseMotion3DEnv(
         render_mode="rgb_array", use_gui=False, realistic_bg=True
     )
@@ -153,8 +153,8 @@ def test_base_motion3d_can_cross_bounds_with_many_small_base_actions():
         oc_obs = environment.observation_space.devectorize(vec_obs)
         obs = BaseMotion3DObjectCentricState(oc_obs.data, oc_obs.type_features)
 
-        assert obs.base_pose.y < config.robot_base_pose_lower_bound.y
-        assert obs.base_pose.y < start_y - desired_distance + step_distance
+        assert obs.base_pose.y >= config.robot_base_pose_lower_bound.y
+        assert obs.base_pose.y > start_y - desired_distance + step_distance
         assert not terminated
     finally:
         environment.close()

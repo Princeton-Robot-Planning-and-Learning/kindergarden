@@ -12,7 +12,6 @@ from tests.conftest import MAKE_VIDEOS
 
 def test_object_centric_clutteredretrieval2d_env():
     """Tests for ObjectCentricClutteredRetrieval2DEnv()."""
-
     # Test env creation and random actions.
     env = ObjectCentricClutteredRetrieval2DEnv(num_obstructions=25)
 

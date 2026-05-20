@@ -1,4 +1,5 @@
-"""Tests for the TidyBot3D cupboard scene: observation/action spaces, reset, and step."""
+"""Tests for the TidyBot3D cupboard scene: observation/action spaces, reset, and
+step."""
 
 from pathlib import Path
 
@@ -113,7 +114,6 @@ def test_tidybot3d_cupboard_has_eight_objects():
 
 def test_tidybot_cupboard_constrained_fitting_goals():
     """Test that tidybot-cupboard-o12-ConstrainedFitting env correctly checks goals."""
-
     tasks_root = (
         Path(kinder.__path__[0]).parent / "kinder" / "envs" / "dynamic3d" / "tasks"
     )

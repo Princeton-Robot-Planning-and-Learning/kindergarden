@@ -28,7 +28,6 @@ _TEST_TASKS = Path(__file__).parent / "test_tasks"
 
 def test_straight_base_motion():
     """This environment is really simple: moving directly towards the target works."""
-
     env = TidyBot3DEnv(
         task_config_path=str(_TEST_TASKS / "tidybot-base_motion-o1.json"),
         render_mode="rgb_array",
@@ -82,7 +81,6 @@ def test_straight_base_motion():
 )
 def test_straight_base_motion_mimiclabs(view):
     """Test base motion with MimicLabs background scene (uses lab5 for base_motion)."""
-
     env = TidyBot3DEnv(
         task_config_path=str(_TEST_TASKS / "tidybot-base_motion-o1.json"),
         render_mode="rgb_array",

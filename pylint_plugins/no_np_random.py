@@ -1,7 +1,7 @@
 """Pylint checker that bans direct use of np.random (global RNG state).
 
-Allowed: np.random.default_rng, np.random.Generator
-Banned:  everything else under np.random
+Allowed: np.random.default_rng, np.random.Generator Banned:  everything else under
+np.random
 """
 
 from astroid import nodes  # type: ignore[import-untyped]

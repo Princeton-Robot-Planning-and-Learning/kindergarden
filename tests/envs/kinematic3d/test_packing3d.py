@@ -33,7 +33,6 @@ SAVE_TRAJECTORIES = MAKE_VIDEOS
 
 def test_packing3d_env_basic():
     """Basic smoke test for the packing3d environment."""
-
     for num_parts in [1, 2, 3]:
         env = Packing3DEnv(
             num_parts=num_parts, use_gui=False, realistic_bg=False

@@ -15,7 +15,6 @@ from tests.conftest import MAKE_VIDEOS
 
 def test_object_centric_clutteredstorage2d_env():
     """Tests for ObjectCentricClutteredStorage2DEnv()."""
-
     # Test env creation and random actions.
     env = ObjectCentricClutteredStorage2DEnv(num_blocks=1)
 

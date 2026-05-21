@@ -31,7 +31,7 @@ def load_realistic_background(
     orientation=(0, 0, 0, 1),
     scale=(1, 1, 1),
 ) -> int:
-    """Load an OBJ file as a visual-only background in PyBullet.
+    """Load an OBJ file as a background in PyBullet.
 
     Args:
         physics_client_id: PyBullet physics client ID.
@@ -49,18 +49,22 @@ def load_realistic_background(
         meshScale=scale,
         physicsClientId=physics_client_id,
     )
+    collision_id = p.createCollisionShape(
+        p.GEOM_MESH,
+        fileName=str(obj_path),
+        meshScale=scale,
+        physicsClientId=physics_client_id,
+        flags=p.GEOM_FORCE_CONCAVE_TRIMESH,
+    )
 
     body_id = p.createMultiBody(
         baseMass=0,
         baseVisualShapeIndex=visual_id,
-        baseCollisionShapeIndex=-1,  # visual only
+        baseCollisionShapeIndex=collision_id,
         basePosition=position,
         baseOrientation=orientation,
         physicsClientId=physics_client_id,
     )
-
-    # Disable collision
-    p.setCollisionFilterGroupMask(body_id, -1, 0, 0, physicsClientId=physics_client_id)
 
     return body_id
 

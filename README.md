@@ -152,6 +152,12 @@ obs, info = env.reset(seed=42)
 | SweepSimple3D | Dynamic3D | `kinder/SweepSimple3D-o50-sweep_the_blocks_to_the_right_side_of_the_kitchen_island-v0` |
 | Tossing3D | Dynamic3D | `kinder/Tossing3D-o1-v0` |
 
+## Hugging Face Models and Datasets
+
+Pre-trained model checkpoints and demonstration datasets are available on Hugging Face:
+- Models: https://huggingface.co/kinder-bench
+- Dataset: https://huggingface.co/datasets/kinder-bench/kinder-datasets
+
 ## Acknowledgements
 
 We thank the authors of following projects for open-sourcing their code, whose assets we utilized in KinDER:

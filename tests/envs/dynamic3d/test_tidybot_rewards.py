@@ -9,8 +9,8 @@ from kinder.envs.dynamic3d import tidybot_rewards
 
 
 def test_reward_calculator_base_behavior():
-    """Test the base TidyBotRewardCalculator: reward, episode_step
-    increment, and termination logic.
+    """Test the base TidyBotRewardCalculator: reward, episode_step increment, and
+    termination logic.
 
     - Checks that calculate_reward returns the base reward (-0.01)
     when no task reward is present.

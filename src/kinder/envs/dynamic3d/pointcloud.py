@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import mujoco
@@ -220,6 +222,174 @@ def capture_pointcloud_from_gym_env(
         max_depth=max_depth,
         on_alias=on_alias,
     )
+
+
+def is_dynamic3d_gym_env(gym_env: Any) -> bool:
+    """Return True if ``gym_env`` is a KinDER Dynamic3D env with an active MuJoCo sim."""
+    try:
+        oc_env = get_object_centric_env(gym_env)
+    except AttributeError:
+        return False
+    robot_env = oc_env._robot_env
+    return robot_env is not None and robot_env.sim is not None
+
+
+def subsample_point_cloud(
+    points: NDArray[np.float32],
+    max_points: int,
+    rng: np.random.Generator,
+) -> NDArray[np.float32]:
+    """Uniformly subsample a point cloud to at most ``max_points`` rows."""
+    n = int(points.shape[0])
+    if n <= max_points:
+        return points
+    indices = rng.choice(n, size=max_points, replace=False)
+    return points[indices]
+
+
+def stack_point_cloud_frames(
+    frames: list[NDArray[np.float32]],
+    max_points: int,
+) -> tuple[NDArray[np.float32], NDArray[np.int32]]:
+    """Stack per-frame clouds into (T, max_points, 3) with NaN padding.
+
+    Returns:
+        stacked: float32 array of shape (T, max_points, 3)
+        counts: int32 array of shape (T,) with the number of valid points per frame
+    """
+    if not frames:
+        raise ValueError("No point cloud frames to stack.")
+
+    num_frames = len(frames)
+    stacked = np.full((num_frames, max_points, 3), np.nan, dtype=np.float32)
+    counts = np.zeros(num_frames, dtype=np.int32)
+    for index, points in enumerate(frames):
+        num_valid = min(int(points.shape[0]), max_points)
+        counts[index] = num_valid
+        stacked[index, :num_valid] = points[:num_valid]
+    return stacked, counts
+
+
+@dataclass
+class PointCloudRecorder:
+    """Record world-frame point clouds over an episode (reset + each step).
+
+    Usage::
+
+        recorder = PointCloudRecorder(camera_name="tidybot_base")
+        env.reset(seed=seed)
+        recorder.on_reset(env)
+        for action in actions:
+            env.step(action)
+            recorder.on_step(env)
+        recorder.save_npz("trajectory_pointcloud.npz", env_id=env_id)
+
+    Aligns with demo GIF replay: call ``on_reset`` after ``env.reset``, then
+    ``on_step`` after every ``env.step`` (same cadence as ``env.render()`` for video).
+    """
+
+    camera_name: str = "tidybot_base"
+    max_points_per_frame: int = 50_000
+    min_depth: float = 0.02
+    max_depth: float | None = None
+    seed: int = 0
+    on_alias: Callable[[str], None] | None = print
+    store_rgb: bool = False
+    _frames: list[NDArray[np.float32]] = field(default_factory=list, init=False)
+    _rgb_frames: list[NDArray[np.uint8]] = field(default_factory=list, init=False)
+    _rng: np.random.Generator = field(init=False)
+    _resolved_camera: str | None = field(default=None, init=False)
+    _camera_id: int | None = field(default=None, init=False)
+
+    def __post_init__(self) -> None:
+        self._rng = np.random.default_rng(self.seed)
+
+    def clear(self) -> None:
+        """Drop all buffered frames."""
+        self._frames.clear()
+        self._rgb_frames.clear()
+        self._resolved_camera = None
+        self._camera_id = None
+
+    def num_frames(self) -> int:
+        """Number of captured frames (reset frame + one per step so far)."""
+        return len(self._frames)
+
+    def _capture(self, gym_env: Any) -> None:
+        if not is_dynamic3d_gym_env(gym_env):
+            raise TypeError(
+                "PointCloudRecorder only supports KinDER Dynamic3D environments."
+            )
+        alias_cb = self.on_alias if len(self._frames) == 0 else None
+        points, rgb, resolved, camera_id = capture_pointcloud_from_gym_env(
+            gym_env,
+            self.camera_name,
+            min_depth=self.min_depth,
+            max_depth=self.max_depth,
+            on_alias=alias_cb,
+        )
+        if self._resolved_camera is None:
+            self._resolved_camera = resolved
+            self._camera_id = camera_id
+        subsampled = subsample_point_cloud(
+            points, self.max_points_per_frame, self._rng
+        )
+        self._frames.append(subsampled)
+        if self.store_rgb:
+            self._rgb_frames.append(np.asarray(rgb, dtype=np.uint8))
+
+    def on_reset(self, gym_env: Any) -> None:
+        """Capture a point cloud immediately after ``env.reset()``."""
+        self._capture(gym_env)
+
+    def on_step(self, gym_env: Any) -> None:
+        """Capture a point cloud immediately after ``env.step()``."""
+        self._capture(gym_env)
+
+    def save_npz(
+        self,
+        path: str | Path,
+        *,
+        env_id: str | None = None,
+        demo_seed: int | None = None,
+    ) -> Path:
+        """Save buffered frames to a compressed ``.npz`` file.
+
+        Arrays:
+            - ``points``: (T, max_points_per_frame, 3) float32, NaN-padded
+            - ``counts``: (T,) int32, valid points per frame
+            - ``camera``: resolved MuJoCo camera name (string)
+            - ``camera_id``: MuJoCo camera index
+            - ``num_frames``, ``max_points_per_frame``, ``min_depth``
+            - ``env_id``, ``demo_seed`` when provided
+            - ``rgb``: (T, H, W, 3) uint8 if ``store_rgb=True``
+        """
+        if not self._frames:
+            raise ValueError("No frames recorded; call on_reset/on_step before save_npz.")
+
+        out_path = Path(path)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        points, counts = stack_point_cloud_frames(
+            self._frames, self.max_points_per_frame
+        )
+        payload: dict[str, Any] = {
+            "points": points,
+            "counts": counts,
+            "camera": np.asarray(self._resolved_camera or ""),
+            "camera_id": np.int32(self._camera_id if self._camera_id is not None else -1),
+            "num_frames": np.int32(len(self._frames)),
+            "max_points_per_frame": np.int32(self.max_points_per_frame),
+            "min_depth": np.float32(self.min_depth),
+        }
+        if env_id is not None:
+            payload["env_id"] = np.asarray(env_id)
+        if demo_seed is not None:
+            payload["demo_seed"] = np.int32(demo_seed)
+        if self.store_rgb and self._rgb_frames:
+            payload["rgb"] = np.stack(self._rgb_frames, axis=0)
+
+        np.savez_compressed(out_path, **payload)
+        return out_path
 
 
 def show_camera_rgb(

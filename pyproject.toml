@@ -113,6 +113,7 @@ module = [
     "cv2.*",
     "pybullet.*",
     "gdown.*",
+    "h5py.*",
 ]
 ignore_missing_imports = true
 

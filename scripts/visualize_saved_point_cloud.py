@@ -29,9 +29,48 @@ import json
 import sys
 from pathlib import Path
 
-import matplotlib.pyplot as plt
+import matplotlib
 import numpy as np
-from mpl_toolkits.mplot3d import Axes3D  # type: ignore[import-untyped]  # noqa: F401  # pylint: disable=unused-import
+
+def _select_backend(no_show: bool) -> None:
+    """Switch matplotlib to an interactive backend unless --no-show is set.
+
+    Tries each candidate in preference order and falls back to Agg (which
+    still supports --save-figs) with a warning if none works.
+    """
+    if no_show:
+        matplotlib.use("Agg")
+        return
+
+    _candidates = ["Qt5Agg", "Qt6Agg", "TkAgg", "GTK3Agg", "WXAgg", "WebAgg"]
+    for _b in _candidates:
+        try:
+            matplotlib.use(_b)
+            # Probe by importing pyplot and creating a figure manager; some
+            # backends accept matplotlib.use() but fail at figure creation.
+            import matplotlib.pyplot as _plt  # pylint: disable=import-outside-toplevel,reimported
+            _plt.figure()
+            _plt.close("all")
+            return
+        except Exception:  # pylint: disable=broad-except
+            continue
+
+    matplotlib.use("Agg")
+    print(
+        "Warning: no interactive matplotlib backend found — "
+        "plots will not be shown interactively.\n"
+        "  Install PyQt5 for interactive display:  pip install PyQt5",
+        file=sys.stderr,
+    )
+
+
+# Backend must be selected before pyplot is imported at module level.
+# We parse just the --no-show flag early so the selection can be made.
+_no_show_early = "--no-show" in sys.argv
+_select_backend(_no_show_early)
+
+import matplotlib.pyplot as plt  # pylint: disable=wrong-import-position,ungrouped-imports
+from mpl_toolkits.mplot3d import Axes3D  # type: ignore[import-untyped]  # noqa: F401  # pylint: disable=wrong-import-position,ungrouped-imports,unused-import
 
 _CAMERA_PALETTE = [
     [0.90, 0.30, 0.30],

@@ -348,15 +348,27 @@ def _write_step(
     action: Any,
     capture: dict[str, Any],
     camera_names: list[str],
+    cam_sizes: dict[str, int],
+    rng: np.random.Generator,
 ) -> None:
-    """Write one step's data into pre-allocated HDF5 datasets."""
+    """Write one step's data into pre-allocated HDF5 datasets.
+
+    Point cloud arrays are padded or sub-sampled to the fixed per-camera sizes
+    established at step 0, so every row has a consistent shape.
+    """
     obs_grp["state"][step_idx] = obs.astype(np.float32)
     grp["actions"][step_idx] = np.asarray(action, dtype=np.float32)
 
     for cam_name in camera_names:
         obs_grp[f"{cam_name}_rgb"][step_idx] = capture[f"{cam_name}_rgb"]
-        obs_grp[f"{cam_name}_pc_xyz"][step_idx] = capture[f"{cam_name}_pc_xyz"]
-        obs_grp[f"{cam_name}_pc_rgb"][step_idx] = capture[f"{cam_name}_pc_rgb"]
+
+        xyz = capture[f"{cam_name}_pc_xyz"]
+        rgb = capture[f"{cam_name}_pc_rgb"]
+        size = cam_sizes[cam_name]
+        if len(xyz) != size:
+            xyz, rgb = _pad_or_subsample(xyz, rgb, size, rng)
+        obs_grp[f"{cam_name}_pc_xyz"][step_idx] = xyz
+        obs_grp[f"{cam_name}_pc_rgb"][step_idx] = rgb
 
 
 # ---------------------------------------------------------------------------
@@ -421,12 +433,19 @@ def _process_demo(
     grp.attrs["seed"] = seed
     obs_grp = grp.require_group("obs")
 
-    # Capture step 0 (after reset) to determine shapes for dataset creation
+    # Capture step 0 to establish per-camera point-cloud sizes for the whole
+    # demo.  The number of valid depth pixels fluctuates slightly each step,
+    # so we pin each camera to the count from step 0 (or --max-pts when set)
+    # and pad / sub-sample every subsequent step to match.
     capture0 = _capture_step(
         env, camera_names, width, height, max_depth, min_depth, max_pts, rng
     )
+    cam_sizes: dict[str, int] = {
+        cam: len(capture0[f"{cam}_pc_xyz"]) for cam in camera_names
+    }
     _create_datasets(grp, obs_grp, capture0, obs_np, actions, camera_names, num_frames)
-    _write_step(grp, obs_grp, 0, obs_np, actions[0], capture0, camera_names)
+    _write_step(grp, obs_grp, 0, obs_np, actions[0], capture0, camera_names,
+                cam_sizes, rng)
 
     # Step through remaining actions
     for step_idx in range(1, num_frames):
@@ -437,7 +456,8 @@ def _process_demo(
             env, camera_names, width, height, max_depth, min_depth, max_pts, rng
         )
         _write_step(
-            grp, obs_grp, step_idx, obs_np, actions[step_idx], capture, camera_names
+            grp, obs_grp, step_idx, obs_np, actions[step_idx], capture,
+            camera_names, cam_sizes, rng,
         )
 
     # Final step: execute last action to get terminal observation

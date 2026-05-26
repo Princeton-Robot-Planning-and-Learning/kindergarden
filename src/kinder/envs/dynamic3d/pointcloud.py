@@ -271,6 +271,22 @@ def stack_point_cloud_frames(
 
 
 @dataclass
+class PointCloudRecordingConfig:
+    """Options for recording point clouds alongside demo replay."""
+
+    camera: str = "tidybot_base"
+    max_points_per_frame: int = 50_000
+    min_depth: float = 0.02
+    subsample_seed: int = 0
+    output_path: Path | None = None
+
+
+def default_pointcloud_output_path(video_path: Path) -> Path:
+    """Default ``.npz`` path next to a demo GIF (``foo.gif`` -> ``foo_pointcloud.npz``)."""
+    return video_path.with_name(f"{video_path.stem}_pointcloud.npz")
+
+
+@dataclass
 class PointCloudRecorder:
     """Record world-frame point clouds over an episode (reset + each step).
 

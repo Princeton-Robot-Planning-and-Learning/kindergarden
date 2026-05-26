@@ -2,11 +2,22 @@
 
 import os
 import shutil
+import sys
 from pathlib import Path
 from typing import List
 
 import dill as pkl
 import gdown
+import gymnasium
+import numpy as np
+
+# Demos collected before task env IDs were renamed (TidyBot3D-* -> *3D).
+LEGACY_ENV_ID_MAP = {
+    "kinder/TidyBot3D-tool_use-lab2_kitchen-o5-sweep_the_blocks_into_the_top_drawer_of_the_kitchen_island-v0": (  # pylint: disable=line-too-long
+        "kinder/SweepIntoDrawer3D-o5-v0"
+    ),
+    "kinder/TidyBot3D-cupboard_real-o1-v0": "kinder/ConstrainedCupboard3D-o1-v0",
+}
 
 # Get the path to the kinder assets directory
 _PACKAGE_DIR = Path(__file__).parent
@@ -133,9 +144,37 @@ def download_mimiclabs_assets(non_interactive: bool = False) -> None:
     )
 
 
+def _ensure_numpy_pickle_compat() -> None:
+    """Allow unpickling demos saved with NumPy 2.x while running NumPy 1.x."""
+    if int(np.__version__.split(".", maxsplit=1)[0]) >= 2:
+        return
+    if "numpy._core" in sys.modules:
+        return
+    import numpy.core as _core
+
+    sys.modules["numpy._core"] = _core
+    sys.modules["numpy._core.multiarray"] = _core.multiarray
+    sys.modules["numpy._core.umath"] = _core.umath
+    sys.modules["numpy._core._multiarray_umath"] = _core._multiarray_umath
+
+
+def resolve_legacy_env_id(env_id: str) -> str:
+    """Map pre-rename demo env IDs to their current gymnasium registry names."""
+    resolved = LEGACY_ENV_ID_MAP.get(env_id, env_id)
+    if resolved != env_id:
+        print(f"Note: remapping legacy env id {env_id} -> {resolved}")
+    return resolved
+
+
+def is_registered_env_id(env_id: str) -> bool:
+    """Return True if ``env_id`` is registered with gymnasium."""
+    return env_id in gymnasium.registry
+
+
 def load_demo(demo_path: Path) -> dict:
     """Load a demonstration from a pickle file."""
     try:
+        _ensure_numpy_pickle_compat()
         with open(demo_path, "rb") as f:
             demo_data = pkl.load(f)
 
@@ -158,6 +197,14 @@ def load_demo(demo_path: Path) -> dict:
             raise ValueError(" Demo does not contain seed information.")
 
         return demo_data
+    except ModuleNotFoundError as e:
+        if "numpy._core" in str(e):
+            raise ValueError(
+                f"Error loading demo from {demo_path}: {e}. "
+                "This demo was likely saved with NumPy 2.x. Upgrade NumPy "
+                "(pip install 'numpy>=2.0') or use a KinDER env with NumPy 2."
+            ) from e
+        raise ValueError(f"Error loading demo from {demo_path}: {e}") from e
     except Exception as e:
         # Don't exit, just raise the exception to be handled by caller
         raise ValueError(f"Error loading demo from {demo_path}: {e}") from e

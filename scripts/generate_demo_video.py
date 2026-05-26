@@ -30,8 +30,14 @@ import imageio.v2 as iio
 from docs.generate_env_docs import sanitize_env_id
 
 import kinder
+from kinder.envs.dynamic3d.pointcloud import (
+    PointCloudRecorder,
+    PointCloudRecordingConfig,
+    default_pointcloud_output_path,
+    is_dynamic3d_gym_env,
+)
 from kinder.gif_utils import optimize_gif
-from kinder.utils import load_demo
+from kinder.utils import is_registered_env_id, load_demo, resolve_legacy_env_id
 
 
 def discover_all_demos(demos_dir: Path = Path("demos")) -> List[Path]:
@@ -135,6 +141,7 @@ def generate_demo_video(
     output_path: Path | None = None,
     fps: int | None = None,
     loop: int = 0,
+    pointcloud: PointCloudRecordingConfig | None = None,
 ) -> None:
     """Generate a video from a pickled demonstration."""
     # Load the demonstration.
@@ -151,20 +158,22 @@ def generate_demo_video(
 
     # Create the environment.
     kinder.register_all_environments()
-    if "TidyBot" in env_id:
-        env = kinder.make(
-            env_id,
-            render_mode="rgb_array",
-            scene_bg=True,
+    env_id = resolve_legacy_env_id(env_id)
+    if not is_registered_env_id(env_id):
+        raise ValueError(
+            f"Environment {env_id} is not registered. "
+            "If this demo uses a renamed Dynamic3D task, add a mapping in "
+            "kinder.utils.LEGACY_ENV_ID_MAP."
         )
-    elif "3D" in env_id and "TidyBot" not in env_id:
-        env = kinder.make(
-            env_id,
-            render_mode="rgb_array",
-            realistic_bg=True,
-        )
-    else:
-        env = kinder.make(env_id, render_mode="rgb_array")
+
+    dynamic3d_classes = set(kinder.get_env_categories().get("Dynamic3D", []))
+    env_class = env_id.removeprefix("kinder/").split("-", maxsplit=1)[0]
+    make_kwargs: dict = {"render_mode": "rgb_array"}
+    if env_class in dynamic3d_classes:
+        make_kwargs["scene_bg"] = True
+    elif "3D" in env_id:
+        make_kwargs["realistic_bg"] = True
+    env = kinder.make(env_id, **make_kwargs)
 
     # Get FPS from environment metadata if not specified.
     if fps is None:
@@ -186,12 +195,28 @@ def generate_demo_video(
     # Reset environment to initial state with the correct seed.
     env.reset(seed=seed)
 
+    recorder: PointCloudRecorder | None = None
+    if pointcloud is not None:
+        if is_dynamic3d_gym_env(env):
+            recorder = PointCloudRecorder(
+                camera_name=pointcloud.camera,
+                max_points_per_frame=pointcloud.max_points_per_frame,
+                min_depth=pointcloud.min_depth,
+                seed=pointcloud.subsample_seed,
+                on_alias=print,
+            )
+            recorder.on_reset(env)
+        else:
+            print(
+                f"Warning: point cloud recording skipped; {env_id} is not Dynamic3D."
+            )
+
     # Collect frames by replaying the demonstration.
     frames = []
     total_reward = 0.0
     terminated_successfully = False
 
-    if "TidyBot" in env_id:
+    if is_dynamic3d_gym_env(env):
         env.unwrapped._object_centric_env.set_render_camera("agentview_1")  # type: ignore # pylint: disable=protected-access
     # Add initial frame.
     initial_frame = env.render()  # type: ignore
@@ -203,7 +228,10 @@ def generate_demo_video(
             _, reward, terminated, truncated, _ = env.step(action)
             total_reward += float(reward)
 
-            if "TidyBot" in env_id:
+            if recorder is not None:
+                recorder.on_step(env)
+
+            if is_dynamic3d_gym_env(env):
                 env.unwrapped._object_centric_env.set_render_camera("agentview_1")  # type: ignore # pylint: disable=protected-access
             frame = env.render()  # type: ignore
             frames.append(frame)
@@ -235,6 +263,21 @@ def generate_demo_video(
     except Exception as e:
         raise ValueError(f"Error saving video: {e}") from e
 
+    pointcloud_path: Path | None = None
+    if recorder is not None and recorder.num_frames() > 0:
+        assert output_path is not None
+        assert pointcloud is not None
+        pc_out = pointcloud.output_path or default_pointcloud_output_path(
+            output_path
+        )
+        pointcloud_path = recorder.save_npz(
+            pc_out, env_id=env_id, demo_seed=seed
+        )
+        print(
+            f"Point cloud trajectory saved to {pointcloud_path} "
+            f"({recorder.num_frames()} frames)"
+        )
+
     # Save stats to JSON file alongside the GIF.
     stats_path = output_path.with_suffix(".json")
     stats = {
@@ -242,12 +285,27 @@ def generate_demo_video(
         "terminated_successfully": bool(terminated_successfully),
         "num_steps": len(actions),
     }
+    if pointcloud_path is not None:
+        stats["pointcloud_path"] = str(pointcloud_path)
     try:
         with open(stats_path, "w", encoding="utf-8") as f:
             json.dump(stats, f, indent=2)
         print(f"Stats saved to {stats_path}")
     except Exception as e:
         print(f"Warning: Failed to save stats to {stats_path}: {e}")
+
+
+def _pointcloud_config_from_args(
+    args: argparse.Namespace,
+) -> PointCloudRecordingConfig | None:
+    if not args.pointcloud:
+        return None
+    return PointCloudRecordingConfig(
+        camera=args.pointcloud_camera,
+        max_points_per_frame=args.pointcloud_max_points,
+        min_depth=args.pointcloud_min_depth,
+        subsample_seed=args.pointcloud_seed,
+    )
 
 
 def generate_latest_demo_video(
@@ -566,6 +624,35 @@ def _main() -> None:
         action="store_true",
         help="Force regeneration even if GIF exists (--one-per-variant)",
     )
+    parser.add_argument(
+        "--pointcloud",
+        action="store_true",
+        help="Record world-frame point clouds while replaying (Dynamic3D only)",
+    )
+    parser.add_argument(
+        "--pointcloud-camera",
+        type=str,
+        default="tidybot_base",
+        help="MuJoCo camera for point clouds (default: tidybot_base)",
+    )
+    parser.add_argument(
+        "--pointcloud-max-points",
+        type=int,
+        default=50_000,
+        help="Max points per frame after subsampling (default: 50000)",
+    )
+    parser.add_argument(
+        "--pointcloud-min-depth",
+        type=float,
+        default=0.02,
+        help="Minimum depth in meters (default: 0.02)",
+    )
+    parser.add_argument(
+        "--pointcloud-seed",
+        type=int,
+        default=0,
+        help="RNG seed for point cloud subsampling (default: 0)",
+    )
 
     args = parser.parse_args()
 
@@ -596,6 +683,7 @@ def _main() -> None:
                     output_path=custom_output_path,
                     fps=args.fps,
                     loop=args.loop,
+                    pointcloud=_pointcloud_config_from_args(args),
                 )
             except Exception as e:
                 print(f"Error processing demo {args.demo_path}: {e}")
@@ -603,6 +691,8 @@ def _main() -> None:
 
     elif args.latest:
         # Generate GIF for latest demo
+        if args.pointcloud:
+            print("Warning: --pointcloud only applies when a demo .p path is given.")
         generate_latest_demo_video(
             demos_dir=args.demos_dir,
             output_dir=args.output_dir,
@@ -611,6 +701,8 @@ def _main() -> None:
         )
 
     elif args.all:
+        if args.pointcloud:
+            print("Warning: --pointcloud only applies when a demo .p path is given.")
         # Generate GIFs for all demos
         generate_all_demo_videos(
             demos_dir=args.demos_dir,
@@ -621,6 +713,8 @@ def _main() -> None:
         )
 
     elif args.env:
+        if args.pointcloud:
+            print("Warning: --pointcloud only applies when a demo .p path is given.")
         # Generate GIFs for specific environment
         generate_env_demo_videos(
             env_id=args.env,
@@ -632,6 +726,8 @@ def _main() -> None:
         )
 
     elif args.one_per_variant:
+        if args.pointcloud:
+            print("Warning: --pointcloud only applies when a demo .p path is given.")
         # Generate one GIF per variant
         generate_one_per_variant(
             demos_dir=args.demos_dir,

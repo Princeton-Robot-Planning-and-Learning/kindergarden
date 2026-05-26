@@ -32,6 +32,7 @@ dependencies = [
    "pybullet-arm64>=3.2.8",
    "tomsgeoms2d>=0.0.1",
    "pybullet_helpers>=0.1.0",
+   "pyqt5>=5.15.11",
 ]
 
 [project.optional-dependencies]

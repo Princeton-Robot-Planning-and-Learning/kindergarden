@@ -32,6 +32,7 @@ from pathlib import Path
 import matplotlib
 import numpy as np
 
+
 def _select_backend(no_show: bool) -> None:
     """Switch matplotlib to an interactive backend unless --no-show is set.
 
@@ -49,6 +50,7 @@ def _select_backend(no_show: bool) -> None:
             # Probe by importing pyplot and creating a figure manager; some
             # backends accept matplotlib.use() but fail at figure creation.
             import matplotlib.pyplot as _plt  # pylint: disable=import-outside-toplevel,reimported
+
             _plt.figure()
             _plt.close("all")
             return
@@ -70,7 +72,8 @@ _no_show_early = "--no-show" in sys.argv
 _select_backend(_no_show_early)
 
 import matplotlib.pyplot as plt  # pylint: disable=wrong-import-position,ungrouped-imports
-from mpl_toolkits.mplot3d import Axes3D  # type: ignore[import-untyped]  # noqa: F401  # pylint: disable=wrong-import-position,ungrouped-imports,unused-import
+from mpl_toolkits.mplot3d import (  # type: ignore[import-untyped]  # noqa: F401  # pylint: disable=wrong-import-position,ungrouped-imports,unused-import
+    Axes3D,)
 
 _CAMERA_PALETTE = [
     [0.90, 0.30, 0.30],
@@ -127,9 +130,7 @@ def load_point_cloud(
     rgb: np.ndarray = data["rgb"]
     camera_indices: np.ndarray = data["camera_indices"]
     camera_names: list[str] = (
-        json.loads(str(data["camera_names"]))
-        if "camera_names" in data
-        else []
+        json.loads(str(data["camera_names"])) if "camera_names" in data else []
     )
     return xyz, rgb, camera_indices, camera_names
 
@@ -160,8 +161,13 @@ def plot_3d_rgb(
     fig = plt.figure(figsize=(9, 7))
     ax = fig.add_subplot(111, projection="3d")
     ax.scatter(  # type: ignore[misc]
-        sub_xyz[:, 0], sub_xyz[:, 1], sub_xyz[:, 2],
-        c=colours, s=0.5, marker=".", linewidths=0,
+        sub_xyz[:, 0],
+        sub_xyz[:, 1],
+        sub_xyz[:, 2],
+        c=colours,
+        s=0.5,
+        marker=".",
+        linewidths=0,
     )
     ax.set_xlabel("X (m)")
     ax.set_ylabel("Y (m)")
@@ -194,8 +200,14 @@ def plot_3d_by_camera(
             pts = pts[keep]
         colour = _CAMERA_PALETTE[cam_idx % len(_CAMERA_PALETTE)]
         ax.scatter(  # type: ignore[misc]
-            pts[:, 0], pts[:, 1], pts[:, 2],
-            c=[colour], s=0.5, marker=".", linewidths=0, label=cname,
+            pts[:, 0],
+            pts[:, 1],
+            pts[:, 2],
+            c=[colour],
+            s=0.5,
+            marker=".",
+            linewidths=0,
+            label=cname,
         )
 
     ax.set_xlabel("X (m)")
@@ -233,8 +245,12 @@ def plot_projections(
     axes[3].remove()
     ax3d = fig.add_subplot(1, 4, 4, projection="3d")
     ax3d.scatter(  # type: ignore[misc]
-        sub_xyz[:, 0], sub_xyz[:, 1], sub_xyz[:, 2],
-        c=colours, s=0.3, linewidths=0,
+        sub_xyz[:, 0],
+        sub_xyz[:, 1],
+        sub_xyz[:, 2],
+        c=colours,
+        s=0.3,
+        linewidths=0,
     )
     ax3d.set_xlabel("X")
     ax3d.set_ylabel("Y")

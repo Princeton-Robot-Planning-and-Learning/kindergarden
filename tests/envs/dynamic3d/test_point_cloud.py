@@ -215,7 +215,7 @@ def test_generate_scene_point_cloud_nonempty(sim):
 
 
 def test_generate_scene_point_cloud_array_shapes(sim):
-    """xyz, rgb, and camera_indices have consistent leading dimensions."""
+    """Xyz, rgb, and camera_indices have consistent leading dimensions."""
     pc = generate_scene_point_cloud(sim, width=64, height=48)
     n = len(pc)
     assert pc.xyz.shape == (n, 3)
@@ -224,7 +224,7 @@ def test_generate_scene_point_cloud_array_shapes(sim):
 
 
 def test_generate_scene_point_cloud_dtypes(sim):
-    """xyz is float32, rgb is uint8, camera_indices is int32."""
+    """Xyz is float32, rgb is uint8, camera_indices is int32."""
     pc = generate_scene_point_cloud(sim, width=64, height=48)
     assert pc.xyz.dtype == np.float32
     assert pc.rgb.dtype == np.uint8
@@ -257,6 +257,7 @@ def test_generate_scene_point_cloud_single_camera(sim):
     if all_names == 0:
         pytest.skip("No named cameras in this model")
     import mujoco  # type: ignore[import-untyped]  # pylint: disable=import-outside-toplevel
+
     name = mujoco.mj_id2name(  # pylint: disable=no-member
         sim.model.mj_model, mujoco.mjtObj.mjOBJ_CAMERA, 0  # pylint: disable=no-member
     )
@@ -306,7 +307,7 @@ def test_point_cloud_to_dict(sim):
 
 
 def test_point_cloud_len(sim):
-    """len(pc) matches the first dimension of xyz."""
+    """Len(pc) matches the first dimension of xyz."""
     pc = generate_scene_point_cloud(sim, width=64, height=48)
     assert len(pc) == pc.xyz.shape[0]
 
@@ -324,9 +325,10 @@ def test_visualize_point_cloud(sim, request):
     if not request.config.getoption("--visualize", default=False):
         pytest.skip("Pass --visualize to enable this test")
 
-    import mujoco  # type: ignore[import-untyped]  # pylint: disable=import-outside-toplevel
     import matplotlib.pyplot as plt  # pylint: disable=import-outside-toplevel
-    from mpl_toolkits.mplot3d import Axes3D  # type: ignore[import-untyped]  # noqa: F401  # pylint: disable=import-outside-toplevel,unused-import
+    import mujoco  # type: ignore[import-untyped]  # pylint: disable=import-outside-toplevel
+    from mpl_toolkits.mplot3d import (  # type: ignore[import-untyped]  # noqa: F401  # pylint: disable=import-outside-toplevel,unused-import
+        Axes3D,)
 
     mj_model = sim.model.mj_model
     ctx = sim._render_context_offscreen  # pylint: disable=protected-access
@@ -334,12 +336,16 @@ def test_visualize_point_cloud(sim, request):
 
     # Collect named cameras
     camera_names = [
-        mujoco.mj_id2name(mj_model, mujoco.mjtObj.mjOBJ_CAMERA, i)  # pylint: disable=no-member
+        mujoco.mj_id2name(
+            mj_model, mujoco.mjtObj.mjOBJ_CAMERA, i
+        )  # pylint: disable=no-member
         for i in range(mj_model.ncam)
     ]
     camera_names = [n for n in camera_names if n is not None]
     name2id = {
-        mujoco.mj_id2name(mj_model, mujoco.mjtObj.mjOBJ_CAMERA, i): i  # pylint: disable=no-member
+        mujoco.mj_id2name(
+            mj_model, mujoco.mjtObj.mjOBJ_CAMERA, i
+        ): i  # pylint: disable=no-member
         for i in range(mj_model.ncam)
     }
 
@@ -347,7 +353,9 @@ def test_visualize_point_cloud(sim, request):
     assert n_cams > 0, "No named cameras found in model"
 
     # --- RGB renders ---
-    fig_rgb, axes_rgb = plt.subplots(1, n_cams, figsize=(4 * n_cams, 3.5), squeeze=False)
+    fig_rgb, axes_rgb = plt.subplots(
+        1, n_cams, figsize=(4 * n_cams, 3.5), squeeze=False
+    )
     fig_rgb.suptitle("RGB renders", fontsize=10)
     for col, cname in enumerate(camera_names):
         ctx.render(width=width, height=height, camera_id=name2id[cname])
@@ -390,8 +398,13 @@ def test_visualize_point_cloud(sim, request):
     fig_3d = plt.figure(figsize=(9, 7))
     ax_3d = fig_3d.add_subplot(111, projection="3d")
     ax_3d.scatter(
-        pc.xyz[idx, 0], pc.xyz[idx, 1], pc.xyz[idx, 2],
-        c=colours, s=0.5, marker=".", linewidths=0,
+        pc.xyz[idx, 0],
+        pc.xyz[idx, 1],
+        pc.xyz[idx, 2],
+        c=colours,
+        s=0.5,
+        marker=".",
+        linewidths=0,
     )
     ax_3d.set_xlabel("X (m)")
     ax_3d.set_ylabel("Y (m)")
@@ -441,5 +454,5 @@ def test_save_point_cloud(sim, request):
     )
     print(f"\nPoint cloud saved to: {out}  ({len(pc):,} points)")
     print(f"  Load with: data = np.load('{out}')")
-    print( "  Arrays:    data['xyz'], data['rgb'], data['camera_indices']")
+    print("  Arrays:    data['xyz'], data['rgb'], data['camera_indices']")
     print(f"  Cameras:   {pc.camera_names}")

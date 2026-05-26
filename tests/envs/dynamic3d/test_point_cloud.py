@@ -256,7 +256,8 @@ def test_generate_scene_point_cloud_single_camera(sim):
     all_names = sim.model.mj_model.ncam
     if all_names == 0:
         pytest.skip("No named cameras in this model")
-    import mujoco  # type: ignore[import-untyped]  # pylint: disable=import-outside-toplevel
+    # pylint: disable-next=import-outside-toplevel
+    import mujoco  # type: ignore[import-untyped]
 
     name = mujoco.mj_id2name(  # pylint: disable=no-member
         sim.model.mj_model, mujoco.mjtObj.mjOBJ_CAMERA, 0  # pylint: disable=no-member
@@ -325,29 +326,28 @@ def test_visualize_point_cloud(sim, request):
     if not request.config.getoption("--visualize", default=False):
         pytest.skip("Pass --visualize to enable this test")
 
-    import matplotlib.pyplot as plt  # pylint: disable=import-outside-toplevel
-    import mujoco  # type: ignore[import-untyped]  # pylint: disable=import-outside-toplevel
-    from mpl_toolkits.mplot3d import (  # type: ignore[import-untyped]  # noqa: F401  # pylint: disable=import-outside-toplevel,unused-import
-        Axes3D,)
+    # pylint: disable=import-outside-toplevel,unused-import
+    import matplotlib.pyplot as plt
+    import mujoco  # type: ignore[import-untyped]
+    from mpl_toolkits.mplot3d import Axes3D  # type: ignore[import-untyped]  # noqa: F401
+    # pylint: enable=import-outside-toplevel,unused-import
 
     mj_model = sim.model.mj_model
     ctx = sim._render_context_offscreen  # pylint: disable=protected-access
     width, height = 320, 240
 
+    # pylint: disable=no-member
     # Collect named cameras
     camera_names = [
-        mujoco.mj_id2name(
-            mj_model, mujoco.mjtObj.mjOBJ_CAMERA, i
-        )  # pylint: disable=no-member
+        mujoco.mj_id2name(mj_model, mujoco.mjtObj.mjOBJ_CAMERA, i)
         for i in range(mj_model.ncam)
     ]
     camera_names = [n for n in camera_names if n is not None]
     name2id = {
-        mujoco.mj_id2name(
-            mj_model, mujoco.mjtObj.mjOBJ_CAMERA, i
-        ): i  # pylint: disable=no-member
+        mujoco.mj_id2name(mj_model, mujoco.mjtObj.mjOBJ_CAMERA, i): i
         for i in range(mj_model.ncam)
     }
+    # pylint: enable=no-member
 
     n_cams = len(camera_names)
     assert n_cams > 0, "No named cameras found in model"

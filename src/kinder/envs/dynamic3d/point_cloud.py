@@ -394,9 +394,8 @@ def get_sim_from_env(env: Any) -> "MjSim":  # type: ignore[name-defined]
 
     # Path: object_centric_env → _robot_env → sim
     if hasattr(unwrapped, "_object_centric_env"):
-        robot_env = (
-            unwrapped._object_centric_env._robot_env
-        )  # pylint: disable=protected-access
+        # pylint: disable=protected-access
+        robot_env = unwrapped._object_centric_env._robot_env
     elif hasattr(unwrapped, "_robot_env"):
         robot_env = unwrapped._robot_env  # pylint: disable=protected-access
     else:

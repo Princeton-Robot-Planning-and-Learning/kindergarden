@@ -326,7 +326,7 @@ def test_visualize_point_cloud(sim, request):
 
     import mujoco  # type: ignore[import-untyped]  # pylint: disable=import-outside-toplevel
     import matplotlib.pyplot as plt  # pylint: disable=import-outside-toplevel
-    from mpl_toolkits.mplot3d import Axes3D  # noqa: F401  # pylint: disable=import-outside-toplevel,unused-import
+    from mpl_toolkits.mplot3d import Axes3D  # type: ignore[import-untyped]  # noqa: F401  # pylint: disable=import-outside-toplevel,unused-import
 
     mj_model = sim.model.mj_model
     ctx = sim._render_context_offscreen  # pylint: disable=protected-access
@@ -371,11 +371,15 @@ def test_visualize_point_cloud(sim, request):
         im = axes_depth[0][col].imshow(z_vis, cmap="turbo")
         axes_depth[0][col].set_title(cname, fontsize=9)
         axes_depth[0][col].axis("off")
-        fig_depth.colorbar(im, ax=axes_depth[0][col], fraction=0.046, pad=0.04, label="m")
+        fig_depth.colorbar(  # pylint: disable=line-too-long
+            im, ax=axes_depth[0][col], fraction=0.046, pad=0.04, label="m"
+        )
     fig_depth.tight_layout()
 
     # --- 3-D point cloud ---
-    pc = generate_scene_point_cloud(sim, camera_names=camera_names, width=width, height=height)
+    pc = generate_scene_point_cloud(
+        sim, camera_names=camera_names, width=width, height=height
+    )
     assert len(pc) > 0, "Point cloud is empty — nothing to visualize"
 
     rng = np.random.default_rng(0)

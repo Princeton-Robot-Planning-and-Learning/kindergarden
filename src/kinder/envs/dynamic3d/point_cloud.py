@@ -30,7 +30,6 @@ import mujoco  # type: ignore
 import numpy as np
 from numpy.typing import NDArray
 
-
 # ---------------------------------------------------------------------------
 # Public data type
 # ---------------------------------------------------------------------------
@@ -219,9 +218,9 @@ def rgbd_to_point_cloud(
     z_metric = depth_buffer_to_metric(depth_raw, model)  # (H, W)
 
     # Build pixel grid
-    u = np.arange(width, dtype=np.float64)   # (W,)
+    u = np.arange(width, dtype=np.float64)  # (W,)
     v = np.arange(height, dtype=np.float64)  # (H,)
-    uu, vv = np.meshgrid(u, v)               # (H, W) each
+    uu, vv = np.meshgrid(u, v)  # (H, W) each
 
     # Valid mask
     mask = (z_metric >= min_depth) & (z_metric <= max_depth) & np.isfinite(z_metric)
@@ -229,9 +228,9 @@ def rgbd_to_point_cloud(
         empty = np.empty((0, 3), dtype=np.float32)
         return empty, np.empty((0, 3), dtype=np.uint8)
 
-    z = z_metric[mask]        # (N,)
-    u_m = uu[mask]            # (N,)
-    v_m = vv[mask]            # (N,)
+    z = z_metric[mask]  # (N,)
+    u_m = uu[mask]  # (N,)
+    v_m = vv[mask]  # (N,)
 
     # Back-project to camera frame.
     # MuJoCo camera convention: X = right, Y = up, Z = backward.
@@ -239,7 +238,7 @@ def rgbd_to_point_cloud(
     fx, fy, cx, cy = K[0, 0], K[1, 1], K[0, 2], K[1, 2]
     x_cam = (u_m - cx) / fx * z
     y_cam = -(v_m - cy) / fy * z  # flip: image v increases down, camera Y up
-    z_cam = -z                     # camera looks in -Z
+    z_cam = -z  # camera looks in -Z
 
     pts_cam = np.stack([x_cam, y_cam, z_cam], axis=-1)  # (N, 3)
 
@@ -344,17 +343,19 @@ def generate_scene_point_cloud(
         if len(xyz) > 0:
             all_xyz.append(xyz)
             all_rgb.append(rgb)
-            all_idx.append(
-                np.full(len(xyz), local_idx, dtype=np.int32)
-            )
+            all_idx.append(np.full(len(xyz), local_idx, dtype=np.int32))
         resolved_names.append(cname)
 
     if not all_xyz:
         empty_f = np.empty((0, 3), dtype=np.float32)
         empty_u = np.empty((0, 3), dtype=np.uint8)
         empty_i = np.empty((0,), dtype=np.int32)
-        return PointCloud(xyz=empty_f, rgb=empty_u, camera_indices=empty_i,
-                          camera_names=resolved_names)
+        return PointCloud(
+            xyz=empty_f,
+            rgb=empty_u,
+            camera_indices=empty_i,
+            camera_names=resolved_names,
+        )
 
     return PointCloud(
         xyz=np.concatenate(all_xyz, axis=0),
@@ -393,7 +394,9 @@ def get_sim_from_env(env: Any) -> "MjSim":  # type: ignore[name-defined]
 
     # Path: object_centric_env → _robot_env → sim
     if hasattr(unwrapped, "_object_centric_env"):
-        robot_env = unwrapped._object_centric_env._robot_env  # pylint: disable=protected-access
+        robot_env = (
+            unwrapped._object_centric_env._robot_env
+        )  # pylint: disable=protected-access
     elif hasattr(unwrapped, "_robot_env"):
         robot_env = unwrapped._robot_env  # pylint: disable=protected-access
     else:

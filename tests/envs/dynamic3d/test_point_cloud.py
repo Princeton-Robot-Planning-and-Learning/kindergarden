@@ -163,7 +163,7 @@ def test_rgbd_to_point_cloud_shapes(sim):
     model = sim.model.mj_model
     data = sim.data.mj_data
     h, w = 32, 32
-    rgb = np.random.randint(0, 255, (h, w, 3), dtype=np.uint8)
+    rgb = np.random.default_rng(0).integers(0, 255, (h, w, 3), dtype=np.uint8)
     depth = np.full((h, w), 0.3, dtype=np.float32)
     xyz, rgb_pts = rgbd_to_point_cloud(rgb, depth, cam_id=0, model=model, data=data)
     assert xyz.shape[1] == 3

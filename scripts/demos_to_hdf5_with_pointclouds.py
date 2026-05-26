@@ -58,7 +58,7 @@ from pathlib import Path
 from typing import Any
 
 import gymnasium
-import h5py
+import h5py  # pylint: disable=import-error
 import numpy as np
 from numpy.typing import NDArray
 

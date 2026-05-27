@@ -24,14 +24,13 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Sequence
+from typing import Any, Sequence
 
 import mujoco
 import numpy as np
 from numpy.typing import NDArray
 
-if TYPE_CHECKING:
-    from kinder.envs.dynamic3d.mujoco_utils import MjSim
+from kinder.envs.dynamic3d.mujoco_utils import MjSim
 
 # ---------------------------------------------------------------------------
 # Public data type

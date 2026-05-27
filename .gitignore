@@ -10,6 +10,7 @@ llm_cache.db
 vlm_cache
 unit_test_videos*
 data/
+hdf5_data/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

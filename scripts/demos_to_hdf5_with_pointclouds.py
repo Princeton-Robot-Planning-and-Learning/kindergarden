@@ -221,8 +221,9 @@ def _render_rgb(
     if cam_id < 0:
         raise ValueError(f"Camera '{cam_name}' not found in model.")
     ctx.render(width=width, height=height, camera_id=cam_id)
-    rgb_img: NDArray[np.uint8] = ctx.read_pixels(width, height, depth=False)
-    return rgb_img
+    result = ctx.read_pixels(width, height, depth=False)
+    assert isinstance(result, np.ndarray)
+    return result
 
 
 # ---------------------------------------------------------------------------

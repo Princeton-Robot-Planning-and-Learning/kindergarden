@@ -51,7 +51,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-import h5py  # type: ignore[import-untyped]  # pylint: disable=import-error
+import h5py  # pylint: disable=import-error
 import numpy as np
 from numpy.typing import NDArray
 
@@ -59,33 +59,21 @@ try:
     import open3d as o3d  # type: ignore[import-untyped]
 except ImportError:
     print(
-        "Error: open3d is not installed.\n"
-        "  Install it with:  pip install open3d",
+        "Error: open3d is not installed.\n  Install it with:  pip install open3d",
         file=sys.stderr,
     )
     sys.exit(1)
 
-import matplotlib  # pylint: disable=wrong-import-position,ungrouped-imports
-
 # Matplotlib backend must be chosen before pyplot is imported.
 # We need a non-blocking interactive backend to update the RGB window while
-# Open3D runs its own event loop.
+# Open3D runs its own event loop. select_backend lives in the same scripts/ dir.
+sys.path.insert(0, str(Path(__file__).parent))
+from _viz_backend import select_backend  # pylint: disable=wrong-import-position
+
 _no_show_early = "--no-show" in sys.argv
-if _no_show_early:
-    matplotlib.use("Agg")
-else:
-    for _b in ["Qt5Agg", "Qt6Agg", "TkAgg", "GTK3Agg", "WXAgg"]:
-        try:
-            matplotlib.use(_b)
-            import matplotlib.pyplot as _plt  # pylint: disable=import-outside-toplevel,reimported
-            _plt.figure()
-            _plt.close("all")
-            break
-        except Exception:  # pylint: disable=broad-except
-            continue
+select_backend(_no_show_early)
 
 import matplotlib.pyplot as plt  # pylint: disable=wrong-import-position,ungrouped-imports
-
 
 # ---------------------------------------------------------------------------
 # CLI
@@ -94,39 +82,78 @@ import matplotlib.pyplot as plt  # pylint: disable=wrong-import-position,ungroup
 
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
-        description=(
-            "Visualise HDF5 demo data: Open3D point clouds + matplotlib RGB"
-        ),
+        description=("Visualise HDF5 demo data: Open3D point clouds + matplotlib RGB"),
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     p.add_argument("hdf5_path", type=Path, help="Path to the HDF5 file")
-    p.add_argument("--demo", type=int, default=0, metavar="N",
-                   help="Demo index to visualise")
-    p.add_argument("--step", type=int, default=0, metavar="N",
-                   help="Initial step index")
-    p.add_argument("--cameras", nargs="+", default=None, metavar="CAM",
-                   help="Cameras to show (default: all cameras in the file)")
-    p.add_argument("--animate", action="store_true",
-                   help="Auto-play through all steps at --fps speed")
-    p.add_argument("--fps", type=float, default=5.0, metavar="N",
-                   help="Playback speed for --animate")
-    p.add_argument("--max-pts", type=int, default=50_000, metavar="N",
-                   help="Max points to render per step (sub-sampled for speed)")
-    p.add_argument("--point-size", type=float, default=2.0, metavar="R",
-                   help="Point radius in the Open3D viewer")
-    p.add_argument("--background", nargs=3, type=float,
-                   default=[0.1, 0.1, 0.1], metavar=("R", "G", "B"),
-                   help="Open3D background colour (0-1 per channel)")
-    p.add_argument("--save-figs", type=str, default=None, metavar="PREFIX",
-                   help=(
-                       "Save screenshots for each step.  "
-                       "Writes PREFIX_{step:04d}_rgb.png and "
-                       "PREFIX_{step:04d}_pcd.png"
-                   ))
-    p.add_argument("--no-show", action="store_true",
-                   help="Do not open interactive windows (useful headless)")
-    p.add_argument("--info", action="store_true",
-                   help="Print available demos and cameras then exit")
+    p.add_argument(
+        "--demo", type=int, default=0, metavar="N", help="Demo index to visualise"
+    )
+    p.add_argument(
+        "--step", type=int, default=0, metavar="N", help="Initial step index"
+    )
+    p.add_argument(
+        "--cameras",
+        nargs="+",
+        default=None,
+        metavar="CAM",
+        help="Cameras to show (default: all cameras in the file)",
+    )
+    p.add_argument(
+        "--animate",
+        action="store_true",
+        help="Auto-play through all steps at --fps speed",
+    )
+    p.add_argument(
+        "--fps",
+        type=float,
+        default=5.0,
+        metavar="N",
+        help="Playback speed for --animate",
+    )
+    p.add_argument(
+        "--max-pts",
+        type=int,
+        default=50_000,
+        metavar="N",
+        help="Max points to render per step (sub-sampled for speed)",
+    )
+    p.add_argument(
+        "--point-size",
+        type=float,
+        default=2.0,
+        metavar="R",
+        help="Point radius in the Open3D viewer",
+    )
+    p.add_argument(
+        "--background",
+        nargs=3,
+        type=float,
+        default=[0.1, 0.1, 0.1],
+        metavar=("R", "G", "B"),
+        help="Open3D background colour (0-1 per channel)",
+    )
+    p.add_argument(
+        "--save-figs",
+        type=str,
+        default=None,
+        metavar="PREFIX",
+        help=(
+            "Save screenshots for each step.  "
+            "Writes PREFIX_{step:04d}_rgb.png and "
+            "PREFIX_{step:04d}_pcd.png"
+        ),
+    )
+    p.add_argument(
+        "--no-show",
+        action="store_true",
+        help="Do not open interactive windows (useful headless)",
+    )
+    p.add_argument(
+        "--info",
+        action="store_true",
+        help="Print available demos and cameras then exit",
+    )
     return p.parse_args()
 
 
@@ -244,7 +271,9 @@ def _build_rgb_figure(
 ) -> tuple[plt.Figure, list[plt.Axes]]:
     n = len(cameras)
     fig, axes = plt.subplots(
-        1, n, figsize=(4 * n, 3.5),
+        1,
+        n,
+        figsize=(4 * n, 3.5),
         squeeze=False,
     )
     ax_list = list(axes[0])
@@ -269,9 +298,7 @@ def _update_rgb_figure(
         ax.imshow(rgb_imgs[cam])
         ax.set_title(cam, fontsize=8)
         ax.axis("off")
-    fig.suptitle(
-        f"{title_prefix}Step {step} / {num_frames - 1}", fontsize=9
-    )
+    fig.suptitle(f"{title_prefix}Step {step} / {num_frames - 1}", fontsize=9)
     fig.canvas.draw_idle()  # type: ignore[attr-defined]
     fig.canvas.flush_events()  # type: ignore[attr-defined]
 
@@ -330,12 +357,10 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
             sys.exit(1)
 
         title_prefix = (
-            f"Demo {args.demo} (seed={seed})  |  "
-            f"{', '.join(cameras)}  |  "
+            f"Demo {args.demo} (seed={seed})  |  " f"{', '.join(cameras)}  |  "
         )
         print(
-            f"Demo {args.demo}: {num_frames} frames, seed={seed}, "
-            f"cameras={cameras}"
+            f"Demo {args.demo}: {num_frames} frames, seed={seed}, " f"cameras={cameras}"
         )
         print("  Keys: Right/N = next  Left/P = prev  R = reset  Q = quit")
 
@@ -346,19 +371,20 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
         rgb_fig, rgb_axes = _build_rgb_figure(cameras)
 
         def _refresh_rgb(step: int) -> None:
-            rgb_imgs, _, _ = _load_step(
-                obs_grp, step, cameras, args.max_pts, rng
-            )
+            rgb_imgs, _, _ = _load_step(obs_grp, step, cameras, args.max_pts, rng)
             _update_rgb_figure(
-                rgb_fig, rgb_axes, cameras, rgb_imgs,
-                step, num_frames, title_prefix,
+                rgb_fig,
+                rgb_axes,
+                cameras,
+                rgb_imgs,
+                step,
+                num_frames,
+                title_prefix,
             )
 
         # ---- Open3D window ------------------------------------------------
         # Load step 0 data to initialise geometry
-        _, xyz0, rgb0 = _load_step(
-            obs_grp, start_step, cameras, args.max_pts, rng
-        )
+        _, xyz0, rgb0 = _load_step(obs_grp, start_step, cameras, args.max_pts, rng)
         pcd = _make_pcd(xyz0, rgb0)
 
         if args.no_show:
@@ -366,16 +392,16 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
             renderer = o3d.visualization.rendering.OffscreenRenderer(  # pylint: disable=no-member
                 1280, 720
             )
-            mat = o3d.visualization.rendering.MaterialRecord()  # pylint: disable=no-member
+            mat = (
+                o3d.visualization.rendering.MaterialRecord()  # pylint: disable=no-member
+            )
             mat.shader = "defaultLit"
             mat.point_size = args.point_size
             renderer.scene.set_background(args.background + [1.0])
 
             steps = range(num_frames) if args.animate else [start_step]
             for step in steps:
-                _, xyz, rgb_f = _load_step(
-                    obs_grp, step, cameras, args.max_pts, rng
-                )
+                _, xyz, rgb_f = _load_step(obs_grp, step, cameras, args.max_pts, rng)
                 _update_pcd(pcd, xyz, rgb_f)
                 renderer.scene.clear_geometry()
                 renderer.scene.add_geometry("pcd", pcd, mat)
@@ -384,8 +410,13 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
                     obs_grp, step, cameras, args.max_pts, rng
                 )
                 _update_rgb_figure(
-                    rgb_fig, rgb_axes, cameras, rgb_imgs_step,
-                    step, num_frames, title_prefix,
+                    rgb_fig,
+                    rgb_axes,
+                    cameras,
+                    rgb_imgs_step,
+                    step,
+                    num_frames,
+                    title_prefix,
                 )
 
                 if args.save_figs:
@@ -401,9 +432,7 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
         # Interactive Open3D visualizer
         vis = o3d.visualization.VisualizerWithKeyCallback()  # pylint: disable=no-member
         vis.create_window(
-            window_name=(
-                f"Point Cloud — {args.hdf5_path.name}  demo={args.demo}"
-            ),
+            window_name=(f"Point Cloud — {args.hdf5_path.name}  demo={args.demo}"),
             width=1024,
             height=768,
         )
@@ -425,9 +454,7 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
         def _go_to(step: int) -> None:
             step = max(0, min(step, num_frames - 1))
             state["step"] = step
-            _, xyz, rgb_f = _load_step(
-                obs_grp, step, cameras, args.max_pts, rng
-            )
+            _, xyz, rgb_f = _load_step(obs_grp, step, cameras, args.max_pts, rng)
             _update_pcd(pcd, xyz, rgb_f)
             vis.update_geometry(pcd)
             _refresh_rgb(step)
@@ -455,11 +482,11 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
             return False
 
         # Key codes: Right=262, Left=263, N=78, P=80, R=82, Space=32, Q=81
-        vis.register_key_callback(262, _cb_next)   # Right arrow
-        vis.register_key_callback(78, _cb_next)    # N
-        vis.register_key_callback(263, _cb_prev)   # Left arrow
-        vis.register_key_callback(80, _cb_prev)    # P
-        vis.register_key_callback(82, _cb_reset)   # R
+        vis.register_key_callback(262, _cb_next)  # Right arrow
+        vis.register_key_callback(78, _cb_next)  # N
+        vis.register_key_callback(263, _cb_prev)  # Left arrow
+        vis.register_key_callback(80, _cb_prev)  # P
+        vis.register_key_callback(82, _cb_reset)  # R
         vis.register_key_callback(32, _cb_toggle_play)  # Space
 
         interval = 1.0 / max(args.fps, 0.1)

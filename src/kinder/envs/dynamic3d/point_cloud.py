@@ -24,11 +24,14 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from typing import Any, Sequence
+from typing import TYPE_CHECKING, Any, Sequence
 
-import mujoco  # type: ignore
+import mujoco
 import numpy as np
 from numpy.typing import NDArray
+
+if TYPE_CHECKING:
+    from kinder.envs.dynamic3d.mujoco_utils import MjSim
 
 # ---------------------------------------------------------------------------
 # Public data type
@@ -86,7 +89,7 @@ class PointCloud:
 
 
 def get_camera_intrinsics(
-    model: mujoco.MjModel,  # type: ignore[name-defined]
+    model: mujoco.MjModel,
     cam_id: int,
     width: int,
     height: int,
@@ -119,7 +122,7 @@ def get_camera_intrinsics(
 
 
 def get_camera_extrinsics(
-    data: mujoco.MjData,  # type: ignore[name-defined]
+    data: mujoco.MjData,
     cam_id: int,
 ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
     """Return the camera-to-world rotation and translation.
@@ -145,7 +148,7 @@ def get_camera_extrinsics(
 
 def depth_buffer_to_metric(
     depth_raw: NDArray[np.float32],
-    model: mujoco.MjModel,  # type: ignore[name-defined]
+    model: mujoco.MjModel,
 ) -> NDArray[np.float64]:
     """Convert a raw MuJoCo depth buffer to metric distances (metres).
 
@@ -185,8 +188,8 @@ def rgbd_to_point_cloud(
     rgb: NDArray[np.uint8],
     depth_raw: NDArray[np.float32],
     cam_id: int,
-    model: mujoco.MjModel,  # type: ignore[name-defined]
-    data: mujoco.MjData,  # type: ignore[name-defined]
+    model: mujoco.MjModel,
+    data: mujoco.MjData,
     *,
     max_depth: float = 10.0,
     min_depth: float = 0.01,
@@ -255,7 +258,7 @@ def rgbd_to_point_cloud(
 
 
 def generate_scene_point_cloud(
-    sim: "MjSim",  # type: ignore[name-defined]  # kinder MjSim
+    sim: MjSim,
     camera_names: Sequence[str] | None = None,
     *,
     width: int = 640,
@@ -285,8 +288,8 @@ def generate_scene_point_cloud(
     Raises:
         ValueError: If a requested camera name is not found in the model.
     """
-    mj_model: mujoco.MjModel = sim.model.mj_model  # type: ignore[name-defined]
-    mj_data: mujoco.MjData = sim.data.mj_data  # type: ignore[name-defined]
+    mj_model: mujoco.MjModel = sim.model.mj_model
+    mj_data: mujoco.MjData = sim.data.mj_data
 
     # Resolve camera names → camera IDs
     name2id: dict[str, int] = {}
@@ -370,14 +373,14 @@ def generate_scene_point_cloud(
 # ---------------------------------------------------------------------------
 
 
-def get_sim_from_env(env: Any) -> "MjSim":  # type: ignore[name-defined]
+def get_sim_from_env(env: Any) -> MjSim:
     """Extract the underlying :class:`MjSim` from a wrapped kinder env.
 
     Works with the standard ``kinder.make(...)`` wrapper stack::
 
         kinder_wrapper
           └─ ObjectCentricRobotEnv (_object_centric_env)
-               └─ RobotEnv         (_robot_env)
+               └─ RobotEnv         (_robot_env)   ← Dynamic3D-specific
                     └─ MujocoEnv   (sim)
 
     Args:
@@ -387,22 +390,26 @@ def get_sim_from_env(env: Any) -> "MjSim":  # type: ignore[name-defined]
         The ``MjSim`` instance (guaranteed non-None after a reset).
 
     Raises:
-        RuntimeError: If the expected attributes are not found, or if the
-            sim has not been initialised (i.e. no reset has been called yet).
+        RuntimeError: If the environment is not a Dynamic3D kinder env, or if
+            the sim has not been initialised (i.e. no reset has been called).
     """
     unwrapped = env.unwrapped
 
-    # Path: object_centric_env → _robot_env → sim
+    # Navigate to the ObjectCentricRobotEnv layer.  It may be the unwrapped
+    # env itself (e.g. ObjectCentricTidyBot3DEnv used directly) or reachable
+    # via _object_centric_env on an outer wrapper.
     if hasattr(unwrapped, "_object_centric_env"):
-        # pylint: disable=protected-access
-        robot_env = unwrapped._object_centric_env._robot_env
-    elif hasattr(unwrapped, "_robot_env"):
-        robot_env = unwrapped._robot_env  # pylint: disable=protected-access
+        oce = unwrapped._object_centric_env  # pylint: disable=protected-access
     else:
+        oce = unwrapped
+
+    # _robot_env is the Dynamic3D-specific marker; other kinder env families
+    # (dynamic2d, kinematic2d/3d) do not have it.
+    robot_env = getattr(oce, "_robot_env", None)  # pylint: disable=protected-access
+    if robot_env is None:
         raise RuntimeError(
-            "Cannot locate a robot env inside the provided environment. "
-            "Expected either '_object_centric_env._robot_env' or '_robot_env' "
-            f"on {type(unwrapped).__name__}."
+            "This environment does not have a '_robot_env' — "
+            "point cloud generation requires a Dynamic3D MuJoCo environment."
         )
 
     sim = robot_env.sim

@@ -10,7 +10,9 @@ Navigation inside the Open3D window
   Right arrow / ``N``  — next step
   Left arrow  / ``P``  — previous step
   ``R``                — jump back to step 0
-  ``Q`` / close window — quit
+  ``Space``            — play / pause (with ``--animate``)
+  ``Q`` / ``Esc``       — quit
+  Close window         — quit
 
 Requirements
 ------------
@@ -41,6 +43,11 @@ Usage
 
     # List available demos and cameras
     python scripts/visualize_hdf5_open3d.py data.hdf5 --info
+
+    # Visualise an HDF5 produced with ``--complete-pointclouds``.  This reads
+    # the single ``complete_pc_xyz`` / ``complete_pc_rgb`` dataset instead of
+    # the per-camera point clouds.  Per-camera RGB images are still shown.
+    python scripts/visualize_hdf5_open3d.py data.hdf5 --complete-pointclouds
 """
 
 from __future__ import annotations
@@ -127,6 +134,13 @@ def _parse_args() -> argparse.Namespace:
                    help="Do not open interactive windows (useful headless)")
     p.add_argument("--info", action="store_true",
                    help="Print available demos and cameras then exit")
+    p.add_argument("--complete-pointclouds", action="store_true",
+                   help=(
+                       "Read the single occlusion-free 'complete_pc_*' "
+                       "datasets produced by demos_to_hdf5_with_pointclouds.py "
+                       "--complete-pointclouds, instead of the per-camera "
+                       "point clouds.  Per-camera RGB images are still shown."
+                   ))
     return p.parse_args()
 
 
@@ -144,17 +158,30 @@ def _list_cameras(obs_grp: h5py.Group) -> list[str]:
     ]
 
 
+def _has_complete_pc(obs_grp: h5py.Group) -> bool:
+    """Return True iff the obs group contains complete_pc_xyz/rgb datasets."""
+    return "complete_pc_xyz" in obs_grp and "complete_pc_rgb" in obs_grp
+
+
 def _print_info(hf: h5py.File) -> None:
     data = hf["data"]
-    print(f"env_id        : {data.attrs.get('env_id', 'N/A')}")
-    print(f"total_episodes: {data.attrs.get('total_episodes', 'N/A')}")
-    print(f"total_frames  : {data.attrs.get('total_frames', 'N/A')}")
+    print(f"env_id              : {data.attrs.get('env_id', 'N/A')}")
+    print(f"total_episodes      : {data.attrs.get('total_episodes', 'N/A')}")
+    print(f"total_frames        : {data.attrs.get('total_frames', 'N/A')}")
+    cp_flag = bool(data.attrs.get("complete_pointclouds", False))
+    print(f"complete_pointclouds: {cp_flag}")
+    if cp_flag and "num_points_per_geom" in data.attrs:
+        print(
+            f"num_points_per_geom : {int(data.attrs['num_points_per_geom'])}"
+        )
     for key in sorted(data.keys()):
         grp = data[key]
         cams = _list_cameras(grp["obs"])
+        has_cp = _has_complete_pc(grp["obs"])
         print(
             f"  {key}: {grp.attrs.get('num_frames', '?')} frames, "
-            f"seed={grp.attrs.get('seed', '?')}, cameras={cams}"
+            f"seed={grp.attrs.get('seed', '?')}, cameras={cams}, "
+            f"complete_pc={has_cp}"
         )
 
 
@@ -164,41 +191,51 @@ def _load_step(
     cameras: list[str],
     max_pts: int,
     rng: np.random.Generator,
+    *,
+    complete_pointclouds: bool = False,
 ) -> tuple[
     dict[str, NDArray[np.uint8]],
     NDArray[np.float64],
     NDArray[np.float64],
 ]:
-    """Load and merge camera data for *step*.
+    """Load RGB images and a merged point cloud for *step*.
+
+    When ``complete_pointclouds`` is ``False`` (default), per-camera point
+    clouds (``{cam}_pc_xyz``/``{cam}_pc_rgb``) are concatenated.  When
+    ``True``, the single ``complete_pc_xyz``/``complete_pc_rgb`` dataset is
+    used instead.  Per-camera RGB images are loaded in both modes.
 
     Returns:
         rgb_imgs   : {cam: (H, W, 3) uint8}
-        merged_xyz : (N, 3) float64 — all cameras concatenated, NaN rows removed
+        merged_xyz : (N, 3) float64 — NaN-padded rows removed
         merged_rgb : (N, 3) float64 — colours normalised to [0, 1]
     """
     rgb_imgs: dict[str, NDArray[np.uint8]] = {}
-    all_xyz: list[NDArray[np.float32]] = []
-    all_rgb: list[NDArray[np.float32]] = []
-
     for cam in cameras:
         rgb_imgs[cam] = obs_grp[f"{cam}_rgb"][step]
 
-        raw_xyz: NDArray[np.float32] = obs_grp[f"{cam}_pc_xyz"][step]
-        raw_rgb: NDArray[np.uint8] = obs_grp[f"{cam}_pc_rgb"][step]
-
-        # Strip NaN padding
+    if complete_pointclouds:
+        raw_xyz: NDArray[np.float32] = obs_grp["complete_pc_xyz"][step]
+        raw_rgb: NDArray[np.uint8] = obs_grp["complete_pc_rgb"][step]
         valid = np.isfinite(raw_xyz).all(axis=1)
-        xyz = raw_xyz[valid].astype(np.float32)
-        rgb_f = raw_rgb[valid].astype(np.float32) / 255.0
-        all_xyz.append(xyz)
-        all_rgb.append(rgb_f)
-
-    if all_xyz:
-        merged_xyz = np.concatenate(all_xyz, axis=0).astype(np.float64)
-        merged_rgb = np.concatenate(all_rgb, axis=0).astype(np.float64)
+        merged_xyz = raw_xyz[valid].astype(np.float64)
+        merged_rgb = (raw_rgb[valid].astype(np.float32) / 255.0).astype(np.float64)
     else:
-        merged_xyz = np.empty((0, 3), dtype=np.float64)
-        merged_rgb = np.empty((0, 3), dtype=np.float64)
+        all_xyz: list[NDArray[np.float32]] = []
+        all_rgb: list[NDArray[np.float32]] = []
+        for cam in cameras:
+            raw_xyz = obs_grp[f"{cam}_pc_xyz"][step]
+            raw_rgb = obs_grp[f"{cam}_pc_rgb"][step]
+            valid = np.isfinite(raw_xyz).all(axis=1)
+            all_xyz.append(raw_xyz[valid].astype(np.float32))
+            all_rgb.append(raw_rgb[valid].astype(np.float32) / 255.0)
+
+        if all_xyz:
+            merged_xyz = np.concatenate(all_xyz, axis=0).astype(np.float64)
+            merged_rgb = np.concatenate(all_rgb, axis=0).astype(np.float64)
+        else:
+            merged_xyz = np.empty((0, 3), dtype=np.float64)
+            merged_rgb = np.empty((0, 3), dtype=np.float64)
 
     # Sub-sample for render speed
     n = len(merged_xyz)
@@ -329,15 +366,44 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
             print("Error: no camera data found.", file=sys.stderr)
             sys.exit(1)
 
+        # Validate the point cloud mode against the file contents
+        complete_pc = bool(args.complete_pointclouds)
+        if complete_pc and not _has_complete_pc(obs_grp):
+            print(
+                "Error: --complete-pointclouds was passed but no "
+                "'complete_pc_xyz' / 'complete_pc_rgb' datasets were found "
+                "in this file.  Re-export with "
+                "'demos_to_hdf5_with_pointclouds.py --complete-pointclouds' "
+                "or omit the flag here.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        if not complete_pc and not any(
+            f"{cam}_pc_xyz" in obs_grp for cam in cameras
+        ):
+            print(
+                "Error: no per-camera point cloud datasets found.  This "
+                "file appears to have been written with "
+                "'--complete-pointclouds'; pass --complete-pointclouds "
+                "here too.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+        pc_label = "complete-pc" if complete_pc else "per-camera-pc"
         title_prefix = (
             f"Demo {args.demo} (seed={seed})  |  "
             f"{', '.join(cameras)}  |  "
+            f"{pc_label}  |  "
         )
         print(
             f"Demo {args.demo}: {num_frames} frames, seed={seed}, "
-            f"cameras={cameras}"
+            f"cameras={cameras}, point-cloud-mode={pc_label}"
         )
-        print("  Keys: Right/N = next  Left/P = prev  R = reset  Q = quit")
+        print(
+            "  Keys: Right/N = next  Left/P = prev  R = reset  "
+            "Space = play/pause  Q/Esc = quit"
+        )
 
         start_step = min(max(args.step, 0), num_frames - 1)
 
@@ -347,7 +413,8 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
 
         def _refresh_rgb(step: int) -> None:
             rgb_imgs, _, _ = _load_step(
-                obs_grp, step, cameras, args.max_pts, rng
+                obs_grp, step, cameras, args.max_pts, rng,
+                complete_pointclouds=complete_pc,
             )
             _update_rgb_figure(
                 rgb_fig, rgb_axes, cameras, rgb_imgs,
@@ -357,7 +424,8 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
         # ---- Open3D window ------------------------------------------------
         # Load step 0 data to initialise geometry
         _, xyz0, rgb0 = _load_step(
-            obs_grp, start_step, cameras, args.max_pts, rng
+            obs_grp, start_step, cameras, args.max_pts, rng,
+            complete_pointclouds=complete_pc,
         )
         pcd = _make_pcd(xyz0, rgb0)
 
@@ -374,14 +442,16 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
             steps = range(num_frames) if args.animate else [start_step]
             for step in steps:
                 _, xyz, rgb_f = _load_step(
-                    obs_grp, step, cameras, args.max_pts, rng
+                    obs_grp, step, cameras, args.max_pts, rng,
+                    complete_pointclouds=complete_pc,
                 )
                 _update_pcd(pcd, xyz, rgb_f)
                 renderer.scene.clear_geometry()
                 renderer.scene.add_geometry("pcd", pcd, mat)
 
                 rgb_imgs_step, _, _ = _load_step(
-                    obs_grp, step, cameras, args.max_pts, rng
+                    obs_grp, step, cameras, args.max_pts, rng,
+                    complete_pointclouds=complete_pc,
                 )
                 _update_rgb_figure(
                     rgb_fig, rgb_axes, cameras, rgb_imgs_step,
@@ -418,6 +488,7 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
             "step": start_step,
             "playing": args.animate,
             "last_time": time.monotonic(),
+            "quit": False,
         }
 
         _refresh_rgb(start_step)
@@ -426,7 +497,8 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
             step = max(0, min(step, num_frames - 1))
             state["step"] = step
             _, xyz, rgb_f = _load_step(
-                obs_grp, step, cameras, args.max_pts, rng
+                obs_grp, step, cameras, args.max_pts, rng,
+                complete_pointclouds=complete_pc,
             )
             _update_pcd(pcd, xyz, rgb_f)
             vis.update_geometry(pcd)
@@ -454,17 +526,26 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
             state["playing"] = not state["playing"]
             return False
 
-        # Key codes: Right=262, Left=263, N=78, P=80, R=82, Space=32, Q=81
+        def _cb_quit(vis_: Any) -> bool:  # pylint: disable=unused-argument
+            state["quit"] = True
+            return False
+
+        # GLFW key codes: Right=262, Left=263, N=78, P=80, R=82, Space=32,
+        # Q=81, Esc=256
         vis.register_key_callback(262, _cb_next)   # Right arrow
         vis.register_key_callback(78, _cb_next)    # N
         vis.register_key_callback(263, _cb_prev)   # Left arrow
         vis.register_key_callback(80, _cb_prev)    # P
         vis.register_key_callback(82, _cb_reset)   # R
         vis.register_key_callback(32, _cb_toggle_play)  # Space
+        vis.register_key_callback(81, _cb_quit)    # Q
+        vis.register_key_callback(256, _cb_quit)   # Esc
 
         interval = 1.0 / max(args.fps, 0.1)
 
         while vis.poll_events():
+            if state["quit"]:
+                break
             if state["playing"]:
                 now = time.monotonic()
                 if now - state["last_time"] >= interval:

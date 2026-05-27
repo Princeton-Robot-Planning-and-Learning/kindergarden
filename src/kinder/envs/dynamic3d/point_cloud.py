@@ -366,6 +366,328 @@ def generate_scene_point_cloud(
 
 
 # ---------------------------------------------------------------------------
+# Complete (occlusion-free) point cloud via mesh sampling
+# ---------------------------------------------------------------------------
+
+
+def _quat_to_matrix(quat: NDArray[np.float64]) -> NDArray[np.float64]:
+    """Convert a MuJoCo (w, x, y, z) quaternion to a 3x3 rotation matrix."""
+    w, x, y, z = (float(quat[0]), float(quat[1]), float(quat[2]), float(quat[3]))
+    n = w * w + x * x + y * y + z * z
+    if n < 1e-12:
+        return np.eye(3, dtype=np.float64)
+    s = 2.0 / n
+    return np.array(
+        [
+            [1.0 - s * (y * y + z * z), s * (x * y - z * w), s * (x * z + y * w)],
+            [s * (x * y + z * w), 1.0 - s * (x * x + z * z), s * (y * z - x * w)],
+            [s * (x * z - y * w), s * (y * z + x * w), 1.0 - s * (x * x + y * y)],
+        ],
+        dtype=np.float64,
+    )
+
+
+def _transform_from_pos_quat(
+    pos: NDArray[np.float64],
+    quat: NDArray[np.float64],
+) -> NDArray[np.float64]:
+    """Build a 4x4 homogeneous transform from a position and (w, x, y, z) quat."""
+    T = np.eye(4, dtype=np.float64)
+    T[:3, :3] = _quat_to_matrix(quat)
+    T[:3, 3] = np.asarray(pos, dtype=np.float64)
+    return T
+
+
+def _generate_box_mesh(model: "mujoco.MjModel", geom_id: int):  # type: ignore[name-defined]
+    """Triangle mesh for an ``mjGEOM_BOX`` in its local frame."""
+    import trimesh  # pylint: disable=import-outside-toplevel  # type: ignore[import]
+
+    half_extents = np.asarray(model.geom_size[geom_id], dtype=np.float64)
+    signs = np.array(
+        [
+            [-1, -1, -1],
+            [-1, -1, 1],
+            [-1, 1, -1],
+            [-1, 1, 1],
+            [1, -1, -1],
+            [1, -1, 1],
+            [1, 1, -1],
+            [1, 1, 1],
+        ],
+        dtype=np.float64,
+    )
+    vertices = signs * half_extents
+    faces = np.array(
+        [
+            [0, 1, 3], [0, 3, 2],
+            [4, 6, 7], [4, 7, 5],
+            [0, 4, 5], [0, 5, 1],
+            [2, 3, 7], [2, 7, 6],
+            [0, 2, 6], [0, 6, 4],
+            [1, 5, 7], [1, 7, 3],
+        ],
+        dtype=np.int64,
+    )
+    return trimesh.Trimesh(vertices=vertices, faces=faces, process=False)
+
+
+def _generate_cylinder_mesh(
+    model: "mujoco.MjModel",  # type: ignore[name-defined]
+    geom_id: int,
+    n_segments: int = 20,
+):
+    """Triangle mesh for an ``mjGEOM_CYLINDER`` in its local frame."""
+    import trimesh  # pylint: disable=import-outside-toplevel  # type: ignore[import]
+
+    radius = float(model.geom_size[geom_id][0])
+    half_height = float(model.geom_size[geom_id][1])
+
+    angles = np.linspace(0.0, 2.0 * np.pi, n_segments, endpoint=False)
+    x = radius * np.cos(angles)
+    y = radius * np.sin(angles)
+
+    bottom_ring = np.stack([x, y, np.full_like(x, -half_height)], axis=1)
+    top_ring = np.stack([x, y, np.full_like(x, half_height)], axis=1)
+    center_bottom = np.array([[0.0, 0.0, -half_height]])
+    center_top = np.array([[0.0, 0.0, half_height]])
+    vertices = np.vstack([bottom_ring, top_ring, center_bottom, center_top])
+
+    i_center_bottom = 2 * n_segments
+    i_center_top = 2 * n_segments + 1
+
+    faces: list[list[int]] = []
+    for i in range(n_segments):
+        i_next = (i + 1) % n_segments
+        faces.append([i, i + n_segments, i_next + n_segments])
+        faces.append([i, i_next + n_segments, i_next])
+    for i in range(n_segments):
+        i_next = (i + 1) % n_segments
+        faces.append([i_center_bottom, i_next, i])
+    for i in range(n_segments):
+        i_next = (i + 1) % n_segments
+        faces.append([i_center_top, i + n_segments, i_next + n_segments])
+
+    return trimesh.Trimesh(
+        vertices=vertices, faces=np.array(faces, dtype=np.int64), process=False
+    )
+
+
+def _generate_sphere_mesh(
+    model: "mujoco.MjModel",  # type: ignore[name-defined]
+    geom_id: int,
+    subdivisions: int = 3,
+):
+    """Triangle mesh for an ``mjGEOM_SPHERE`` in its local frame."""
+    import trimesh  # pylint: disable=import-outside-toplevel  # type: ignore[import]
+
+    radius = float(model.geom_size[geom_id][0])
+    return trimesh.creation.icosphere(subdivisions=subdivisions, radius=radius)
+
+
+def _generate_capsule_mesh(
+    model: "mujoco.MjModel",  # type: ignore[name-defined]
+    geom_id: int,
+    segments: int = 20,
+    subdivisions: int = 2,
+):
+    """Triangle mesh for an ``mjGEOM_CAPSULE`` in its local frame.
+
+    A capsule consists of a cylinder of length ``2 * half_height`` along the
+    Z axis with hemispherical caps at each end.
+    """
+    import trimesh  # pylint: disable=import-outside-toplevel  # type: ignore[import]
+
+    radius = float(model.geom_size[geom_id][0])
+    half_height = float(model.geom_size[geom_id][1])
+
+    cylinder = trimesh.creation.cylinder(
+        radius=radius, height=2.0 * half_height, sections=segments
+    )
+    sphere = trimesh.creation.icosphere(subdivisions=subdivisions, radius=radius)
+
+    # Top hemisphere (z >= 0), translated to +half_height
+    top_mask = sphere.vertices[:, 2] >= 0
+    top_face_mask = np.all(top_mask[sphere.faces], axis=1)
+    top_face_idx = sphere.faces[top_face_mask]
+    top_vert_idx = np.where(top_mask)[0]
+    remap = {old: new for new, old in enumerate(top_vert_idx)}
+    top_faces_new = np.vectorize(remap.get)(top_face_idx)
+    top = trimesh.Trimesh(
+        vertices=sphere.vertices[top_vert_idx],
+        faces=top_faces_new,
+        process=False,
+    )
+    top.apply_translation([0.0, 0.0, half_height])
+
+    bottom = top.copy()
+    bottom.apply_scale([1.0, 1.0, -1.0])
+
+    return trimesh.util.concatenate([cylinder, top, bottom])
+
+
+def _build_geom_mesh(
+    model: "mujoco.MjModel",  # type: ignore[name-defined]
+    geom_id: int,
+):
+    """Return a ``trimesh.Trimesh`` for a geom, or ``None`` if unsupported.
+
+    Supports ``mjGEOM_MESH``, ``mjGEOM_BOX``, ``mjGEOM_CYLINDER``,
+    ``mjGEOM_SPHERE`` and ``mjGEOM_CAPSULE``.  Planes, height fields and
+    other primitives are silently skipped.
+    """
+    import trimesh  # pylint: disable=import-outside-toplevel  # type: ignore[import]
+
+    geom_type = int(model.geom_type[geom_id])
+    if geom_type == int(mujoco.mjtGeom.mjGEOM_MESH):  # pylint: disable=no-member
+        mesh_id = int(model.geom_dataid[geom_id])
+        if mesh_id < 0:
+            return None
+        v_start = int(model.mesh_vertadr[mesh_id])
+        v_n = int(model.mesh_vertnum[mesh_id])
+        f_start = int(model.mesh_faceadr[mesh_id])
+        f_n = int(model.mesh_facenum[mesh_id])
+        verts = np.asarray(model.mesh_vert[v_start : v_start + v_n], dtype=np.float64)
+        faces = np.asarray(model.mesh_face[f_start : f_start + f_n], dtype=np.int64)
+        if len(verts) == 0 or len(faces) == 0:
+            return None
+        return trimesh.Trimesh(vertices=verts, faces=faces, process=False)
+    if geom_type == int(mujoco.mjtGeom.mjGEOM_BOX):  # pylint: disable=no-member
+        return _generate_box_mesh(model, geom_id)
+    if geom_type == int(mujoco.mjtGeom.mjGEOM_CYLINDER):  # pylint: disable=no-member
+        return _generate_cylinder_mesh(model, geom_id)
+    if geom_type == int(mujoco.mjtGeom.mjGEOM_SPHERE):  # pylint: disable=no-member
+        return _generate_sphere_mesh(model, geom_id)
+    if geom_type == int(mujoco.mjtGeom.mjGEOM_CAPSULE):  # pylint: disable=no-member
+        return _generate_capsule_mesh(model, geom_id)
+    return None
+
+
+def _geom_color_uint8(
+    model: "mujoco.MjModel",  # type: ignore[name-defined]
+    geom_id: int,
+) -> NDArray[np.uint8]:
+    """Look up an RGB colour (0-255) for a geom, preferring its material."""
+    matid = int(model.geom_matid[geom_id])
+    if matid >= 0:
+        rgba = np.asarray(model.mat_rgba[matid], dtype=np.float64)
+    else:
+        rgba = np.asarray(model.geom_rgba[geom_id], dtype=np.float64)
+    return np.clip(rgba[:3] * 255.0, 0, 255).astype(np.uint8)
+
+
+def generate_complete_scene_point_cloud(
+    sim: "MjSim",  # type: ignore[name-defined]
+    *,
+    num_points_per_geom: int = 500,
+    seed: int | None = None,
+) -> PointCloud:
+    """Generate an occlusion-free, world-frame point cloud by sampling all geoms.
+
+    Unlike :func:`generate_scene_point_cloud`, this function does **not** use
+    cameras, depth buffers, or RGB rendering.  It iterates over every geom
+    in the model, builds a triangle mesh for it
+    (``MESH``/``BOX``/``CYLINDER``/``SPHERE``/``CAPSULE``), samples
+    ``num_points_per_geom`` surface points, and transforms them into the
+    world frame using the geom's current body pose
+    (``data.xpos`` / ``data.xmat``) and the geom's local offset
+    (``model.geom_pos`` / ``model.geom_quat``).
+
+    Each point is coloured using the geom's material colour (or
+    ``geom_rgba`` if no material is set).  ``camera_names`` and
+    ``camera_indices`` are repurposed here to identify the **source geom**
+    for each point.
+
+    Args:
+        sim: A ``kinder`` :class:`MjSim` instance (already reset and
+            forwarded).
+        num_points_per_geom: Number of surface points sampled per geom.
+        seed: Optional RNG seed for reproducible sampling.
+
+    Returns:
+        A :class:`PointCloud` whose ``camera_names`` is a list of geom
+        labels (``"<name>_geom<id>"``) and ``camera_indices`` maps each
+        point to its index in that list.
+    """
+    try:
+        import trimesh  # pylint: disable=import-outside-toplevel,unused-import  # type: ignore[import]
+    except ImportError as exc:  # pragma: no cover
+        raise ImportError(
+            "trimesh is required for complete point cloud generation. "
+            "Install it with: pip install trimesh"
+        ) from exc
+
+    mj_model: mujoco.MjModel = sim.model.mj_model  # type: ignore[name-defined]
+    mj_data: mujoco.MjData = sim.data.mj_data  # type: ignore[name-defined]
+
+    rng = np.random.default_rng(seed)
+
+    all_xyz: list[NDArray[np.float32]] = []
+    all_rgb: list[NDArray[np.uint8]] = []
+    all_idx: list[NDArray[np.int32]] = []
+    geom_labels: list[str] = []
+
+    for geom_id in range(mj_model.ngeom):
+        mesh = _build_geom_mesh(mj_model, geom_id)
+        if mesh is None:
+            continue
+
+        try:
+            samples, _ = mesh.sample(num_points_per_geom, return_index=True)
+        except Exception:  # pylint: disable=broad-except
+            verts = np.asarray(mesh.vertices)
+            if len(verts) == 0:
+                continue
+            pick = rng.integers(0, len(verts), size=num_points_per_geom)
+            samples = verts[pick]
+        points_local = np.asarray(samples, dtype=np.float64)
+
+        body_id = int(mj_model.geom_bodyid[geom_id])
+        body_pos = np.asarray(mj_data.xpos[body_id], dtype=np.float64)
+        body_mat = np.asarray(mj_data.xmat[body_id], dtype=np.float64).reshape(3, 3)
+        body_T = np.eye(4, dtype=np.float64)
+        body_T[:3, :3] = body_mat
+        body_T[:3, 3] = body_pos
+
+        local_T = _transform_from_pos_quat(
+            np.asarray(mj_model.geom_pos[geom_id], dtype=np.float64),
+            np.asarray(mj_model.geom_quat[geom_id], dtype=np.float64),
+        )
+        T = body_T @ local_T
+
+        homog = np.hstack([points_local, np.ones((points_local.shape[0], 1))])
+        world = (homog @ T.T)[:, :3].astype(np.float32)
+
+        rgb255 = _geom_color_uint8(mj_model, geom_id)
+        rgb_arr = np.tile(rgb255, (len(world), 1)).astype(np.uint8)
+
+        idx = len(geom_labels)
+        all_xyz.append(world)
+        all_rgb.append(rgb_arr)
+        all_idx.append(np.full(len(world), idx, dtype=np.int32))
+
+        geom_name = mujoco.mj_id2name(  # pylint: disable=no-member
+            mj_model, mujoco.mjtObj.mjOBJ_GEOM, geom_id  # pylint: disable=no-member
+        )
+        label = f"{geom_name}_geom{geom_id}" if geom_name else f"geom{geom_id}"
+        geom_labels.append(label)
+
+    if not all_xyz:
+        return PointCloud(
+            xyz=np.empty((0, 3), dtype=np.float32),
+            rgb=np.empty((0, 3), dtype=np.uint8),
+            camera_indices=np.empty((0,), dtype=np.int32),
+            camera_names=[],
+        )
+
+    return PointCloud(
+        xyz=np.concatenate(all_xyz, axis=0),
+        rgb=np.concatenate(all_rgb, axis=0),
+        camera_indices=np.concatenate(all_idx, axis=0),
+        camera_names=geom_labels,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Convenience: extract sim from a wrapped kinder env
 # ---------------------------------------------------------------------------
 

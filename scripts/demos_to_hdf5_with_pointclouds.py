@@ -58,7 +58,7 @@ from pathlib import Path
 from typing import Any
 
 import gymnasium
-import h5py  # pylint: disable=import-error
+import h5py
 import numpy as np
 from numpy.typing import NDArray
 
@@ -444,8 +444,9 @@ def _process_demo(
         cam: len(capture0[f"{cam}_pc_xyz"]) for cam in camera_names
     }
     _create_datasets(grp, obs_grp, capture0, obs_np, actions, camera_names, num_frames)
-    _write_step(grp, obs_grp, 0, obs_np, actions[0], capture0, camera_names,
-                cam_sizes, rng)
+    _write_step(
+        grp, obs_grp, 0, obs_np, actions[0], capture0, camera_names, cam_sizes, rng
+    )
 
     # Step through remaining actions
     for step_idx in range(1, num_frames):
@@ -456,8 +457,15 @@ def _process_demo(
             env, camera_names, width, height, max_depth, min_depth, max_pts, rng
         )
         _write_step(
-            grp, obs_grp, step_idx, obs_np, actions[step_idx], capture,
-            camera_names, cam_sizes, rng,
+            grp,
+            obs_grp,
+            step_idx,
+            obs_np,
+            actions[step_idx],
+            capture,
+            camera_names,
+            cam_sizes,
+            rng,
         )
 
     # Final step: execute last action to get terminal observation

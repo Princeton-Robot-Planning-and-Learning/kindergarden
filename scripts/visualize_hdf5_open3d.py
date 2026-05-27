@@ -51,7 +51,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-import h5py  # pylint: disable=import-error
+import h5py
 import numpy as np
 from numpy.typing import NDArray
 

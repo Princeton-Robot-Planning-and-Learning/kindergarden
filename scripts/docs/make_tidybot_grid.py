@@ -42,10 +42,7 @@ def get_gif_info(gif_path: Path) -> tuple[int, int, float]:
 
 def main() -> None:
     """Generate a grid video from multiple TidyBot3D demos."""
-    env_id = (
-        "kinder/TidyBot3D-tool_use-lab2_kitchen"
-        "-o5-sweep_the_blocks_into_the_top_drawer_of_the_kitchen_island-v0"
-    )
+    env_id = "kinder/SweepIntoDrawer3D-o5-v0"
     demos_dir = Path(__file__).parent.parent / "demos"
     output_path = (
         Path(__file__).parent.parent / "docs/envs/assets/tidybot_sweep_grid.mp4"

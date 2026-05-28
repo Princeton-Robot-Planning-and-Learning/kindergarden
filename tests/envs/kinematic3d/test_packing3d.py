@@ -116,6 +116,7 @@ def test_packing3d_goal():
         updated_obs.get_object_pose("part0"),
         updated_obs.get_object_half_extents_packing3d("part0")[:3],
     )
+    assert "part0" not in updated_obs.available_parts
     assert env.goal_reached()
 
     env.close()

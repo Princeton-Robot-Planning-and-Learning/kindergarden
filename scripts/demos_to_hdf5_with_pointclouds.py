@@ -529,6 +529,7 @@ def _process_demo(
         print(f"  Auto-detected cameras: {camera_names}")
     elif not store_camera:
         camera_names = camera_names or []
+    assert camera_names is not None
 
     num_frames = len(actions)
     grp_name = f"demo_{demo_idx}"

@@ -429,17 +429,18 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
 
         # ---- Matplotlib RGB window (only when camera data is available) ----
         plt.ion()
-        has_rgb_panel = bool(cameras)
-        if has_rgb_panel:
+        rgb_fig: plt.Figure | None = None
+        rgb_axes: list[plt.Axes] = []
+        if cameras:
             rgb_fig, rgb_axes = _build_rgb_figure(cameras)
 
         def _refresh_rgb(step: int) -> None:
-            if not has_rgb_panel:
+            if rgb_fig is None:
                 return
             rgb_imgs, _, _ = _load_step(obs_grp, step, cameras, args.max_pts, rng)
             _update_rgb_figure(
-                rgb_fig,  # type: ignore[possibly-undefined]
-                rgb_axes,  # type: ignore[possibly-undefined]
+                rgb_fig,
+                rgb_axes,
                 cameras,
                 rgb_imgs,
                 step,
@@ -476,9 +477,12 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
                     pcd_path = f"{args.save_figs}_{step:04d}_pcd.png"
                     img = renderer.render_to_image()
                     o3d.io.write_image(pcd_path, img)  # pylint: disable=no-member
-                    rgb_path = f"{args.save_figs}_{step:04d}_rgb.png"
-                    rgb_fig.savefig(rgb_path, dpi=120, bbox_inches="tight")
-                    print(f"  Saved step {step}: {pcd_path}, {rgb_path}")
+                    if rgb_fig is not None:
+                        rgb_path = f"{args.save_figs}_{step:04d}_rgb.png"
+                        rgb_fig.savefig(rgb_path, dpi=120, bbox_inches="tight")
+                        print(f"  Saved step {step}: {pcd_path}, {rgb_path}")
+                    else:
+                        print(f"  Saved step {step}: {pcd_path}")
             return
 
         # Interactive Open3D visualizer
@@ -514,8 +518,9 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
                 Path(args.save_figs).parent.mkdir(parents=True, exist_ok=True)
                 pcd_path = f"{args.save_figs}_{step:04d}_pcd.png"
                 vis.capture_screen_image(pcd_path, do_render=True)
-                rgb_path = f"{args.save_figs}_{step:04d}_rgb.png"
-                rgb_fig.savefig(rgb_path, dpi=120, bbox_inches="tight")
+                if rgb_fig is not None:
+                    rgb_path = f"{args.save_figs}_{step:04d}_rgb.png"
+                    rgb_fig.savefig(rgb_path, dpi=120, bbox_inches="tight")
 
         def _cb_next(vis_: Any) -> bool:  # pylint: disable=unused-argument
             _go_to(state["step"] + 1)

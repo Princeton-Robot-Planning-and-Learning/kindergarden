@@ -509,7 +509,8 @@ def _quat_to_mat4(
     pos: NDArray[np.float64],
     quat: NDArray[np.float64],
 ) -> NDArray[np.float64]:
-    """Build a 4×4 homogeneous transform from a MuJoCo (w,x,y,z) quaternion + position."""
+    """Build a 4×4 homogeneous transform from a MuJoCo (w,x,y,z) quaternion + position.
+    """
     w, x, y, z = quat
     return np.array(
         [

@@ -428,7 +428,7 @@ def test_visualize_point_cloud(sim, request):
 
 
 def test_generate_point_cloud_default_returns_point_cloud(sim):
-    """generate_point_cloud() with no method arg uses 'camera' and returns a PointCloud."""
+    """generate_point_cloud() with no method arg defaults to 'camera' mode."""
     result = generate_point_cloud(sim, width=64, height=48)
     assert isinstance(result, PointCloud)
 

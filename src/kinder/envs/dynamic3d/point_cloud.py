@@ -505,22 +505,15 @@ def _require_trimesh() -> Any:
         ) from exc
 
 
-def _quat_to_mat4(
+def _transform_from_pos_quat(
+    trimesh_mod: Any,
     pos: NDArray[np.float64],
     quat: NDArray[np.float64],
 ) -> NDArray[np.float64]:
-    """Build a 4×4 homogeneous transform from a MuJoCo (w,x,y,z) quaternion + position.
-    """
-    w, x, y, z = quat
-    return np.array(
-        [
-            [1 - 2 * (y * y + z * z), 2 * (x * y - w * z), 2 * (x * z + w * y), pos[0]],
-            [2 * (x * y + w * z), 1 - 2 * (x * x + z * z), 2 * (y * z - w * x), pos[1]],
-            [2 * (x * z - w * y), 2 * (y * z + w * x), 1 - 2 * (x * x + y * y), pos[2]],
-            [0.0, 0.0, 0.0, 1.0],
-        ],
-        dtype=np.float64,
-    )
+    """Build a 4×4 homogeneous transform from a MuJoCo position + quaternion."""
+    transform = trimesh_mod.transformations.quaternion_matrix(quat)
+    transform[:3, 3] = pos
+    return transform
 
 
 def _make_box_mesh(trimesh_mod: Any, model: mujoco.MjModel, geom_id: int) -> Any:
@@ -705,6 +698,7 @@ def generate_full_point_cloud(
     Returns:
         A :class:`MeshPointCloud` with world-frame XYZ positions.
     """
+    trimesh_mod = _require_trimesh()
     model = sim.model.mj_model
     data = sim.data.mj_data
 
@@ -722,8 +716,8 @@ def generate_full_point_cloud(
         body_transform[:3, :3] = body_mat
         body_transform[:3, 3] = body_pos
 
-        local_transform = _quat_to_mat4(
-            model.geom_pos[geom_id], model.geom_quat[geom_id]
+        local_transform = _transform_from_pos_quat(
+            trimesh_mod, model.geom_pos[geom_id], model.geom_quat[geom_id]
         )
         world_transform = body_transform @ local_transform
 

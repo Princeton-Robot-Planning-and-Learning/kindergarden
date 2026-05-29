@@ -129,7 +129,7 @@ class MeshPointCloud:
         mask = self.geom_indices == idx
         return MeshPointCloud(
             xyz=self.xyz[mask],
-            geom_indices=self.geom_indices[mask],
+            geom_indices=np.zeros(int(mask.sum()), dtype=np.int32),
             geom_names=[name],
         )
 
@@ -138,6 +138,7 @@ class MeshPointCloud:
         return {
             "xyz": self.xyz,
             "geom_indices": self.geom_indices,
+            "geom_names": np.array(self.geom_names),
         }
 
 
@@ -504,20 +505,25 @@ def _require_trimesh() -> Any:
         ) from exc
 
 
-def _transform_from_pos_quat(
+def _quat_to_mat4(
     pos: NDArray[np.float64],
     quat: NDArray[np.float64],
 ) -> NDArray[np.float64]:
-    """Build a 4×4 homogeneous transform from a MuJoCo position + quaternion."""
-    trimesh = _require_trimesh()
-    transform = trimesh.transformations.quaternion_matrix(quat)
-    transform[:3, 3] = pos
-    return transform
+    """Build a 4×4 homogeneous transform from a MuJoCo (w,x,y,z) quaternion + position."""
+    w, x, y, z = quat
+    return np.array(
+        [
+            [1 - 2 * (y * y + z * z), 2 * (x * y - w * z), 2 * (x * z + w * y), pos[0]],
+            [2 * (x * y + w * z), 1 - 2 * (x * x + z * z), 2 * (y * z - w * x), pos[1]],
+            [2 * (x * z - w * y), 2 * (y * z + w * x), 1 - 2 * (x * x + y * y), pos[2]],
+            [0.0, 0.0, 0.0, 1.0],
+        ],
+        dtype=np.float64,
+    )
 
 
-def _make_box_mesh(model: mujoco.MjModel, geom_id: int) -> Any:
+def _make_box_mesh(trimesh_mod: Any, model: mujoco.MjModel, geom_id: int) -> Any:
     """Create a trimesh box from a MuJoCo mjGEOM_BOX geom (local coords)."""
-    trimesh = _require_trimesh()
     half = model.geom_size[geom_id]  # (3,) half-extents
     signs = np.array(
         [
@@ -547,14 +553,13 @@ def _make_box_mesh(model: mujoco.MjModel, geom_id: int) -> Any:
         [1, 5, 7],
         [1, 7, 3],
     ]
-    return trimesh.Trimesh(vertices=vertices, faces=faces)
+    return trimesh_mod.Trimesh(vertices=vertices, faces=faces)
 
 
 def _make_cylinder_mesh(
-    model: mujoco.MjModel, geom_id: int, n_segments: int = 20
+    trimesh_mod: Any, model: mujoco.MjModel, geom_id: int, n_segments: int = 20
 ) -> Any:
     """Create a trimesh cylinder from a MuJoCo mjGEOM_CYLINDER geom."""
-    trimesh = _require_trimesh()
     radius, half_height = model.geom_size[geom_id][:2]
     angles = np.linspace(0, 2 * np.pi, n_segments, endpoint=False)
     x, y = radius * np.cos(angles), radius * np.sin(angles)
@@ -567,41 +572,21 @@ def _make_cylinder_mesh(
         j = (i + 1) % n_segments
         faces += [[i, i + n_segments, j + n_segments], [i, j + n_segments, j]]
         faces += [[i_cb, j, i], [i_ct, i + n_segments, j + n_segments]]
-    return trimesh.Trimesh(vertices=vertices, faces=faces)
+    return trimesh_mod.Trimesh(vertices=vertices, faces=faces)
 
 
 def _make_sphere_mesh(
-    model: mujoco.MjModel, geom_id: int, subdivisions: int = 3
+    trimesh_mod: Any, model: mujoco.MjModel, geom_id: int, subdivisions: int = 3
 ) -> Any:
     """Create a trimesh sphere from a MuJoCo mjGEOM_SPHERE geom."""
-    trimesh = _require_trimesh()
     radius = float(model.geom_size[geom_id][0])
-    return trimesh.creation.icosphere(subdivisions=subdivisions, radius=radius)
+    return trimesh_mod.creation.icosphere(subdivisions=subdivisions, radius=radius)
 
 
-def _make_capsule_mesh(model: mujoco.MjModel, geom_id: int, segments: int = 32) -> Any:
+def _make_capsule_mesh(trimesh_mod: Any, model: mujoco.MjModel, geom_id: int) -> Any:
     """Create a trimesh capsule from a MuJoCo mjGEOM_CAPSULE geom."""
-    trimesh = _require_trimesh()
     radius, half_height = model.geom_size[geom_id][:2]
-    cylinder = trimesh.creation.cylinder(
-        radius=radius, height=2 * half_height, sections=segments
-    )
-    sphere = trimesh.creation.icosphere(subdivisions=3, radius=radius)
-    # Top hemisphere
-    top_mask = sphere.vertices[:, 2] >= 0
-    top_face_mask = np.all(top_mask[sphere.faces], axis=1)
-    top_idx = np.where(top_mask)[0]
-    remap = {old: new for new, old in enumerate(top_idx)}
-    top_faces = np.vectorize(remap.get)(sphere.faces[top_face_mask])
-    top = trimesh.Trimesh(
-        vertices=sphere.vertices[top_idx], faces=top_faces, process=False
-    )
-    top.apply_translation([0, 0, half_height])
-    # Bottom hemisphere — mirror of top
-    bottom = top.copy()
-    bottom.apply_scale([1, 1, -1])
-    bottom.apply_translation([0, 0, -2 * half_height])
-    return trimesh.util.concatenate([cylinder, top, bottom])
+    return trimesh_mod.creation.capsule(radius=radius, height=2 * half_height)
 
 
 # ---------------------------------------------------------------------------
@@ -617,6 +602,61 @@ _MESH_GEOM_TYPES = frozenset(
         mujoco.mjtGeom.mjGEOM_CAPSULE,  # pylint: disable=no-member
     ]
 )
+
+
+def _get_scene_geoms(sim: MjSim) -> list[tuple[int, str, Any]]:
+    """Return (geom_id, name, mesh) for every supported geom in the scene.
+
+    Calls ``_require_trimesh()`` once and passes the module to all helpers.
+    """
+    trimesh_mod = _require_trimesh()
+    model = sim.model.mj_model
+    result: list[tuple[int, str, Any]] = []
+
+    for geom_id in range(model.ngeom):
+        gtype = model.geom_type[geom_id]
+        if gtype not in _MESH_GEOM_TYPES:
+            continue
+
+        if gtype == mujoco.mjtGeom.mjGEOM_MESH:  # pylint: disable=no-member
+            mesh_id = model.geom_dataid[geom_id]
+            if mesh_id < 0:
+                continue
+            raw_name = mujoco.mj_id2name(  # pylint: disable=no-member
+                model,
+                int(mujoco.mjtObj.mjOBJ_MESH),  # pylint: disable=no-member
+                mesh_id,
+            )
+            name = (raw_name or f"mesh{mesh_id}") + f"_geom{geom_id}"
+            mesh = trimesh_mod.Trimesh(
+                vertices=model.mesh_vert[
+                    model.mesh_vertadr[mesh_id] : model.mesh_vertadr[mesh_id]
+                    + model.mesh_vertnum[mesh_id]
+                ],
+                faces=model.mesh_face[
+                    model.mesh_faceadr[mesh_id] : model.mesh_faceadr[mesh_id]
+                    + model.mesh_facenum[mesh_id]
+                ],
+            )
+        else:
+            raw_name = mujoco.mj_id2name(  # pylint: disable=no-member
+                model,
+                int(mujoco.mjtObj.mjOBJ_GEOM),  # pylint: disable=no-member
+                geom_id,
+            )
+            name = (raw_name or f"geom{geom_id}") + f"_geom{geom_id}"
+            if gtype == mujoco.mjtGeom.mjGEOM_BOX:  # pylint: disable=no-member
+                mesh = _make_box_mesh(trimesh_mod, model, geom_id)
+            elif gtype == mujoco.mjtGeom.mjGEOM_CYLINDER:  # pylint: disable=no-member
+                mesh = _make_cylinder_mesh(trimesh_mod, model, geom_id)
+            elif gtype == mujoco.mjtGeom.mjGEOM_SPHERE:  # pylint: disable=no-member
+                mesh = _make_sphere_mesh(trimesh_mod, model, geom_id)
+            else:  # CAPSULE
+                mesh = _make_capsule_mesh(trimesh_mod, model, geom_id)
+
+        result.append((geom_id, name, mesh))
+
+    return result
 
 
 def get_scene_meshes(sim: MjSim) -> dict[str, Any]:
@@ -636,56 +676,7 @@ def get_scene_meshes(sim: MjSim) -> dict[str, Any]:
         Mapping from ``"<mesh_or_geom_name>_geomN"`` to an untransformed
         :class:`trimesh.Trimesh` in the geom's local coordinate frame.
     """
-    _require_trimesh()
-    model = sim.model.mj_model
-    meshes: dict[str, Any] = {}
-
-    for geom_id in range(model.ngeom):
-        gtype = model.geom_type[geom_id]
-        if gtype not in _MESH_GEOM_TYPES:
-            continue
-
-        if gtype == mujoco.mjtGeom.mjGEOM_MESH:  # pylint: disable=no-member
-            mesh_id = model.geom_dataid[geom_id]
-            if mesh_id < 0:
-                continue
-            raw_name = mujoco.mj_id2name(  # pylint: disable=no-member
-                model,
-                int(mujoco.mjtObj.mjOBJ_MESH),  # pylint: disable=no-member
-                mesh_id,
-            )
-            name = (raw_name or f"mesh{mesh_id}") + f"_geom{geom_id}"
-            import trimesh as _trimesh  # pylint: disable=import-outside-toplevel
-
-            mesh = _trimesh.Trimesh(
-                vertices=model.mesh_vert[
-                    model.mesh_vertadr[mesh_id] : model.mesh_vertadr[mesh_id]
-                    + model.mesh_vertnum[mesh_id]
-                ],
-                faces=model.mesh_face[
-                    model.mesh_faceadr[mesh_id] : model.mesh_faceadr[mesh_id]
-                    + model.mesh_facenum[mesh_id]
-                ],
-            )
-        else:
-            raw_name = mujoco.mj_id2name(  # pylint: disable=no-member
-                model,
-                int(mujoco.mjtObj.mjOBJ_GEOM),  # pylint: disable=no-member
-                geom_id,
-            )
-            name = (raw_name or f"geom{geom_id}") + f"_geom{geom_id}"
-            if gtype == mujoco.mjtGeom.mjGEOM_BOX:  # pylint: disable=no-member
-                mesh = _make_box_mesh(model, geom_id)
-            elif gtype == mujoco.mjtGeom.mjGEOM_CYLINDER:  # pylint: disable=no-member
-                mesh = _make_cylinder_mesh(model, geom_id)
-            elif gtype == mujoco.mjtGeom.mjGEOM_SPHERE:  # pylint: disable=no-member
-                mesh = _make_sphere_mesh(model, geom_id)
-            else:  # CAPSULE
-                mesh = _make_capsule_mesh(model, geom_id)
-
-        meshes[name] = mesh
-
-    return meshes
+    return {name: mesh for _, name, mesh in _get_scene_geoms(sim)}
 
 
 def generate_full_point_cloud(
@@ -713,20 +704,16 @@ def generate_full_point_cloud(
     Returns:
         A :class:`MeshPointCloud` with world-frame XYZ positions.
     """
-    _require_trimesh()
     model = sim.model.mj_model
     data = sim.data.mj_data
 
-    base_meshes = get_scene_meshes(sim)
+    scene_geoms = _get_scene_geoms(sim)
 
     all_xyz: list[NDArray[np.float32]] = []
     all_idx: list[NDArray[np.int32]] = []
     geom_names: list[str] = []
 
-    for local_idx, (name, mesh) in enumerate(base_meshes.items()):
-        # Find the geom_id encoded in the name suffix
-        geom_id = int(name.rsplit("_geom", 1)[1])
-
+    for local_idx, (geom_id, name, mesh) in enumerate(scene_geoms):
         body_id = int(model.geom_bodyid[geom_id])
         body_pos = data.xpos[body_id]
         body_mat = data.xmat[body_id].reshape(3, 3)
@@ -734,7 +721,7 @@ def generate_full_point_cloud(
         body_transform[:3, :3] = body_mat
         body_transform[:3, 3] = body_pos
 
-        local_transform = _transform_from_pos_quat(
+        local_transform = _quat_to_mat4(
             model.geom_pos[geom_id], model.geom_quat[geom_id]
         )
         world_transform = body_transform @ local_transform

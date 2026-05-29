@@ -439,7 +439,6 @@ def _write_step(
     *,
     store_camera: bool = True,
     store_mesh: bool = False,
-    mesh_pc_size: int = 0,
 ) -> None:
     """Write one step's data into pre-allocated HDF5 datasets.
 
@@ -461,12 +460,8 @@ def _write_step(
             obs_grp[f"{cam_name}_pc_rgb"][step_idx] = rgb
 
     if store_mesh:
-        xyz_m = capture["mesh_pc_xyz"]
-        idx_m = capture["mesh_pc_geom_indices"]
-        if len(xyz_m) != mesh_pc_size:
-            xyz_m, idx_m = _pad_or_subsample_mesh(xyz_m, idx_m, mesh_pc_size, rng)
-        obs_grp["mesh_pc_xyz"][step_idx] = xyz_m
-        obs_grp["mesh_pc_geom_indices"][step_idx] = idx_m
+        obs_grp["mesh_pc_xyz"][step_idx] = capture["mesh_pc_xyz"]
+        obs_grp["mesh_pc_geom_indices"][step_idx] = capture["mesh_pc_geom_indices"]
 
 
 # ---------------------------------------------------------------------------
@@ -549,9 +544,6 @@ def _process_demo(
         {cam: len(capture0[f"{cam}_pc_xyz"]) for cam in camera_names}
         if store_camera else {}
     )
-    mesh_pc_size: int = (
-        len(capture0["mesh_pc_xyz"]) if store_mesh else 0
-    )
 
     _create_datasets(
         grp, obs_grp, capture0, obs_np, actions, camera_names, num_frames,
@@ -562,7 +554,6 @@ def _process_demo(
         grp, obs_grp, 0, obs_np, actions[0], capture0, camera_names, cam_sizes, rng,
         store_camera=store_camera,
         store_mesh=store_mesh,
-        mesh_pc_size=mesh_pc_size,
     )
 
     # Step through remaining actions
@@ -587,7 +578,6 @@ def _process_demo(
             rng,
             store_camera=store_camera,
             store_mesh=store_mesh,
-            mesh_pc_size=mesh_pc_size,
         )
 
     # Final step: execute last action to get terminal observation

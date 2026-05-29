@@ -164,6 +164,28 @@ def _parse_args() -> argparse.Namespace:
             "Points are coloured by geom index."
         ),
     )
+    p.add_argument(
+        "--trackpointcloud",
+        action="store_true",
+        help=(
+            "Visualise the tracked point cloud stored in obs/track_pc_xyz. "
+            "All geoms are coloured by geom index. Use --track-geom to "
+            "highlight a specific geom with fixed per-point HSV colours that "
+            "stay on the same surface location across timesteps."
+        ),
+    )
+    p.add_argument(
+        "--track-geom",
+        type=int,
+        nargs="+",
+        default=None,
+        metavar="N",
+        help=(
+            "One or more geom indices to highlight in --trackpointcloud mode. "
+            "Selected geoms are coloured with fixed per-point HSV colours; "
+            "all other geoms are shown in grey."
+        ),
+    )
     return p.parse_args()
 
 
@@ -278,6 +300,73 @@ def _load_mesh_step(
     return xyz, colors
 
 
+def _load_track_step(
+    obs_grp: h5py.Group,
+    step: int,
+    point_colors: NDArray[np.float64] | None,
+    max_pts: int,
+    rng: np.random.Generator,
+    track_geom: list[int] | None = None,
+) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.float64]]:
+    """Load the tracked point cloud for *step* with fixed per-point colours.
+
+    On the first call (``point_colors=None``) assigns each point a colour based
+    on its index using the HSV colormap — this colour never changes, so the
+    same surface location always appears in the same colour.
+
+    Without ``track_geom``: all points are coloured by geom index (tab20).
+    With ``track_geom``: the selected geoms use fixed per-point HSV colours;
+    all other geoms are rendered in grey as background context.
+
+    Returns:
+        xyz          : (N, 3) float64 world-frame positions
+        colors       : (N, 3) float64 RGB in [0, 1]
+        point_colors : fixed HSV palette to pass back on the next call
+    """
+    raw_xyz: NDArray[np.float32] = obs_grp["track_pc_xyz"][step]
+    raw_idx: NDArray[np.int32] = obs_grp["track_pc_geom_indices"][step]
+
+    # Build per-point HSV palette once from the full cloud size
+    if point_colors is None:
+        n_total = raw_xyz.shape[0]
+        point_colors = plt.get_cmap("hsv")(np.linspace(0, 1, n_total, endpoint=False))[
+            :, :3
+        ].astype(np.float64)
+
+    valid = np.isfinite(raw_xyz).all(axis=1) & (raw_idx >= 0)
+
+    if track_geom is None:
+        # All geoms coloured by geom index
+        sel = np.where(valid)[0]
+        xyz = raw_xyz[sel].astype(np.float64)
+        colors: NDArray[np.float64] = plt.get_cmap("tab20")(raw_idx[sel] % 20)[
+            :, :3
+        ].astype(np.float64)
+    else:
+        # Background: all non-highlighted geoms in grey
+        highlight_mask = np.isin(raw_idx, track_geom)
+        bg_sel = np.where(valid & ~highlight_mask)[0]
+        obj_sel = np.where(valid & highlight_mask)[0]
+
+        bg_xyz = raw_xyz[bg_sel].astype(np.float64)
+        bg_colors = np.full((len(bg_xyz), 3), 0.35, dtype=np.float64)
+
+        # Foreground: fixed per-point HSV colours for the highlighted geoms
+        obj_xyz = raw_xyz[obj_sel].astype(np.float64)
+        obj_colors = point_colors[obj_sel]
+
+        xyz = np.concatenate([bg_xyz, obj_xyz], axis=0)
+        colors = np.concatenate([bg_colors, obj_colors], axis=0)
+
+    n = len(xyz)
+    if n > max_pts:
+        idx = rng.choice(n, max_pts, replace=False)
+        xyz = xyz[idx]
+        colors = colors[idx]
+
+    return xyz, colors, point_colors
+
+
 # ---------------------------------------------------------------------------
 # Open3D helpers
 # ---------------------------------------------------------------------------
@@ -379,11 +468,18 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
         num_frames: int = int(demo_grp.attrs["num_frames"])
         seed: Any = demo_grp.attrs.get("seed", "?")
 
-        # ---- Validate mesh dataset when requested -------------------------
+        # ---- Validate mesh/track datasets when requested ------------------
         if args.completepointcloud and "mesh_pc_xyz" not in obs_grp:
             print(
                 "Error: mesh_pc_xyz not found in this demo. "
                 "Re-generate the HDF5 with --completepointcloud or --allpointcloud.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        if args.trackpointcloud and "track_pc_xyz" not in obs_grp:
+            print(
+                "Error: track_pc_xyz not found in this demo. "
+                "Re-generate the HDF5 with --trackpointcloud.",
                 file=sys.stderr,
             )
             sys.exit(1)
@@ -403,11 +499,19 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
         else:
             cameras = available_cams
 
-        if not cameras and not args.completepointcloud:
+        if not cameras and not args.completepointcloud and not args.trackpointcloud:
             print("Error: no camera data found.", file=sys.stderr)
             sys.exit(1)
 
-        mode_label = "mesh PC" if args.completepointcloud else "camera PC"
+        if args.trackpointcloud:
+            if args.track_geom is not None:
+                mode_label = f"track PC (geoms {args.track_geom} highlighted)"
+            else:
+                mode_label = "track PC"
+        elif args.completepointcloud:
+            mode_label = "mesh PC"
+        else:
+            mode_label = "camera PC"
         title_prefix = f"Demo {args.demo} (seed={seed})  |  [{mode_label}]  |  " + (
             ", ".join(cameras) + "  |  " if cameras else ""
         )
@@ -419,8 +523,21 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
 
         start_step = min(max(args.step, 0), num_frames - 1)
 
+        # Mutable container so _load_pc can update point_colors before state exists
+        _pc_colors: list[NDArray[np.float64] | None] = [None]
+
         def _load_pc(step: int) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
             """Return (xyz, colors) for the active point-cloud mode."""
+            if args.trackpointcloud:
+                xyz, colors, _pc_colors[0] = _load_track_step(
+                    obs_grp,
+                    step,
+                    _pc_colors[0],
+                    args.max_pts,
+                    rng,
+                    track_geom=args.track_geom,
+                )
+                return xyz, colors
             if args.completepointcloud:
                 return _load_mesh_step(obs_grp, step, args.max_pts, rng)
             _, xyz, rgb_f = _load_step(obs_grp, step, cameras, args.max_pts, rng)

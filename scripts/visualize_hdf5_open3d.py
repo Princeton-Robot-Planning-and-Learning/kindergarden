@@ -408,9 +408,8 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
             sys.exit(1)
 
         mode_label = "mesh PC" if args.completepointcloud else "camera PC"
-        title_prefix = (
-            f"Demo {args.demo} (seed={seed})  |  [{mode_label}]  |  "
-            + (", ".join(cameras) + "  |  " if cameras else "")
+        title_prefix = f"Demo {args.demo} (seed={seed})  |  [{mode_label}]  |  " + (
+            ", ".join(cameras) + "  |  " if cameras else ""
         )
         print(
             f"Demo {args.demo}: {num_frames} frames, seed={seed}, "

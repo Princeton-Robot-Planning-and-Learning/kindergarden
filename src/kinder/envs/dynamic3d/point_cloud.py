@@ -761,6 +761,85 @@ def generate_full_point_cloud(
     )
 
 
+def generate_track_point_cloud(
+    sim: MjSim,
+    local_points_dict: dict[str, NDArray[np.float32]] | None,
+    *,
+    num_points_per_geom: int = 500,
+) -> tuple[MeshPointCloud, dict[str, NDArray[np.float32]]]:
+    """Generate a tracked world-frame point cloud with fixed point identity.
+
+    On the first call (``local_points_dict=None``) samples surface points from
+    every geom in local coordinates and stores them.  On every subsequent call
+    the *same* local points are re-transformed to their current world positions,
+    so point index ``i`` always refers to the same surface location across
+    timesteps.
+
+    Args:
+        sim: A ``kinder`` :class:`MjSim` instance (already reset and forwarded).
+        local_points_dict: ``None`` on the first call; the dict returned by a
+            previous call on subsequent calls.
+        num_points_per_geom: Number of surface points to sample from each geom
+            mesh (only used on the first call).
+
+    Returns:
+        ``(MeshPointCloud, local_points_dict)`` — pass ``local_points_dict``
+        back on the next call to maintain correspondence.
+    """
+    _require_trimesh()
+    model = sim.model.mj_model
+    data = sim.data.mj_data
+
+    if local_points_dict is None:
+        base_meshes = get_scene_meshes(sim)
+        local_points_dict = {
+            name: mesh.sample(num_points_per_geom).astype(np.float32)
+            for name, mesh in base_meshes.items()
+        }
+
+    all_xyz: list[NDArray[np.float32]] = []
+    all_idx: list[NDArray[np.int32]] = []
+    geom_names: list[str] = []
+
+    for local_idx, (name, local_pts) in enumerate(local_points_dict.items()):
+        geom_id = int(name.rsplit("_geom", 1)[1])
+
+        body_id = int(model.geom_bodyid[geom_id])
+        body_transform = np.eye(4)
+        body_transform[:3, :3] = data.xmat[body_id].reshape(3, 3)
+        body_transform[:3, 3] = data.xpos[body_id]
+
+        world_transform = body_transform @ _transform_from_pos_quat(
+            model.geom_pos[geom_id], model.geom_quat[geom_id]
+        )
+
+        pts_h = np.hstack([local_pts, np.ones((len(local_pts), 1))])
+        xyz = (pts_h @ world_transform.T)[:, :3].astype(np.float32)
+
+        all_xyz.append(xyz)
+        all_idx.append(np.full(len(xyz), local_idx, dtype=np.int32))
+        geom_names.append(name)
+
+    if not all_xyz:
+        return (
+            MeshPointCloud(
+                xyz=np.empty((0, 3), dtype=np.float32),
+                geom_indices=np.empty((0,), dtype=np.int32),
+                geom_names=[],
+            ),
+            local_points_dict,
+        )
+
+    return (
+        MeshPointCloud(
+            xyz=np.concatenate(all_xyz, axis=0),
+            geom_indices=np.concatenate(all_idx, axis=0),
+            geom_names=geom_names,
+        ),
+        local_points_dict,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Convenience: extract sim from a wrapped kinder env
 # ---------------------------------------------------------------------------

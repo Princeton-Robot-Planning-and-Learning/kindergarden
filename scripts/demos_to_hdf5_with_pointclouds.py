@@ -68,6 +68,7 @@ from kinder.envs.dynamic3d.point_cloud import (
     PointCloud,
     generate_full_point_cloud,
     generate_scene_point_cloud,
+    generate_track_point_cloud,
     get_sim_from_env,
 )
 from kinder.utils import load_demo
@@ -169,6 +170,17 @@ def _parse_args() -> argparse.Namespace:
         help=(
             "Store both camera point clouds (existing behaviour) and mesh "
             "point clouds (obs/mesh_pc_xyz and obs/mesh_pc_geom_indices)."
+        ),
+    )
+    p.add_argument(
+        "--trackpointcloud",
+        action="store_true",
+        help=(
+            "Store tracked point clouds with fixed point identity across "
+            "timesteps (obs/track_pc_xyz and obs/track_pc_geom_indices). "
+            "Points are sampled once after env.reset() in local coordinates "
+            "and re-transformed each step. Combinable with "
+            "--completepointcloud and --allpointcloud."
         ),
     )
     p.add_argument(
@@ -296,11 +308,14 @@ def _capture_step(
     *,
     store_camera: bool = True,
     store_mesh: bool = False,
+    store_track: bool = False,
     num_points_per_geom: int = 500,
-) -> dict[str, Any]:
+    local_points_dict: dict[str, NDArray[np.float32]] | None = None,
+) -> tuple[dict[str, Any], dict[str, NDArray[np.float32]] | None]:
     """Capture RGB images and/or point clouds at the current env state.
 
-    Returns a dict whose keys depend on the active flags:
+    Returns ``(result, local_points_dict)`` where ``local_points_dict`` must
+    be passed back on the next call when ``store_track=True``.
 
     Camera mode (``store_camera=True``):
     - ``"{cam}_rgb"``    → (H, W, 3) uint8
@@ -308,8 +323,12 @@ def _capture_step(
     - ``"{cam}_pc_rgb"`` → (N, 3) or (max_pts, 3) uint8
 
     Mesh mode (``store_mesh=True``):
-    - ``"mesh_pc_xyz"``         → (M, 3) or (max_pts, 3) float32
-    - ``"mesh_pc_geom_indices"``→ (M,)  or (max_pts,)  int32
+    - ``"mesh_pc_xyz"``          → (M, 3) or (max_pts, 3) float32
+    - ``"mesh_pc_geom_indices"`` → (M,)  or (max_pts,)  int32
+
+    Track mode (``store_track=True``):
+    - ``"track_pc_xyz"``          → (M, 3) or (max_pts, 3) float32
+    - ``"track_pc_geom_indices"`` → (M,)  or (max_pts,)  int32
     """
     sim = get_sim_from_env(env)
     result: dict[str, Any] = {}
@@ -347,7 +366,18 @@ def _capture_step(
         result["mesh_pc_xyz"] = xyz_m
         result["mesh_pc_geom_indices"] = idx_m
 
-    return result
+    if store_track:
+        track_pc, local_points_dict = generate_track_point_cloud(
+            sim, local_points_dict, num_points_per_geom=num_points_per_geom
+        )
+        xyz_t = track_pc.xyz
+        idx_t = track_pc.geom_indices
+        if max_pts is not None:
+            xyz_t, idx_t = _pad_or_subsample_mesh(xyz_t, idx_t, max_pts, rng)
+        result["track_pc_xyz"] = xyz_t
+        result["track_pc_geom_indices"] = idx_t
+
+    return result, local_points_dict
 
 
 # ---------------------------------------------------------------------------
@@ -366,6 +396,7 @@ def _create_datasets(
     *,
     store_camera: bool = True,
     store_mesh: bool = False,
+    store_track: bool = False,
 ) -> None:
     """Pre-allocate HDF5 datasets for one demo group."""
     act_arr = np.array(actions, dtype=np.float32)
@@ -425,6 +456,22 @@ def _create_datasets(
             compression="gzip",
         )
 
+    if store_track:
+        track_xyz = first_step["track_pc_xyz"]
+        obs_grp.create_dataset(
+            "track_pc_xyz",
+            shape=(num_frames, *track_xyz.shape),
+            dtype=np.float32,
+            compression="gzip",
+        )
+        track_idx = first_step["track_pc_geom_indices"]
+        obs_grp.create_dataset(
+            "track_pc_geom_indices",
+            shape=(num_frames, *track_idx.shape),
+            dtype=np.int32,
+            compression="gzip",
+        )
+
 
 def _write_step(
     grp: h5py.Group,
@@ -440,6 +487,8 @@ def _write_step(
     store_camera: bool = True,
     store_mesh: bool = False,
     mesh_pc_size: int = 0,
+    store_track: bool = False,
+    track_pc_size: int = 0,
 ) -> None:
     """Write one step's data into pre-allocated HDF5 datasets.
 
@@ -468,6 +517,14 @@ def _write_step(
         obs_grp["mesh_pc_xyz"][step_idx] = xyz_m
         obs_grp["mesh_pc_geom_indices"][step_idx] = idx_m
 
+    if store_track:
+        xyz_t = capture["track_pc_xyz"]
+        idx_t = capture["track_pc_geom_indices"]
+        if len(xyz_t) != track_pc_size:
+            xyz_t, idx_t = _pad_or_subsample_mesh(xyz_t, idx_t, track_pc_size, rng)
+        obs_grp["track_pc_xyz"][step_idx] = xyz_t
+        obs_grp["track_pc_geom_indices"][step_idx] = idx_t
+
 
 # ---------------------------------------------------------------------------
 # Main replay loop
@@ -489,6 +546,7 @@ def _process_demo(
     *,
     store_camera: bool = True,
     store_mesh: bool = False,
+    store_track: bool = False,
     num_points_per_geom: int = 500,
 ) -> tuple[gymnasium.Env, list[str], int]:
     """Replay one demo and write it to HDF5.
@@ -539,41 +597,79 @@ def _process_demo(
     obs_grp = grp.require_group("obs")
 
     # Capture step 0 to pin array sizes for the rest of the demo.
-    capture0 = _capture_step(
-        env, camera_names, width, height, max_depth, min_depth, max_pts, rng,
+    # local_points_dict starts as None; generate_track_point_cloud populates it
+    # on the first call so the same surface points are re-used every step.
+    local_points_dict: dict[str, NDArray[np.float32]] | None = None
+    capture0, local_points_dict = _capture_step(
+        env,
+        camera_names,
+        width,
+        height,
+        max_depth,
+        min_depth,
+        max_pts,
+        rng,
         store_camera=store_camera,
         store_mesh=store_mesh,
+        store_track=store_track,
         num_points_per_geom=num_points_per_geom,
+        local_points_dict=local_points_dict,
     )
     cam_sizes: dict[str, int] = (
         {cam: len(capture0[f"{cam}_pc_xyz"]) for cam in camera_names}
-        if store_camera else {}
+        if store_camera
+        else {}
     )
-    mesh_pc_size: int = (
-        len(capture0["mesh_pc_xyz"]) if store_mesh else 0
-    )
+    mesh_pc_size: int = len(capture0["mesh_pc_xyz"]) if store_mesh else 0
+    track_pc_size: int = len(capture0["track_pc_xyz"]) if store_track else 0
 
     _create_datasets(
-        grp, obs_grp, capture0, obs_np, actions, camera_names, num_frames,
+        grp,
+        obs_grp,
+        capture0,
+        obs_np,
+        actions,
+        camera_names,
+        num_frames,
         store_camera=store_camera,
         store_mesh=store_mesh,
+        store_track=store_track,
     )
     _write_step(
-        grp, obs_grp, 0, obs_np, actions[0], capture0, camera_names, cam_sizes, rng,
+        grp,
+        obs_grp,
+        0,
+        obs_np,
+        actions[0],
+        capture0,
+        camera_names,
+        cam_sizes,
+        rng,
         store_camera=store_camera,
         store_mesh=store_mesh,
         mesh_pc_size=mesh_pc_size,
+        store_track=store_track,
+        track_pc_size=track_pc_size,
     )
 
     # Step through remaining actions
     for step_idx in range(1, num_frames):
         obs_np, _reward, _term, _trunc, _ = env.step(actions[step_idx - 1])
 
-        capture = _capture_step(
-            env, camera_names, width, height, max_depth, min_depth, max_pts, rng,
+        capture, local_points_dict = _capture_step(
+            env,
+            camera_names,
+            width,
+            height,
+            max_depth,
+            min_depth,
+            max_pts,
+            rng,
             store_camera=store_camera,
             store_mesh=store_mesh,
+            store_track=store_track,
             num_points_per_geom=num_points_per_geom,
+            local_points_dict=local_points_dict,
         )
         _write_step(
             grp,
@@ -588,6 +684,8 @@ def _process_demo(
             store_camera=store_camera,
             store_mesh=store_mesh,
             mesh_pc_size=mesh_pc_size,
+            store_track=store_track,
+            track_pc_size=track_pc_size,
         )
 
     # Final step: execute last action to get terminal observation
@@ -608,12 +706,15 @@ def main() -> None:
 
     store_camera = not args.completepointcloud
     store_mesh = args.completepointcloud or args.allpointcloud
+    store_track = args.trackpointcloud
 
     mode_label = (
-        "camera + mesh" if args.allpointcloud
-        else "mesh only" if args.completepointcloud
-        else "camera only"
+        "camera + mesh"
+        if args.allpointcloud
+        else "mesh only" if args.completepointcloud else "camera only"
     )
+    if store_track:
+        mode_label += " + track"
     print(f"Found {len(demo_files)} demo(s) in {args.demo_dir}")
     print(f"Output: {args.output}  |  mode: {mode_label}")
 
@@ -647,6 +748,7 @@ def main() -> None:
                     rng=rng,
                     store_camera=store_camera,
                     store_mesh=store_mesh,
+                    store_track=store_track,
                     num_points_per_geom=args.num_points_per_geom,
                 )
                 total_frames += nf

@@ -68,13 +68,14 @@ def test_packing3d_goal():
     assert triangle_type == 1
 
     triangle_vertices = get_triangle_vertices("right", (side_a, side_b))
-    centroid_x = sum(v[0] for v in triangle_vertices) / 3.0
-    centroid_y = sum(v[1] for v in triangle_vertices) / 3.0
     part_x = rack_pose.position[0] - rack_half_extents[0]
     part_y = rack_pose.position[1] - side_b / 2
 
-    obs.set(part, "pose_x", part_x - centroid_x)
-    obs.set(part, "pose_y", part_y - centroid_y)
+    # set_state() restores triangle pose fields as raw PyBullet body poses.
+    # Subtracting the centroid here would encode the old get_object_pose()
+    # restoration behavior and place the true triangle footprint outside the rack.
+    obs.set(part, "pose_x", part_x)
+    obs.set(part, "pose_y", part_y)
     obs.set(part, "pose_z", rack_pose.position[2])
     obs.set(part, "pose_qx", 0.0)
     obs.set(part, "pose_qy", 0.0)

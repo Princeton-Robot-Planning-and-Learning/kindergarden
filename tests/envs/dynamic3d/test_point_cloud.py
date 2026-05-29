@@ -13,11 +13,15 @@ import pytest
 
 from kinder.envs.dynamic3d.envs import ObjectCentricTidyBot3DEnv
 from kinder.envs.dynamic3d.point_cloud import (
+    MeshPointCloud,
     PointCloud,
     depth_buffer_to_metric,
+    generate_full_point_cloud,
+    generate_point_cloud,
     generate_scene_point_cloud,
     get_camera_extrinsics,
     get_camera_intrinsics,
+    get_scene_meshes,
     get_sim_from_env,
     rgbd_to_point_cloud,
 )
@@ -329,7 +333,10 @@ def test_visualize_point_cloud(sim, request):
     # pylint: disable=import-outside-toplevel,unused-import
     import matplotlib.pyplot as plt
     import mujoco  # type: ignore[import-untyped]
-    from mpl_toolkits.mplot3d import Axes3D  # type: ignore[import-untyped]  # noqa: F401
+    from mpl_toolkits.mplot3d import (  # type: ignore[import-untyped]  # noqa: F401
+        Axes3D,
+    )
+
     # pylint: enable=import-outside-toplevel,unused-import
 
     mj_model = sim.model.mj_model
@@ -413,6 +420,170 @@ def test_visualize_point_cloud(sim, request):
     fig_3d.tight_layout()
 
     plt.show()
+
+
+# ---------------------------------------------------------------------------
+# generate_point_cloud dispatcher
+# ---------------------------------------------------------------------------
+
+
+def test_generate_point_cloud_default_returns_point_cloud(sim):
+    """generate_point_cloud() with no method arg defaults to 'camera' mode."""
+    result = generate_point_cloud(sim, width=64, height=48)
+    assert isinstance(result, PointCloud)
+
+
+def test_generate_point_cloud_camera_returns_point_cloud(sim):
+    """generate_point_cloud(method='camera') returns a PointCloud."""
+    result = generate_point_cloud(sim, method="camera", width=64, height=48)
+    assert isinstance(result, PointCloud)
+
+
+def test_generate_point_cloud_mesh_returns_mesh_point_cloud(sim):
+    """generate_point_cloud(method='mesh') returns a MeshPointCloud."""
+    result = generate_point_cloud(sim, method="mesh", num_points_per_geom=10)
+    assert isinstance(result, MeshPointCloud)
+
+
+def test_generate_point_cloud_invalid_method_raises(sim):
+    """Unknown method raises ValueError."""
+    with pytest.raises(ValueError, match="Unknown method"):
+        generate_point_cloud(sim, method="lidar")  # type: ignore[arg-type]
+
+
+# ---------------------------------------------------------------------------
+# get_scene_meshes
+# ---------------------------------------------------------------------------
+
+
+def test_get_scene_meshes_returns_dict(sim):
+    """get_scene_meshes returns a non-empty dict."""
+    meshes = get_scene_meshes(sim)
+    assert isinstance(meshes, dict)
+    assert len(meshes) > 0
+
+
+def test_get_scene_meshes_keys_have_geom_suffix(sim):
+    """All mesh keys end with '_geomN'."""
+    meshes = get_scene_meshes(sim)
+    for name in meshes:
+        parts = name.rsplit("_geom", 1)
+        assert (
+            len(parts) == 2 and parts[1].isdigit()
+        ), f"Key '{name}' does not have the expected '_geomN' suffix"
+
+
+def test_get_scene_meshes_trimesh_objects(sim):
+    """Each value is a trimesh.Trimesh with vertices and faces."""
+    import trimesh  # pylint: disable=import-outside-toplevel
+
+    meshes = get_scene_meshes(sim)
+    for mesh in meshes.values():
+        assert isinstance(mesh, trimesh.Trimesh)
+        assert mesh.vertices.shape[1] == 3
+        assert mesh.faces.shape[1] == 3
+
+
+# ---------------------------------------------------------------------------
+# generate_full_point_cloud
+# ---------------------------------------------------------------------------
+
+
+def test_generate_full_point_cloud_returns_mesh_point_cloud(sim):
+    """generate_full_point_cloud returns a MeshPointCloud."""
+    mpc = generate_full_point_cloud(sim, num_points_per_geom=10)
+    assert isinstance(mpc, MeshPointCloud)
+
+
+def test_generate_full_point_cloud_nonempty(sim):
+    """generate_full_point_cloud has at least one point."""
+    mpc = generate_full_point_cloud(sim, num_points_per_geom=10)
+    assert len(mpc) > 0
+
+
+def test_generate_full_point_cloud_array_shapes(sim):
+    """xyz and geom_indices have consistent leading dimensions."""
+    mpc = generate_full_point_cloud(sim, num_points_per_geom=10)
+    n = len(mpc)
+    assert mpc.xyz.shape == (n, 3)
+    assert mpc.geom_indices.shape == (n,)
+
+
+def test_generate_full_point_cloud_dtypes(sim):
+    """xyz is float32 and geom_indices is int32."""
+    mpc = generate_full_point_cloud(sim, num_points_per_geom=10)
+    assert mpc.xyz.dtype == np.float32
+    assert mpc.geom_indices.dtype == np.int32
+
+
+def test_generate_full_point_cloud_geom_indices_valid(sim):
+    """geom_indices are valid indices into geom_names."""
+    mpc = generate_full_point_cloud(sim, num_points_per_geom=10)
+    assert mpc.geom_indices.min() >= 0
+    assert mpc.geom_indices.max() < len(mpc.geom_names)
+
+
+def test_generate_full_point_cloud_geom_names_populated(sim):
+    """geom_names is non-empty."""
+    mpc = generate_full_point_cloud(sim, num_points_per_geom=10)
+    assert len(mpc.geom_names) > 0
+
+
+def test_generate_full_point_cloud_points_per_geom(sim):
+    """Total points equals num_points_per_geom * number of geoms."""
+    n = 7
+    mpc = generate_full_point_cloud(sim, num_points_per_geom=n)
+    assert len(mpc) == n * len(mpc.geom_names)
+
+
+# ---------------------------------------------------------------------------
+# MeshPointCloud methods
+# ---------------------------------------------------------------------------
+
+
+def test_mesh_point_cloud_filter_by_geom(sim):
+    """filter_by_geom returns only points from the requested geom."""
+    mpc = generate_full_point_cloud(sim, num_points_per_geom=10)
+    geom = mpc.geom_names[0]
+    sub = mpc.filter_by_geom(geom)
+    assert sub.geom_names == [geom]
+    assert len(sub) > 0
+    assert np.all(sub.geom_indices == 0)
+
+
+def test_mesh_point_cloud_filter_by_geom_non_first(sim):
+    """filter_by_geom on a non-first geom re-indexes geom_indices to 0."""
+    mpc = generate_full_point_cloud(sim, num_points_per_geom=10)
+    if len(mpc.geom_names) < 2:
+        pytest.skip("Need at least 2 geoms for this test")
+    geom = mpc.geom_names[1]
+    sub = mpc.filter_by_geom(geom)
+    assert sub.geom_names == [geom]
+    assert len(sub) > 0
+    assert np.all(sub.geom_indices == 0)
+
+
+def test_mesh_point_cloud_filter_by_geom_unknown_raises(sim):
+    """filter_by_geom raises ValueError for an unknown geom name."""
+    mpc = generate_full_point_cloud(sim, num_points_per_geom=10)
+    with pytest.raises(ValueError, match="not in point cloud"):
+        mpc.filter_by_geom("no_such_geom")
+
+
+def test_mesh_point_cloud_to_dict(sim):
+    """to_dict contains xyz, geom_indices, and geom_names keys."""
+    mpc = generate_full_point_cloud(sim, num_points_per_geom=10)
+    d = mpc.to_dict()
+    assert set(d.keys()) == {"xyz", "geom_indices", "geom_names"}
+    np.testing.assert_array_equal(d["xyz"], mpc.xyz)
+    np.testing.assert_array_equal(d["geom_indices"], mpc.geom_indices)
+    np.testing.assert_array_equal(d["geom_names"], np.array(mpc.geom_names))
+
+
+def test_mesh_point_cloud_len(sim):
+    """len(mpc) matches the first dimension of xyz."""
+    mpc = generate_full_point_cloud(sim, num_points_per_geom=10)
+    assert len(mpc) == mpc.xyz.shape[0]
 
 
 def test_save_point_cloud(sim, request):

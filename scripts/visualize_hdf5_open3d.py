@@ -154,6 +154,16 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="Print available demos and cameras then exit",
     )
+    p.add_argument(
+        "--completepointcloud",
+        action="store_true",
+        help=(
+            "Visualise the mesh-based point cloud stored in obs/mesh_pc_xyz "
+            "and obs/mesh_pc_geom_indices (written by --completepointcloud or "
+            "--allpointcloud in demos_to_hdf5_with_pointclouds.py). "
+            "Points are coloured by geom index."
+        ),
+    )
     return p.parse_args()
 
 
@@ -235,6 +245,37 @@ def _load_step(
         merged_rgb = merged_rgb[idx]
 
     return rgb_imgs, merged_xyz, merged_rgb
+
+
+def _load_mesh_step(
+    obs_grp: h5py.Group,
+    step: int,
+    max_pts: int,
+    rng: np.random.Generator,
+) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+    """Load the mesh-based point cloud for *step*, colouring by geom index.
+
+    Returns:
+        xyz    : (N, 3) float64 world-frame positions (NaN rows stripped)
+        colors : (N, 3) float64 RGB in [0, 1], one colour per unique geom
+    """
+    raw_xyz: NDArray[np.float32] = obs_grp["mesh_pc_xyz"][step]
+    raw_idx: NDArray[np.int32] = obs_grp["mesh_pc_geom_indices"][step]
+
+    valid = np.isfinite(raw_xyz).all(axis=1) & (raw_idx >= 0)
+    xyz = raw_xyz[valid].astype(np.float64)
+    geom_idx = raw_idx[valid]
+
+    n = len(xyz)
+    if n > max_pts:
+        sel = rng.choice(n, max_pts, replace=False)
+        xyz = xyz[sel]
+        geom_idx = geom_idx[sel]
+
+    # Colour each geom with a distinct hue using tab20 (cycles every 20 geoms)
+    cmap = plt.get_cmap("tab20")
+    colors: NDArray[np.float64] = cmap(geom_idx % 20)[:, :3]
+    return xyz, colors
 
 
 # ---------------------------------------------------------------------------
@@ -338,6 +379,16 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
         num_frames: int = int(demo_grp.attrs["num_frames"])
         seed: Any = demo_grp.attrs.get("seed", "?")
 
+        # ---- Validate mesh dataset when requested -------------------------
+        if args.completepointcloud and "mesh_pc_xyz" not in obs_grp:
+            print(
+                "Error: mesh_pc_xyz not found in this demo. "
+                "Re-generate the HDF5 with --completepointcloud or --allpointcloud.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+        # ---- Resolve cameras (still used for the RGB panel) ---------------
         available_cams = _list_cameras(obs_grp)
         if args.cameras:
             missing = [c for c in args.cameras if c not in available_cams]
@@ -352,25 +403,40 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
         else:
             cameras = available_cams
 
-        if not cameras:
+        if not cameras and not args.completepointcloud:
             print("Error: no camera data found.", file=sys.stderr)
             sys.exit(1)
 
+        mode_label = "mesh PC" if args.completepointcloud else "camera PC"
         title_prefix = (
-            f"Demo {args.demo} (seed={seed})  |  " f"{', '.join(cameras)}  |  "
+            f"Demo {args.demo} (seed={seed})  |  [{mode_label}]  |  "
+            + (", ".join(cameras) + "  |  " if cameras else "")
         )
         print(
-            f"Demo {args.demo}: {num_frames} frames, seed={seed}, " f"cameras={cameras}"
+            f"Demo {args.demo}: {num_frames} frames, seed={seed}, "
+            f"cameras={cameras}, mode={mode_label}"
         )
         print("  Keys: Right/N = next  Left/P = prev  R = reset  Q = quit")
 
         start_step = min(max(args.step, 0), num_frames - 1)
 
-        # ---- Matplotlib RGB window ----------------------------------------
+        def _load_pc(step: int) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+            """Return (xyz, colors) for the active point-cloud mode."""
+            if args.completepointcloud:
+                return _load_mesh_step(obs_grp, step, args.max_pts, rng)
+            _, xyz, rgb_f = _load_step(obs_grp, step, cameras, args.max_pts, rng)
+            return xyz, rgb_f
+
+        # ---- Matplotlib RGB window (only when camera data is available) ----
         plt.ion()
-        rgb_fig, rgb_axes = _build_rgb_figure(cameras)
+        rgb_fig: plt.Figure | None = None
+        rgb_axes: list[plt.Axes] = []
+        if cameras:
+            rgb_fig, rgb_axes = _build_rgb_figure(cameras)
 
         def _refresh_rgb(step: int) -> None:
+            if rgb_fig is None:
+                return
             rgb_imgs, _, _ = _load_step(obs_grp, step, cameras, args.max_pts, rng)
             _update_rgb_figure(
                 rgb_fig,
@@ -383,8 +449,7 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
             )
 
         # ---- Open3D window ------------------------------------------------
-        # Load step 0 data to initialise geometry
-        _, xyz0, rgb0 = _load_step(obs_grp, start_step, cameras, args.max_pts, rng)
+        xyz0, rgb0 = _load_pc(start_step)
         pcd = _make_pcd(xyz0, rgb0)
 
         if args.no_show:
@@ -401,32 +466,23 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
 
             steps = range(num_frames) if args.animate else [start_step]
             for step in steps:
-                _, xyz, rgb_f = _load_step(obs_grp, step, cameras, args.max_pts, rng)
+                xyz, rgb_f = _load_pc(step)
                 _update_pcd(pcd, xyz, rgb_f)
                 renderer.scene.clear_geometry()
                 renderer.scene.add_geometry("pcd", pcd, mat)
-
-                rgb_imgs_step, _, _ = _load_step(
-                    obs_grp, step, cameras, args.max_pts, rng
-                )
-                _update_rgb_figure(
-                    rgb_fig,
-                    rgb_axes,
-                    cameras,
-                    rgb_imgs_step,
-                    step,
-                    num_frames,
-                    title_prefix,
-                )
+                _refresh_rgb(step)
 
                 if args.save_figs:
                     Path(args.save_figs).parent.mkdir(parents=True, exist_ok=True)
                     pcd_path = f"{args.save_figs}_{step:04d}_pcd.png"
                     img = renderer.render_to_image()
                     o3d.io.write_image(pcd_path, img)  # pylint: disable=no-member
-                    rgb_path = f"{args.save_figs}_{step:04d}_rgb.png"
-                    rgb_fig.savefig(rgb_path, dpi=120, bbox_inches="tight")
-                    print(f"  Saved step {step}: {pcd_path}, {rgb_path}")
+                    if rgb_fig is not None:
+                        rgb_path = f"{args.save_figs}_{step:04d}_rgb.png"
+                        rgb_fig.savefig(rgb_path, dpi=120, bbox_inches="tight")
+                        print(f"  Saved step {step}: {pcd_path}, {rgb_path}")
+                    else:
+                        print(f"  Saved step {step}: {pcd_path}")
             return
 
         # Interactive Open3D visualizer
@@ -454,7 +510,7 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
         def _go_to(step: int) -> None:
             step = max(0, min(step, num_frames - 1))
             state["step"] = step
-            _, xyz, rgb_f = _load_step(obs_grp, step, cameras, args.max_pts, rng)
+            xyz, rgb_f = _load_pc(step)
             _update_pcd(pcd, xyz, rgb_f)
             vis.update_geometry(pcd)
             _refresh_rgb(step)
@@ -462,8 +518,9 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
                 Path(args.save_figs).parent.mkdir(parents=True, exist_ok=True)
                 pcd_path = f"{args.save_figs}_{step:04d}_pcd.png"
                 vis.capture_screen_image(pcd_path, do_render=True)
-                rgb_path = f"{args.save_figs}_{step:04d}_rgb.png"
-                rgb_fig.savefig(rgb_path, dpi=120, bbox_inches="tight")
+                if rgb_fig is not None:
+                    rgb_path = f"{args.save_figs}_{step:04d}_rgb.png"
+                    rgb_fig.savefig(rgb_path, dpi=120, bbox_inches="tight")
 
         def _cb_next(vis_: Any) -> bool:  # pylint: disable=unused-argument
             _go_to(state["step"] + 1)

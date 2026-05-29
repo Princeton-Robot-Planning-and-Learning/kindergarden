@@ -64,7 +64,9 @@ from numpy.typing import NDArray
 
 import kinder
 from kinder.envs.dynamic3d.point_cloud import (
+    MeshPointCloud,
     PointCloud,
+    generate_full_point_cloud,
     generate_scene_point_cloud,
     get_sim_from_env,
 )
@@ -151,6 +153,31 @@ def _parse_args() -> argparse.Namespace:
         metavar="M",
         help="Discard point cloud points closer than this distance in metres",
     )
+
+    mode = p.add_mutually_exclusive_group()
+    mode.add_argument(
+        "--completepointcloud",
+        action="store_true",
+        help=(
+            "Store only mesh-based point clouds (obs/mesh_pc_xyz and "
+            "obs/mesh_pc_geom_indices). No camera point clouds are written."
+        ),
+    )
+    mode.add_argument(
+        "--allpointcloud",
+        action="store_true",
+        help=(
+            "Store both camera point clouds (existing behaviour) and mesh "
+            "point clouds (obs/mesh_pc_xyz and obs/mesh_pc_geom_indices)."
+        ),
+    )
+    p.add_argument(
+        "--num-points-per-geom",
+        type=int,
+        default=500,
+        metavar="N",
+        help="Surface points sampled per geom for mesh-based point clouds",
+    )
     return p.parse_args()
 
 
@@ -172,6 +199,32 @@ def _make_env(env_id: str) -> gymnasium.Env:
     if "kinematic3d" in entrypoint:
         make_kwargs["realistic_bg"] = False
     return kinder.make(env_id, **make_kwargs)
+
+
+def _pad_or_subsample_mesh(
+    xyz: NDArray[np.float32],
+    geom_indices: NDArray[np.int32],
+    max_pts: int,
+    rng: np.random.Generator,
+) -> tuple[NDArray[np.float32], NDArray[np.int32]]:
+    """Return mesh arrays with exactly *max_pts* rows.
+
+    If *n < max_pts*:  pad xyz with NaN, geom_indices with -1.
+    If *n > max_pts*:  randomly sub-sample without replacement.
+    """
+    n = len(xyz)
+    if n == max_pts:
+        return xyz, geom_indices
+    if n > max_pts:
+        idx = rng.choice(n, max_pts, replace=False)
+        return xyz[idx], geom_indices[idx]
+    pad = max_pts - n
+    xyz_pad = np.full((pad, 3), np.nan, dtype=np.float32)
+    geom_pad = np.full((pad,), -1, dtype=np.int32)
+    return (
+        np.concatenate([xyz, xyz_pad], axis=0),
+        np.concatenate([geom_indices, geom_pad], axis=0),
+    )
 
 
 def _pad_or_subsample(
@@ -240,45 +293,59 @@ def _capture_step(
     min_depth: float,
     max_pts: int | None,
     rng: np.random.Generator,
+    *,
+    store_camera: bool = True,
+    store_mesh: bool = False,
+    num_points_per_geom: int = 500,
 ) -> dict[str, Any]:
-    """Capture RGB images and point clouds for all cameras at the current state.
+    """Capture RGB images and/or point clouds at the current env state.
 
-    Returns a dict with keys:
+    Returns a dict whose keys depend on the active flags:
+
+    Camera mode (``store_camera=True``):
     - ``"{cam}_rgb"``    → (H, W, 3) uint8
     - ``"{cam}_pc_xyz"`` → (N, 3) or (max_pts, 3) float32
     - ``"{cam}_pc_rgb"`` → (N, 3) or (max_pts, 3) uint8
+
+    Mesh mode (``store_mesh=True``):
+    - ``"mesh_pc_xyz"``         → (M, 3) or (max_pts, 3) float32
+    - ``"mesh_pc_geom_indices"``→ (M,)  or (max_pts,)  int32
     """
     sim = get_sim_from_env(env)
-
-    # Generate merged point cloud (all cameras in one call for efficiency)
-    full_pc: PointCloud = generate_scene_point_cloud(
-        sim,
-        camera_names=camera_names,
-        width=width,
-        height=height,
-        max_depth=max_depth,
-        min_depth=min_depth,
-    )
-
     result: dict[str, Any] = {}
-    for cam_name in camera_names:
-        # RGB image
-        rgb_img = _render_rgb(env, cam_name, width, height)
-        result[f"{cam_name}_rgb"] = rgb_img
 
-        # Per-camera point cloud
-        if cam_name in full_pc.camera_names:
-            cam_pc = full_pc.filter_by_camera(cam_name)
-            xyz, rgb = cam_pc.xyz, cam_pc.rgb
-        else:
-            xyz = np.empty((0, 3), dtype=np.float32)
-            rgb = np.empty((0, 3), dtype=np.uint8)
+    if store_camera:
+        scene_pc: PointCloud = generate_scene_point_cloud(
+            sim,
+            camera_names=camera_names,
+            width=width,
+            height=height,
+            max_depth=max_depth,
+            min_depth=min_depth,
+        )
+        for cam_name in camera_names:
+            result[f"{cam_name}_rgb"] = _render_rgb(env, cam_name, width, height)
+            if cam_name in scene_pc.camera_names:
+                cam_pc = scene_pc.filter_by_camera(cam_name)
+                xyz, rgb = cam_pc.xyz, cam_pc.rgb
+            else:
+                xyz = np.empty((0, 3), dtype=np.float32)
+                rgb = np.empty((0, 3), dtype=np.uint8)
+            if max_pts is not None:
+                xyz, rgb = _pad_or_subsample(xyz, rgb, max_pts, rng)
+            result[f"{cam_name}_pc_xyz"] = xyz
+            result[f"{cam_name}_pc_rgb"] = rgb
 
+    if store_mesh:
+        mesh_pc: MeshPointCloud = generate_full_point_cloud(
+            sim, num_points_per_geom=num_points_per_geom
+        )
+        xyz_m = mesh_pc.xyz
+        idx_m = mesh_pc.geom_indices
         if max_pts is not None:
-            xyz, rgb = _pad_or_subsample(xyz, rgb, max_pts, rng)
-
-        result[f"{cam_name}_pc_xyz"] = xyz
-        result[f"{cam_name}_pc_rgb"] = rgb
+            xyz_m, idx_m = _pad_or_subsample_mesh(xyz_m, idx_m, max_pts, rng)
+        result["mesh_pc_xyz"] = xyz_m
+        result["mesh_pc_geom_indices"] = idx_m
 
     return result
 
@@ -296,6 +363,9 @@ def _create_datasets(
     actions: list[Any],
     camera_names: list[str],
     num_frames: int,
+    *,
+    store_camera: bool = True,
+    store_mesh: bool = False,
 ) -> None:
     """Pre-allocate HDF5 datasets for one demo group."""
     act_arr = np.array(actions, dtype=np.float32)
@@ -315,28 +385,43 @@ def _create_datasets(
         compression="gzip",
     )
 
-    for cam_name in camera_names:
-        rgb = first_step[f"{cam_name}_rgb"]
-        obs_grp.create_dataset(
-            f"{cam_name}_rgb",
-            shape=(num_frames, *rgb.shape),
-            dtype=np.uint8,
-            compression="gzip",
-        )
+    if store_camera:
+        for cam_name in camera_names:
+            rgb = first_step[f"{cam_name}_rgb"]
+            obs_grp.create_dataset(
+                f"{cam_name}_rgb",
+                shape=(num_frames, *rgb.shape),
+                dtype=np.uint8,
+                compression="gzip",
+            )
+            xyz = first_step[f"{cam_name}_pc_xyz"]
+            obs_grp.create_dataset(
+                f"{cam_name}_pc_xyz",
+                shape=(num_frames, *xyz.shape),
+                dtype=np.float32,
+                compression="gzip",
+            )
+            pc_rgb = first_step[f"{cam_name}_pc_rgb"]
+            obs_grp.create_dataset(
+                f"{cam_name}_pc_rgb",
+                shape=(num_frames, *pc_rgb.shape),
+                dtype=np.uint8,
+                compression="gzip",
+            )
 
-        xyz = first_step[f"{cam_name}_pc_xyz"]
+    if store_mesh:
+        mesh_xyz = first_step["mesh_pc_xyz"]
         obs_grp.create_dataset(
-            f"{cam_name}_pc_xyz",
-            shape=(num_frames, *xyz.shape),
+            "mesh_pc_xyz",
+            shape=(num_frames, *mesh_xyz.shape),
             dtype=np.float32,
             compression="gzip",
         )
-
-        pc_rgb = first_step[f"{cam_name}_pc_rgb"]
+        mesh_idx = first_step["mesh_pc_geom_indices"]
         obs_grp.create_dataset(
-            f"{cam_name}_pc_rgb",
-            shape=(num_frames, *pc_rgb.shape),
-            dtype=np.uint8,
+            "mesh_pc_geom_indices",
+            shape=(num_frames, *mesh_idx.shape),
+            dtype=np.int32,
             compression="gzip",
         )
 
@@ -351,25 +436,32 @@ def _write_step(
     camera_names: list[str],
     cam_sizes: dict[str, int],
     rng: np.random.Generator,
+    *,
+    store_camera: bool = True,
+    store_mesh: bool = False,
 ) -> None:
     """Write one step's data into pre-allocated HDF5 datasets.
 
-    Point cloud arrays are padded or sub-sampled to the fixed per-camera sizes
-    established at step 0, so every row has a consistent shape.
+    Point cloud arrays are padded or sub-sampled to the fixed sizes established
+    at step 0, so every row has a consistent shape.
     """
     obs_grp["state"][step_idx] = obs.astype(np.float32)
     grp["actions"][step_idx] = np.asarray(action, dtype=np.float32)
 
-    for cam_name in camera_names:
-        obs_grp[f"{cam_name}_rgb"][step_idx] = capture[f"{cam_name}_rgb"]
+    if store_camera:
+        for cam_name in camera_names:
+            obs_grp[f"{cam_name}_rgb"][step_idx] = capture[f"{cam_name}_rgb"]
+            xyz = capture[f"{cam_name}_pc_xyz"]
+            rgb = capture[f"{cam_name}_pc_rgb"]
+            size = cam_sizes[cam_name]
+            if len(xyz) != size:
+                xyz, rgb = _pad_or_subsample(xyz, rgb, size, rng)
+            obs_grp[f"{cam_name}_pc_xyz"][step_idx] = xyz
+            obs_grp[f"{cam_name}_pc_rgb"][step_idx] = rgb
 
-        xyz = capture[f"{cam_name}_pc_xyz"]
-        rgb = capture[f"{cam_name}_pc_rgb"]
-        size = cam_sizes[cam_name]
-        if len(xyz) != size:
-            xyz, rgb = _pad_or_subsample(xyz, rgb, size, rng)
-        obs_grp[f"{cam_name}_pc_xyz"][step_idx] = xyz
-        obs_grp[f"{cam_name}_pc_rgb"][step_idx] = rgb
+    if store_mesh:
+        obs_grp["mesh_pc_xyz"][step_idx] = capture["mesh_pc_xyz"]
+        obs_grp["mesh_pc_geom_indices"][step_idx] = capture["mesh_pc_geom_indices"]
 
 
 # ---------------------------------------------------------------------------
@@ -389,6 +481,10 @@ def _process_demo(
     min_depth: float,
     max_pts: int | None,
     rng: np.random.Generator,
+    *,
+    store_camera: bool = True,
+    store_mesh: bool = False,
+    num_points_per_geom: int = 500,
 ) -> tuple[gymnasium.Env, list[str], int]:
     """Replay one demo and write it to HDF5.
 
@@ -412,8 +508,8 @@ def _process_demo(
     # Reset
     obs_np, _ = env.reset(seed=seed)
 
-    # Resolve camera names on first use
-    if camera_names is None:
+    # Resolve camera names (skipped when camera-only data is not needed)
+    if store_camera and camera_names is None:
         sim = get_sim_from_env(env)
         import mujoco  # pylint: disable=import-outside-toplevel  # type: ignore[import]
 
@@ -426,6 +522,9 @@ def _process_demo(
             if cam_name is not None:
                 camera_names.append(cam_name)
         print(f"  Auto-detected cameras: {camera_names}")
+    elif not store_camera:
+        camera_names = camera_names or []
+    assert camera_names is not None
 
     num_frames = len(actions)
     grp_name = f"demo_{demo_idx}"
@@ -434,28 +533,38 @@ def _process_demo(
     grp.attrs["seed"] = seed
     obs_grp = grp.require_group("obs")
 
-    # Capture step 0 to establish per-camera point-cloud sizes for the whole
-    # demo.  The number of valid depth pixels fluctuates slightly each step,
-    # so we pin each camera to the count from step 0 (or --max-pts when set)
-    # and pad / sub-sample every subsequent step to match.
+    # Capture step 0 to pin array sizes for the rest of the demo.
     capture0 = _capture_step(
-        env, camera_names, width, height, max_depth, min_depth, max_pts, rng
+        env, camera_names, width, height, max_depth, min_depth, max_pts, rng,
+        store_camera=store_camera,
+        store_mesh=store_mesh,
+        num_points_per_geom=num_points_per_geom,
     )
-    cam_sizes: dict[str, int] = {
-        cam: len(capture0[f"{cam}_pc_xyz"]) for cam in camera_names
-    }
-    _create_datasets(grp, obs_grp, capture0, obs_np, actions, camera_names, num_frames)
+    cam_sizes: dict[str, int] = (
+        {cam: len(capture0[f"{cam}_pc_xyz"]) for cam in camera_names}
+        if store_camera else {}
+    )
+
+    _create_datasets(
+        grp, obs_grp, capture0, obs_np, actions, camera_names, num_frames,
+        store_camera=store_camera,
+        store_mesh=store_mesh,
+    )
     _write_step(
-        grp, obs_grp, 0, obs_np, actions[0], capture0, camera_names, cam_sizes, rng
+        grp, obs_grp, 0, obs_np, actions[0], capture0, camera_names, cam_sizes, rng,
+        store_camera=store_camera,
+        store_mesh=store_mesh,
     )
 
     # Step through remaining actions
     for step_idx in range(1, num_frames):
         obs_np, _reward, _term, _trunc, _ = env.step(actions[step_idx - 1])
 
-        # Capture AFTER the step that produced this obs
         capture = _capture_step(
-            env, camera_names, width, height, max_depth, min_depth, max_pts, rng
+            env, camera_names, width, height, max_depth, min_depth, max_pts, rng,
+            store_camera=store_camera,
+            store_mesh=store_mesh,
+            num_points_per_geom=num_points_per_geom,
         )
         _write_step(
             grp,
@@ -467,6 +576,8 @@ def _process_demo(
             camera_names,
             cam_sizes,
             rng,
+            store_camera=store_camera,
+            store_mesh=store_mesh,
         )
 
     # Final step: execute last action to get terminal observation
@@ -485,8 +596,16 @@ def main() -> None:
     if args.max_demos is not None:
         demo_files = demo_files[: args.max_demos]
 
+    store_camera = not args.completepointcloud
+    store_mesh = args.completepointcloud or args.allpointcloud
+
+    mode_label = (
+        "camera + mesh" if args.allpointcloud
+        else "mesh only" if args.completepointcloud
+        else "camera only"
+    )
     print(f"Found {len(demo_files)} demo(s) in {args.demo_dir}")
-    print(f"Output: {args.output}")
+    print(f"Output: {args.output}  |  mode: {mode_label}")
 
     rng = np.random.default_rng(0)
 
@@ -516,6 +635,9 @@ def main() -> None:
                     min_depth=args.min_depth,
                     max_pts=args.max_pts,
                     rng=rng,
+                    store_camera=store_camera,
+                    store_mesh=store_mesh,
+                    num_points_per_geom=args.num_points_per_geom,
                 )
                 total_frames += nf
             except Exception as exc:  # pylint: disable=broad-except

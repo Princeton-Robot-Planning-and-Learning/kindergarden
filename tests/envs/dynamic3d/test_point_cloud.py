@@ -427,6 +427,12 @@ def test_visualize_point_cloud(sim, request):
 # ---------------------------------------------------------------------------
 
 
+def test_generate_point_cloud_default_returns_point_cloud(sim):
+    """generate_point_cloud() with no method arg defaults to 'camera' mode."""
+    result = generate_point_cloud(sim, width=64, height=48)
+    assert isinstance(result, PointCloud)
+
+
 def test_generate_point_cloud_camera_returns_point_cloud(sim):
     """generate_point_cloud(method='camera') returns a PointCloud."""
     result = generate_point_cloud(sim, method="camera", width=64, height=48)
@@ -545,6 +551,18 @@ def test_mesh_point_cloud_filter_by_geom(sim):
     assert np.all(sub.geom_indices == 0)
 
 
+def test_mesh_point_cloud_filter_by_geom_non_first(sim):
+    """filter_by_geom on a non-first geom re-indexes geom_indices to 0."""
+    mpc = generate_full_point_cloud(sim, num_points_per_geom=10)
+    if len(mpc.geom_names) < 2:
+        pytest.skip("Need at least 2 geoms for this test")
+    geom = mpc.geom_names[1]
+    sub = mpc.filter_by_geom(geom)
+    assert sub.geom_names == [geom]
+    assert len(sub) > 0
+    assert np.all(sub.geom_indices == 0)
+
+
 def test_mesh_point_cloud_filter_by_geom_unknown_raises(sim):
     """filter_by_geom raises ValueError for an unknown geom name."""
     mpc = generate_full_point_cloud(sim, num_points_per_geom=10)
@@ -553,12 +571,13 @@ def test_mesh_point_cloud_filter_by_geom_unknown_raises(sim):
 
 
 def test_mesh_point_cloud_to_dict(sim):
-    """to_dict contains xyz and geom_indices keys."""
+    """to_dict contains xyz, geom_indices, and geom_names keys."""
     mpc = generate_full_point_cloud(sim, num_points_per_geom=10)
     d = mpc.to_dict()
-    assert set(d.keys()) == {"xyz", "geom_indices"}
+    assert set(d.keys()) == {"xyz", "geom_indices", "geom_names"}
     np.testing.assert_array_equal(d["xyz"], mpc.xyz)
     np.testing.assert_array_equal(d["geom_indices"], mpc.geom_indices)
+    np.testing.assert_array_equal(d["geom_names"], np.array(mpc.geom_names))
 
 
 def test_mesh_point_cloud_len(sim):

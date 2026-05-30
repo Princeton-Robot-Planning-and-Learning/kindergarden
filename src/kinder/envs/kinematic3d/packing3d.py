@@ -37,7 +37,6 @@ from kinder.envs.kinematic3d.object_types import (
 )
 from kinder.envs.kinematic3d.utils import (
     Kinematic3DObjectCentricState,
-    is_inside,
     remove_fingers_from_extended_joints,
 )
 from kinder.envs.utils import PURPLE
@@ -354,11 +353,8 @@ class Packing3DObjectCentricState(Kinematic3DObjectCentricState):
         available_parts = []
         for obj in self.objects:
             if obj.name.startswith("part"):
-                if self.get(obj, "grasp_active") < 0.5 and not is_inside(
-                    self.rack_pose,
-                    self.rack_half_extents,
-                    self.get_object_pose(obj.name),
-                    self.get_object_half_extents_packing3d(obj.name)[:3],
+                if self.get(obj, "grasp_active") < 0.5 and not self.is_part_inside_rack(
+                    obj.name
                 ):
                     available_parts.append(obj.name)
         return available_parts

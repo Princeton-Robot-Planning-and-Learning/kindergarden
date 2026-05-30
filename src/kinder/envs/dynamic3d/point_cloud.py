@@ -129,7 +129,7 @@ class MeshPointCloud:
         mask = self.geom_indices == idx
         return MeshPointCloud(
             xyz=self.xyz[mask],
-            geom_indices=self.geom_indices[mask],
+            geom_indices=np.zeros(int(mask.sum()), dtype=np.int32),
             geom_names=[name],
         )
 
@@ -138,6 +138,7 @@ class MeshPointCloud:
         return {
             "xyz": self.xyz,
             "geom_indices": self.geom_indices,
+            "geom_names": np.array(self.geom_names),
         }
 
 
@@ -579,29 +580,11 @@ def _make_sphere_mesh(
     return trimesh.creation.icosphere(subdivisions=subdivisions, radius=radius)
 
 
-def _make_capsule_mesh(model: mujoco.MjModel, geom_id: int, segments: int = 32) -> Any:
+def _make_capsule_mesh(model: mujoco.MjModel, geom_id: int) -> Any:
     """Create a trimesh capsule from a MuJoCo mjGEOM_CAPSULE geom."""
     trimesh = _require_trimesh()
     radius, half_height = model.geom_size[geom_id][:2]
-    cylinder = trimesh.creation.cylinder(
-        radius=radius, height=2 * half_height, sections=segments
-    )
-    sphere = trimesh.creation.icosphere(subdivisions=3, radius=radius)
-    # Top hemisphere
-    top_mask = sphere.vertices[:, 2] >= 0
-    top_face_mask = np.all(top_mask[sphere.faces], axis=1)
-    top_idx = np.where(top_mask)[0]
-    remap = {old: new for new, old in enumerate(top_idx)}
-    top_faces = np.vectorize(remap.get)(sphere.faces[top_face_mask])
-    top = trimesh.Trimesh(
-        vertices=sphere.vertices[top_idx], faces=top_faces, process=False
-    )
-    top.apply_translation([0, 0, half_height])
-    # Bottom hemisphere — mirror of top
-    bottom = top.copy()
-    bottom.apply_scale([1, 1, -1])
-    bottom.apply_translation([0, 0, -2 * half_height])
-    return trimesh.util.concatenate([cylinder, top, bottom])
+    return trimesh.creation.capsule(radius=radius, height=2 * half_height)
 
 
 # ---------------------------------------------------------------------------
@@ -619,26 +602,11 @@ _MESH_GEOM_TYPES = frozenset(
 )
 
 
-def get_scene_meshes(sim: MjSim) -> dict[str, Any]:
-    """Return untransformed (local-frame) trimesh objects for every geom.
-
-    Supports ``mjGEOM_MESH``, ``mjGEOM_BOX``, ``mjGEOM_CYLINDER``,
-    ``mjGEOM_SPHERE``, and ``mjGEOM_CAPSULE`` geom types.  Geom names are
-    suffixed with ``_geomN`` (N = geom index) so that left/right gripper
-    fingers sharing a mesh name remain distinct.
-
-    Requires the ``trimesh`` package.
-
-    Args:
-        sim: A ``kinder`` :class:`MjSim` instance (already reset).
-
-    Returns:
-        Mapping from ``"<mesh_or_geom_name>_geomN"`` to an untransformed
-        :class:`trimesh.Trimesh` in the geom's local coordinate frame.
-    """
+def _get_scene_geoms(sim: MjSim) -> list[tuple[int, str, Any]]:
+    """Return (geom_id, name, mesh) for every supported geom in the scene."""
     _require_trimesh()
     model = sim.model.mj_model
-    meshes: dict[str, Any] = {}
+    result: list[tuple[int, str, Any]] = []
 
     for geom_id in range(model.ngeom):
         gtype = model.geom_type[geom_id]
@@ -655,9 +623,8 @@ def get_scene_meshes(sim: MjSim) -> dict[str, Any]:
                 mesh_id,
             )
             name = (raw_name or f"mesh{mesh_id}") + f"_geom{geom_id}"
-            import trimesh as _trimesh  # pylint: disable=import-outside-toplevel
-
-            mesh = _trimesh.Trimesh(
+            trimesh = _require_trimesh()
+            mesh = trimesh.Trimesh(
                 vertices=model.mesh_vert[
                     model.mesh_vertadr[mesh_id] : model.mesh_vertadr[mesh_id]
                     + model.mesh_vertnum[mesh_id]
@@ -683,9 +650,29 @@ def get_scene_meshes(sim: MjSim) -> dict[str, Any]:
             else:  # CAPSULE
                 mesh = _make_capsule_mesh(model, geom_id)
 
-        meshes[name] = mesh
+        result.append((geom_id, name, mesh))
 
-    return meshes
+    return result
+
+
+def get_scene_meshes(sim: MjSim) -> dict[str, Any]:
+    """Return untransformed (local-frame) trimesh objects for every geom.
+
+    Supports ``mjGEOM_MESH``, ``mjGEOM_BOX``, ``mjGEOM_CYLINDER``,
+    ``mjGEOM_SPHERE``, and ``mjGEOM_CAPSULE`` geom types.  Geom names are
+    suffixed with ``_geomN`` (N = geom index) so that left/right gripper
+    fingers sharing a mesh name remain distinct.
+
+    Requires the ``trimesh`` package.
+
+    Args:
+        sim: A ``kinder`` :class:`MjSim` instance (already reset).
+
+    Returns:
+        Mapping from ``"<mesh_or_geom_name>_geomN"`` to an untransformed
+        :class:`trimesh.Trimesh` in the geom's local coordinate frame.
+    """
+    return {name: mesh for _, name, mesh in _get_scene_geoms(sim)}
 
 
 def generate_full_point_cloud(
@@ -713,20 +700,16 @@ def generate_full_point_cloud(
     Returns:
         A :class:`MeshPointCloud` with world-frame XYZ positions.
     """
-    _require_trimesh()
     model = sim.model.mj_model
     data = sim.data.mj_data
 
-    base_meshes = get_scene_meshes(sim)
+    scene_geoms = _get_scene_geoms(sim)
 
     all_xyz: list[NDArray[np.float32]] = []
     all_idx: list[NDArray[np.int32]] = []
     geom_names: list[str] = []
 
-    for local_idx, (name, mesh) in enumerate(base_meshes.items()):
-        # Find the geom_id encoded in the name suffix
-        geom_id = int(name.rsplit("_geom", 1)[1])
-
+    for local_idx, (geom_id, name, mesh) in enumerate(scene_geoms):
         body_id = int(model.geom_bodyid[geom_id])
         body_pos = data.xpos[body_id]
         body_mat = data.xmat[body_id].reshape(3, 3)

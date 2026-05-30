@@ -529,10 +529,11 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
                 _track_idx_all = obs_grp["track_pc_geom_indices"][:]
                 print(f"  Track data: {_track_xyz_all.nbytes / 1e6:.0f} MB", flush=True)
             if cameras:
-                total_mb = sum(
-                    obs_grp[f"{cam}_rgb"].nbytes for cam in cameras
-                ) / 1e6
-                print(f"  Pre-loading {len(cameras)} camera streams ({total_mb:.0f} MB)...", flush=True)
+                total_mb = sum(obs_grp[f"{cam}_rgb"].nbytes for cam in cameras) / 1e6
+                print(
+                    f"  Pre-loading {len(cameras)} camera streams ({total_mb:.0f} MB)...",
+                    flush=True,
+                )
                 for cam in cameras:
                     _rgb_cache[cam] = obs_grp[f"{cam}_rgb"][:]
                 print("  Done.", flush=True)
@@ -554,7 +555,11 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
                     else obs_grp["track_pc_geom_indices"][step]
                 )
                 xyz, colors, _pc_colors[0] = _load_track_step(
-                    raw_xyz, raw_idx, _pc_colors[0], args.max_pts, rng,
+                    raw_xyz,
+                    raw_idx,
+                    _pc_colors[0],
+                    args.max_pts,
+                    rng,
                     track_geom=args.track_geom,
                 )
                 return xyz, colors

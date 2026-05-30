@@ -527,9 +527,16 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
                 print("  Pre-loading track point cloud...", flush=True)
                 _track_xyz_all = obs_grp["track_pc_xyz"][:]
                 _track_idx_all = obs_grp["track_pc_geom_indices"][:]
-                print(f"  Track data: {_track_xyz_all.nbytes / 1e6:.0f} MB", flush=True)
+                track_mb = _track_xyz_all.nbytes / 1e6  # pylint: disable=no-member
+                print(f"  Track data: {track_mb:.0f} MB", flush=True)
             if cameras:
-                total_mb = sum(obs_grp[f"{cam}_rgb"].nbytes for cam in cameras) / 1e6
+                total_mb = (
+                    sum(
+                        obs_grp[f"{cam}_rgb"].nbytes  # pylint: disable=no-member
+                        for cam in cameras
+                    )
+                    / 1e6
+                )
                 print(
                     f"  Pre-loading {len(cameras)} camera streams "
                     f"({total_mb:.0f} MB)...",

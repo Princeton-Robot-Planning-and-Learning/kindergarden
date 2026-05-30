@@ -531,7 +531,8 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
             if cameras:
                 total_mb = sum(obs_grp[f"{cam}_rgb"].nbytes for cam in cameras) / 1e6
                 print(
-                    f"  Pre-loading {len(cameras)} camera streams ({total_mb:.0f} MB)...",
+                    f"  Pre-loading {len(cameras)} camera streams "
+                    f"({total_mb:.0f} MB)...",
                     flush=True,
                 )
                 for cam in cameras:

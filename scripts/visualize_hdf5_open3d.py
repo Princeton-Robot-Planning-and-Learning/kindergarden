@@ -301,14 +301,14 @@ def _load_mesh_step(
 
 
 def _load_track_step(
-    obs_grp: h5py.Group,
-    step: int,
+    raw_xyz: NDArray[np.float32],
+    raw_idx: NDArray[np.int32],
     point_colors: NDArray[np.float64] | None,
     max_pts: int,
     rng: np.random.Generator,
     track_geom: list[int] | None = None,
 ) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.float64]]:
-    """Load the tracked point cloud for *step* with fixed per-point colours.
+    """Render one step of the tracked point cloud with fixed per-point colours.
 
     On the first call (``point_colors=None``) assigns each point a colour based
     on its index using the HSV colormap — this colour never changes, so the
@@ -323,8 +323,6 @@ def _load_track_step(
         colors       : (N, 3) float64 RGB in [0, 1]
         point_colors : fixed HSV palette to pass back on the next call
     """
-    raw_xyz: NDArray[np.float32] = obs_grp["track_pc_xyz"][step]
-    raw_idx: NDArray[np.int32] = obs_grp["track_pc_geom_indices"][step]
 
     # Build per-point HSV palette once from the full cloud size
     if point_colors is None:
@@ -398,36 +396,32 @@ def _update_pcd(
 
 def _build_rgb_figure(
     cameras: list[str],
-) -> tuple[plt.Figure, list[plt.Axes]]:
+    first_imgs: dict[str, NDArray[np.uint8]],
+) -> tuple[plt.Figure, list[Any]]:
     n = len(cameras)
-    fig, axes = plt.subplots(
-        1,
-        n,
-        figsize=(4 * n, 3.5),
-        squeeze=False,
-    )
+    fig, axes = plt.subplots(1, n, figsize=(4 * n, 3.5), squeeze=False)
     ax_list = list(axes[0])
+    im_list = []
     for ax, cam in zip(ax_list, cameras):
+        im = ax.imshow(first_imgs[cam])
         ax.set_title(cam, fontsize=8)
         ax.axis("off")
+        im_list.append(im)
     fig.tight_layout()
-    return fig, ax_list
+    return fig, im_list
 
 
 def _update_rgb_figure(
     fig: plt.Figure,
-    axes: list[plt.Axes],
+    im_list: list[Any],
     cameras: list[str],
     rgb_imgs: dict[str, NDArray[np.uint8]],
     step: int,
     num_frames: int,
     title_prefix: str,
 ) -> None:
-    for ax, cam in zip(axes, cameras):
-        ax.cla()
-        ax.imshow(rgb_imgs[cam])
-        ax.set_title(cam, fontsize=8)
-        ax.axis("off")
+    for im, cam in zip(im_list, cameras):
+        im.set_data(rgb_imgs[cam])
     fig.suptitle(f"{title_prefix}Step {step} / {num_frames - 1}", fontsize=9)
     fig.canvas.draw_idle()  # type: ignore[attr-defined]
     fig.canvas.flush_events()  # type: ignore[attr-defined]
@@ -523,18 +517,44 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
 
         start_step = min(max(args.step, 0), num_frames - 1)
 
+        # Pre-load all animation data into RAM to avoid per-frame HDF5 reads.
+        _track_xyz_all: NDArray[np.float32] | None = None
+        _track_idx_all: NDArray[np.int32] | None = None
+        _rgb_cache: dict[str, NDArray[np.uint8]] = {}  # cam -> (T, H, W, 3)
+
+        if args.animate:
+            if args.trackpointcloud:
+                print("  Pre-loading track point cloud...", flush=True)
+                _track_xyz_all = obs_grp["track_pc_xyz"][:]
+                _track_idx_all = obs_grp["track_pc_geom_indices"][:]
+                print(f"  Track data: {_track_xyz_all.nbytes / 1e6:.0f} MB", flush=True)
+            if cameras:
+                total_mb = sum(
+                    obs_grp[f"{cam}_rgb"].nbytes for cam in cameras
+                ) / 1e6
+                print(f"  Pre-loading {len(cameras)} camera streams ({total_mb:.0f} MB)...", flush=True)
+                for cam in cameras:
+                    _rgb_cache[cam] = obs_grp[f"{cam}_rgb"][:]
+                print("  Done.", flush=True)
+
         # Mutable container so _load_pc can update point_colors before state exists
         _pc_colors: list[NDArray[np.float64] | None] = [None]
 
         def _load_pc(step: int) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
             """Return (xyz, colors) for the active point-cloud mode."""
             if args.trackpointcloud:
+                raw_xyz = (
+                    _track_xyz_all[step]
+                    if _track_xyz_all is not None
+                    else obs_grp["track_pc_xyz"][step]
+                )
+                raw_idx = (
+                    _track_idx_all[step]
+                    if _track_idx_all is not None
+                    else obs_grp["track_pc_geom_indices"][step]
+                )
                 xyz, colors, _pc_colors[0] = _load_track_step(
-                    obs_grp,
-                    step,
-                    _pc_colors[0],
-                    args.max_pts,
-                    rng,
+                    raw_xyz, raw_idx, _pc_colors[0], args.max_pts, rng,
                     track_geom=args.track_geom,
                 )
                 return xyz, colors
@@ -546,17 +566,25 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
         # ---- Matplotlib RGB window (only when camera data is available) ----
         plt.ion()
         rgb_fig: plt.Figure | None = None
-        rgb_axes: list[plt.Axes] = []
+        rgb_im_list: list[Any] = []
         if cameras:
-            rgb_fig, rgb_axes = _build_rgb_figure(cameras)
+            first_rgb = (
+                {cam: _rgb_cache[cam][start_step] for cam in cameras}
+                if _rgb_cache
+                else _load_step(obs_grp, start_step, cameras, args.max_pts, rng)[0]
+            )
+            rgb_fig, rgb_im_list = _build_rgb_figure(cameras, first_rgb)
 
         def _refresh_rgb(step: int) -> None:
             if rgb_fig is None:
                 return
-            rgb_imgs, _, _ = _load_step(obs_grp, step, cameras, args.max_pts, rng)
+            if _rgb_cache:
+                rgb_imgs = {cam: _rgb_cache[cam][step] for cam in cameras}
+            else:
+                rgb_imgs, _, _ = _load_step(obs_grp, step, cameras, args.max_pts, rng)
             _update_rgb_figure(
                 rgb_fig,
-                rgb_axes,
+                rgb_im_list,
                 cameras,
                 rgb_imgs,
                 step,
@@ -668,12 +696,16 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
             if state["playing"]:
                 now = time.monotonic()
                 if now - state["last_time"] >= interval:
-                    state["last_time"] = now
                     next_step = state["step"] + 1
                     if next_step >= num_frames:
                         state["playing"] = False
                     else:
-                        _go_to(next_step)
+                        xyz, rgb_f = _load_pc(next_step)
+                        _update_pcd(pcd, xyz, rgb_f)
+                        vis.update_geometry(pcd)
+                        state["step"] = next_step
+                        _refresh_rgb(next_step)
+                    state["last_time"] = time.monotonic()
             vis.update_renderer()
 
         vis.destroy_window()

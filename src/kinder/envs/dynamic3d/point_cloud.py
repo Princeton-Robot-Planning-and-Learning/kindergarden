@@ -870,13 +870,19 @@ def find_ee_frame(
 
     def _has_site(name: str) -> bool:
         return (
-            mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_SITE, name) >= 0
-        )  # pylint: disable=no-member
+            mujoco.mj_name2id(  # pylint: disable=no-member
+                model, mujoco.mjtObj.mjOBJ_SITE, name  # pylint: disable=no-member
+            )
+            >= 0
+        )
 
     def _has_body(name: str) -> bool:
         return (
-            mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, name) >= 0
-        )  # pylint: disable=no-member
+            mujoco.mj_name2id(  # pylint: disable=no-member
+                model, mujoco.mjtObj.mjOBJ_BODY, name  # pylint: disable=no-member
+            )
+            >= 0
+        )
 
     if frame_name is not None:
         if _has_site(frame_name):
@@ -938,15 +944,15 @@ def get_ee_pose(
     data = sim.data.mj_data
     T = np.eye(4, dtype=np.float32)
     if frame_type == "site":
-        site_id = mujoco.mj_name2id(
-            model, mujoco.mjtObj.mjOBJ_SITE, frame_name
-        )  # pylint: disable=no-member
+        site_id = mujoco.mj_name2id(  # pylint: disable=no-member
+            model, mujoco.mjtObj.mjOBJ_SITE, frame_name  # pylint: disable=no-member
+        )
         T[:3, :3] = data.site_xmat[site_id].reshape(3, 3).astype(np.float32)
         T[:3, 3] = data.site_xpos[site_id].astype(np.float32)
     else:
-        body_id = mujoco.mj_name2id(
-            model, mujoco.mjtObj.mjOBJ_BODY, frame_name
-        )  # pylint: disable=no-member
+        body_id = mujoco.mj_name2id(  # pylint: disable=no-member
+            model, mujoco.mjtObj.mjOBJ_BODY, frame_name  # pylint: disable=no-member
+        )
         T[:3, :3] = data.xmat[body_id].reshape(3, 3).astype(np.float32)
         T[:3, 3] = data.xpos[body_id].astype(np.float32)
     return T

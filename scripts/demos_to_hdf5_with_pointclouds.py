@@ -55,7 +55,7 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import gymnasium
 import h5py
@@ -263,17 +263,17 @@ def _se3_inv(T: NDArray[np.float32]) -> NDArray[np.float32]:
 def _create_canonical_datasets(
     grp: h5py.Group,
     obs_grp: h5py.Group,
-    canonical_pts: dict[str, NDArray[np.float32]],
+    canonical_pts: dict[str, tuple[int, NDArray[np.float32]]],
     num_frames: int,
     ee_frame_name: str,
-    ee_frame_type: str,
+    ee_frame_type: Literal["site", "body"],
 ) -> None:
     """Pre-allocate HDF5 datasets for canonical point cloud mode."""
     str_dt = h5py.string_dtype()
 
     # canonical_pointcloud/<hdf5_key>/xyz  +  geom_name attr on every group
     canon_grp = grp.require_group("canonical_pointcloud")
-    for name, pts in canonical_pts.items():
+    for name, (_, pts) in canonical_pts.items():
         key = _hdf5_key(name)
         geom_grp = canon_grp.require_group(key)
         geom_grp.attrs["geom_name"] = name
@@ -700,9 +700,9 @@ def _process_demo(
 
     # Canonical setup: sample fixed local-frame points and locate the EE frame
     # immediately after reset so geometry is in its initial pose.
-    canonical_pts: dict[str, NDArray[np.float32]] = {}
+    canonical_pts: dict[str, tuple[int, NDArray[np.float32]]] = {}
     ee_frame_name: str | None = None
-    ee_frame_type: str = "site"
+    ee_frame_type: Literal["site", "body"] = "site"
     if store_canonical:
         sim = get_sim_from_env(env)
         ee_frame_name, ee_frame_type = find_ee_frame(sim, ee_site)
@@ -783,18 +783,15 @@ def _process_demo(
         track_pc_size=track_pc_size,
     )
 
-    # Collect canonical state at step 0 (after reset, before any action).
-    # ee_poses_all will have num_frames+1 entries: steps 0..num_frames-1 plus
-    # the terminal pose captured after executing actions[-1].
-    sim_canonical = get_sim_from_env(env) if store_canonical else None
     ee_poses_all: list[NDArray[np.float32]] = []
     geom_transforms_all: dict[str, list[NDArray[np.float32]]] = (
         {name: [] for name in canonical_pts} if store_canonical else {}
     )
-    if store_canonical and sim_canonical is not None and ee_frame_name is not None:
-        ee_poses_all.append(get_ee_pose(sim_canonical, ee_frame_name, ee_frame_type))
+    if store_canonical:
+        assert ee_frame_name is not None
+        ee_poses_all.append(get_ee_pose(sim, ee_frame_name, ee_frame_type))
         for name, xform in get_geom_world_transforms(
-            sim_canonical, list(canonical_pts)
+            sim, {n: gid for n, (gid, _) in canonical_pts.items()}
         ).items():
             geom_transforms_all[name].append(xform)
 
@@ -802,12 +799,11 @@ def _process_demo(
     for step_idx in range(1, num_frames):
         obs_np, _reward, _term, _trunc, _ = env.step(actions[step_idx - 1])
 
-        if store_canonical and sim_canonical is not None and ee_frame_name is not None:
-            ee_poses_all.append(
-                get_ee_pose(sim_canonical, ee_frame_name, ee_frame_type)
-            )
+        if store_canonical:
+            assert ee_frame_name is not None
+            ee_poses_all.append(get_ee_pose(sim, ee_frame_name, ee_frame_type))
             for name, xform in get_geom_world_transforms(
-                sim_canonical, list(canonical_pts)
+                sim, {n: gid for n, (gid, _) in canonical_pts.items()}
             ).items():
                 geom_transforms_all[name].append(xform)
 
@@ -848,8 +844,9 @@ def _process_demo(
     # terminal obs is not stored; dataset length == len(actions)
 
     # Capture terminal EE pose (after actions[-1]) for the last delta.
-    if store_canonical and sim_canonical is not None and ee_frame_name is not None:
-        ee_poses_all.append(get_ee_pose(sim_canonical, ee_frame_name, ee_frame_type))
+    if store_canonical:
+        assert ee_frame_name is not None
+        ee_poses_all.append(get_ee_pose(sim, ee_frame_name, ee_frame_type))
 
     # Write canonical data in one pass after all steps are collected.
     if store_canonical and ee_poses_all:
@@ -878,10 +875,7 @@ def main() -> None:
         demo_files = demo_files[: args.max_demos]
 
     store_canonical = args.canonicalpointcloud
-    # In canonical mode the transforms replace per-timestep XYZ arrays, so
-    # camera point clouds are suppressed by default.  Camera RGB images are
-    # also skipped unless a camera-based mode is explicitly combined.
-    store_camera = not args.completepointcloud and not store_canonical
+    store_camera = not args.completepointcloud
     store_mesh = args.completepointcloud or args.allpointcloud
     store_track = args.trackpointcloud
 

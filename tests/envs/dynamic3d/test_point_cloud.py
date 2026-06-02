@@ -16,14 +16,18 @@ from kinder.envs.dynamic3d.point_cloud import (
     MeshPointCloud,
     PointCloud,
     depth_buffer_to_metric,
+    find_ee_frame,
     generate_full_point_cloud,
     generate_point_cloud,
     generate_scene_point_cloud,
     get_camera_extrinsics,
     get_camera_intrinsics,
+    get_ee_pose,
+    get_geom_world_transforms,
     get_scene_meshes,
     get_sim_from_env,
     rgbd_to_point_cloud,
+    sample_canonical_points,
 )
 
 _TEST_TASKS = Path(__file__).parent / "test_tasks"
@@ -627,3 +631,96 @@ def test_save_point_cloud(sim, request):
     print(f"  Load with: data = np.load('{out}')")
     print("  Arrays:    data['xyz'], data['rgb'], data['camera_indices']")
     print(f"  Cameras:   {pc.camera_names}")
+
+
+# ---------------------------------------------------------------------------
+# find_ee_frame
+# ---------------------------------------------------------------------------
+
+
+def test_find_ee_frame_auto_detects(sim):
+    """Auto-detection returns a non-empty name and a valid frame type."""
+    name, frame_type = find_ee_frame(sim)
+    assert frame_type in ("site", "body")
+    assert isinstance(name, str) and len(name) > 0
+
+
+def test_find_ee_frame_explicit_valid(sim):
+    """Passing the auto-detected name explicitly returns the same result."""
+    name, frame_type = find_ee_frame(sim)
+    name2, ft2 = find_ee_frame(sim, name)
+    assert name2 == name and ft2 == frame_type
+
+
+def test_find_ee_frame_invalid_raises(sim):
+    """An unknown frame name raises RuntimeError."""
+    with pytest.raises(RuntimeError, match="not found"):
+        find_ee_frame(sim, "nonexistent_site_xyz")
+
+
+# ---------------------------------------------------------------------------
+# get_ee_pose
+# ---------------------------------------------------------------------------
+
+
+def test_get_ee_pose_shape_and_dtype(sim):
+    """EE pose is a (4,4) float32 homogeneous matrix with a unit last row."""
+    name, ft = find_ee_frame(sim)
+    T = get_ee_pose(sim, name, ft)
+    assert T.shape == (4, 4)
+    assert T.dtype == np.float32
+    np.testing.assert_allclose(T[3], [0, 0, 0, 1], atol=1e-6)
+
+
+def test_get_ee_pose_rotation_orthogonal(sim):
+    """The 3×3 rotation block of the EE pose is orthogonal."""
+    name, ft = find_ee_frame(sim)
+    R = get_ee_pose(sim, name, ft)[:3, :3]
+    np.testing.assert_allclose(R @ R.T, np.eye(3), atol=1e-5)
+
+
+# ---------------------------------------------------------------------------
+# sample_canonical_points
+# ---------------------------------------------------------------------------
+
+
+def test_sample_canonical_points_returns_dict(sim):
+    """Returns a non-empty dict of (geom_id, local_pts) per geom."""
+    pts = sample_canonical_points(sim, num_points_per_geom=10)
+    assert isinstance(pts, dict) and len(pts) > 0
+    for name, (geom_id, arr) in pts.items():
+        assert isinstance(name, str)
+        assert isinstance(geom_id, int)
+        assert arr.shape == (10, 3)
+        assert arr.dtype == np.float32
+
+
+# ---------------------------------------------------------------------------
+# get_geom_world_transforms
+# ---------------------------------------------------------------------------
+
+
+def test_get_geom_world_transforms_shape(sim):
+    """Returns a (4,4) float32 transform for each requested geom."""
+    pts = sample_canonical_points(sim, num_points_per_geom=5)
+    geom_ids = {n: gid for n, (gid, _) in pts.items()}
+    xforms = get_geom_world_transforms(sim, geom_ids)
+    assert set(xforms.keys()) == set(pts.keys())
+    for _name, T in xforms.items():
+        assert T.shape == (4, 4)
+        assert T.dtype == np.float32
+
+
+# ---------------------------------------------------------------------------
+# delta EE correctness
+# ---------------------------------------------------------------------------
+
+
+def test_delta_ee_near_identity_for_no_motion(env, sim):
+    """delta EE transform is near-identity when the robot doesn't move."""
+    name, ft = find_ee_frame(sim)
+    T0 = get_ee_pose(sim, name, ft)
+    env.step(np.zeros(env.action_space.shape))
+    T1 = get_ee_pose(sim, name, ft)
+    delta = np.linalg.inv(T0.astype(np.float64)) @ T1.astype(np.float64)
+    np.testing.assert_allclose(delta, np.eye(4), atol=1e-3)

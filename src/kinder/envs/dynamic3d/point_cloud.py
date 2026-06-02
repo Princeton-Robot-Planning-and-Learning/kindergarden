@@ -848,7 +848,7 @@ _EE_BODY_CANDIDATES: tuple[str, ...] = (
 def find_ee_frame(
     sim: MjSim,
     frame_name: str | None = None,
-) -> tuple[str, str]:
+) -> tuple[str, Literal["site", "body"]]:
     """Locate the EE frame in the model, supporting both sites and bodies.
 
     When *frame_name* is given, tries it first as a site then as a body.
@@ -909,20 +909,10 @@ def find_ee_frame(
     )
 
 
-def find_ee_site(sim: MjSim, site_name: str | None = None) -> str:
-    """Backward-compatible wrapper around :func:`find_ee_frame`.
-
-    Returns only the frame name; use :func:`find_ee_frame` when you also
-    need to know whether the frame is a site or a body.
-    """
-    name, _ = find_ee_frame(sim, site_name)
-    return name
-
-
 def get_ee_pose(
     sim: MjSim,
     frame_name: str,
-    frame_type: str = "site",
+    frame_type: Literal["site", "body"] = "site",
 ) -> NDArray[np.float32]:
     """Return the 4×4 world pose of the EE frame as float32.
 
@@ -962,7 +952,7 @@ def sample_canonical_points(
     sim: MjSim,
     *,
     num_points_per_geom: int = 500,
-) -> dict[str, NDArray[np.float32]]:
+) -> dict[str, tuple[int, NDArray[np.float32]]]:
     """Sample fixed local-frame surface points from every geom.
 
     Points are sampled once (typically right after ``env.reset()``) and kept
@@ -974,18 +964,19 @@ def sample_canonical_points(
         num_points_per_geom: Surface points sampled per geom mesh.
 
     Returns:
-        Mapping from geom name to (P, 3) float32 local-frame points.
+        Mapping from geom name to ``(geom_id, local_pts)`` where
+        *local_pts* is a (P, 3) float32 array of local-frame surface points.
     """
     _require_trimesh()
     return {
-        name: mesh.sample(num_points_per_geom).astype(np.float32)
-        for name, mesh in get_scene_meshes(sim).items()
+        name: (geom_id, mesh.sample(num_points_per_geom).astype(np.float32))
+        for geom_id, name, mesh in _get_scene_geoms(sim)
     }
 
 
 def get_geom_world_transforms(
     sim: MjSim,
-    geom_names: Sequence[str],
+    geom_ids: dict[str, int],
 ) -> dict[str, NDArray[np.float32]]:
     """Return the current 4×4 world transforms for the requested geoms.
 
@@ -994,8 +985,8 @@ def get_geom_world_transforms(
 
     Args:
         sim: A ``kinder`` :class:`MjSim` instance (already stepped).
-        geom_names: Geom names as returned by :func:`get_scene_meshes` (each
-            name ends with ``_geomN`` where ``N`` is the geom index).
+        geom_ids: Mapping from geom name to geom ID, as returned by
+            :func:`sample_canonical_points`.
 
     Returns:
         Mapping from geom name to (4, 4) float32 homogeneous transform.
@@ -1003,8 +994,7 @@ def get_geom_world_transforms(
     model = sim.model.mj_model
     data = sim.data.mj_data
     transforms: dict[str, NDArray[np.float32]] = {}
-    for name in geom_names:
-        geom_id = int(name.rsplit("_geom", 1)[1])
+    for name, geom_id in geom_ids.items():
         body_id = int(model.geom_bodyid[geom_id])
         body_T = np.eye(4, dtype=np.float64)
         body_T[:3, :3] = data.xmat[body_id].reshape(3, 3)

@@ -106,8 +106,8 @@ class MeshPointCloud:
 
     Attributes:
         xyz: (N, 3) float32 array of world-frame XYZ positions.
-        geom_indices: (N,) int32 array mapping each point to its source geom
-            index in ``geom_names``.
+        geom_indices: (N,) int32 array mapping each point to its source geom's
+            0-based sequential position in ``geom_names`` (not a MuJoCo geom ID).
         geom_names: Ordered list of geom/mesh names that contributed points.
     """
 
@@ -741,6 +741,83 @@ def generate_full_point_cloud(
         xyz=np.concatenate(all_xyz, axis=0),
         geom_indices=np.concatenate(all_idx, axis=0),
         geom_names=geom_names,
+    )
+
+
+def generate_track_point_cloud(
+    sim: MjSim,
+    local_points_dict: dict[str, tuple[int, NDArray[np.float32]]] | None,
+    *,
+    num_points_per_geom: int = 500,
+) -> tuple[MeshPointCloud, dict[str, tuple[int, NDArray[np.float32]]]]:
+    """Generate a tracked world-frame point cloud with fixed point identity.
+
+    On the first call (``local_points_dict=None``) samples surface points from
+    every geom in local coordinates and stores them.  On every subsequent call
+    the *same* local points are re-transformed to their current world positions,
+    so point index ``i`` always refers to the same surface location across
+    timesteps.
+
+    Args:
+        sim: A ``kinder`` :class:`MjSim` instance (already reset and forwarded).
+        local_points_dict: ``None`` on the first call; the dict returned by a
+            previous call on subsequent calls.  Maps geom name to
+            ``(geom_id, local_pts)`` — geom_id is the MuJoCo geom index.
+        num_points_per_geom: Number of surface points to sample from each geom
+            mesh (only used on the first call).
+
+    Returns:
+        ``(MeshPointCloud, local_points_dict)`` — pass ``local_points_dict``
+        back on the next call to maintain correspondence.
+    """
+    _require_trimesh()
+    model = sim.model.mj_model
+    data = sim.data.mj_data
+
+    if local_points_dict is None:
+        local_points_dict = {
+            name: (geom_id, mesh.sample(num_points_per_geom).astype(np.float32))
+            for geom_id, name, mesh in _get_scene_geoms(sim)
+        }
+
+    all_xyz: list[NDArray[np.float32]] = []
+    all_idx: list[NDArray[np.int32]] = []
+    geom_names: list[str] = []
+
+    for local_idx, (name, (geom_id, local_pts)) in enumerate(local_points_dict.items()):
+        body_id = int(model.geom_bodyid[geom_id])
+        body_transform = np.eye(4)
+        body_transform[:3, :3] = data.xmat[body_id].reshape(3, 3)
+        body_transform[:3, 3] = data.xpos[body_id]
+
+        world_transform = body_transform @ _transform_from_pos_quat(
+            model.geom_pos[geom_id], model.geom_quat[geom_id]
+        )
+
+        pts_h = np.hstack([local_pts, np.ones((len(local_pts), 1))])
+        xyz = (pts_h @ world_transform.T)[:, :3].astype(np.float32)
+
+        all_xyz.append(xyz)
+        all_idx.append(np.full(len(xyz), local_idx, dtype=np.int32))
+        geom_names.append(name)
+
+    if not all_xyz:
+        return (
+            MeshPointCloud(
+                xyz=np.empty((0, 3), dtype=np.float32),
+                geom_indices=np.empty((0,), dtype=np.int32),
+                geom_names=[],
+            ),
+            local_points_dict,
+        )
+
+    return (
+        MeshPointCloud(
+            xyz=np.concatenate(all_xyz, axis=0),
+            geom_indices=np.concatenate(all_idx, axis=0),
+            geom_names=geom_names,
+        ),
+        local_points_dict,
     )
 
 

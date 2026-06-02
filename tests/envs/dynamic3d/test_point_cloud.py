@@ -19,6 +19,7 @@ from kinder.envs.dynamic3d.point_cloud import (
     generate_full_point_cloud,
     generate_point_cloud,
     generate_scene_point_cloud,
+    generate_track_point_cloud,
     get_camera_extrinsics,
     get_camera_intrinsics,
     get_scene_meshes,
@@ -627,3 +628,43 @@ def test_save_point_cloud(sim, request):
     print(f"  Load with: data = np.load('{out}')")
     print("  Arrays:    data['xyz'], data['rgb'], data['camera_indices']")
     print(f"  Cameras:   {pc.camera_names}")
+
+
+# ---------------------------------------------------------------------------
+# generate_track_point_cloud
+# ---------------------------------------------------------------------------
+
+
+def test_generate_track_point_cloud_first_call_returns_local_dict(sim):
+    """First call with local_points_dict=None returns a non-empty MeshPointCloud."""
+    pc, local_pts = generate_track_point_cloud(sim, None, num_points_per_geom=10)
+    assert isinstance(pc, MeshPointCloud)
+    assert local_pts is not None
+    assert len(pc) > 0
+
+
+def test_generate_track_point_cloud_rigid_correspondence(sim, env):
+    """Intra-geom pairwise distances must be invariant across timesteps."""
+    from scipy.spatial.distance import pdist  # pylint: disable=import-outside-toplevel
+
+    pc0, local_pts = generate_track_point_cloud(sim, None, num_points_per_geom=20)
+    env.step(env.action_space.sample())
+    pc1, _ = generate_track_point_cloud(sim, local_pts, num_points_per_geom=20)
+
+    for name in pc0.geom_names:
+        g0 = pc0.filter_by_geom(name).xyz
+        g1 = pc1.filter_by_geom(name).xyz
+        np.testing.assert_allclose(
+            pdist(g0),
+            pdist(g1),
+            atol=1e-4,
+            err_msg=f"pairwise distances changed for geom {name!r}",
+        )
+
+
+def test_generate_track_point_cloud_consistent_size(sim, env):
+    """Point count must be identical across calls given the same local_points_dict."""
+    pc0, local_pts = generate_track_point_cloud(sim, None, num_points_per_geom=10)
+    env.step(env.action_space.sample())
+    pc1, _ = generate_track_point_cloud(sim, local_pts, num_points_per_geom=10)
+    assert len(pc0) == len(pc1)

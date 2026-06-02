@@ -310,8 +310,8 @@ def _capture_step(
     store_mesh: bool = False,
     store_track: bool = False,
     num_points_per_geom: int = 500,
-    local_points_dict: dict[str, NDArray[np.float32]] | None = None,
-) -> tuple[dict[str, Any], dict[str, NDArray[np.float32]] | None]:
+    local_points_dict: dict[str, tuple[int, NDArray[np.float32]]] | None = None,
+) -> tuple[dict[str, Any], dict[str, tuple[int, NDArray[np.float32]]] | None]:
     """Capture RGB images and/or point clouds at the current env state.
 
     Returns ``(result, local_points_dict)`` where ``local_points_dict`` must
@@ -488,7 +488,6 @@ def _write_step(
     store_mesh: bool = False,
     mesh_pc_size: int = 0,
     store_track: bool = False,
-    track_pc_size: int = 0,
 ) -> None:
     """Write one step's data into pre-allocated HDF5 datasets.
 
@@ -518,12 +517,8 @@ def _write_step(
         obs_grp["mesh_pc_geom_indices"][step_idx] = idx_m
 
     if store_track:
-        xyz_t = capture["track_pc_xyz"]
-        idx_t = capture["track_pc_geom_indices"]
-        if len(xyz_t) != track_pc_size:
-            xyz_t, idx_t = _pad_or_subsample_mesh(xyz_t, idx_t, track_pc_size, rng)
-        obs_grp["track_pc_xyz"][step_idx] = xyz_t
-        obs_grp["track_pc_geom_indices"][step_idx] = idx_t
+        obs_grp["track_pc_xyz"][step_idx] = capture["track_pc_xyz"]
+        obs_grp["track_pc_geom_indices"][step_idx] = capture["track_pc_geom_indices"]
 
 
 # ---------------------------------------------------------------------------
@@ -599,7 +594,7 @@ def _process_demo(
     # Capture step 0 to pin array sizes for the rest of the demo.
     # local_points_dict starts as None; generate_track_point_cloud populates it
     # on the first call so the same surface points are re-used every step.
-    local_points_dict: dict[str, NDArray[np.float32]] | None = None
+    local_points_dict: dict[str, tuple[int, NDArray[np.float32]]] | None = None
     capture0, local_points_dict = _capture_step(
         env,
         camera_names,
@@ -621,8 +616,6 @@ def _process_demo(
         else {}
     )
     mesh_pc_size: int = len(capture0["mesh_pc_xyz"]) if store_mesh else 0
-    track_pc_size: int = len(capture0["track_pc_xyz"]) if store_track else 0
-
     _create_datasets(
         grp,
         obs_grp,
@@ -649,7 +642,6 @@ def _process_demo(
         store_mesh=store_mesh,
         mesh_pc_size=mesh_pc_size,
         store_track=store_track,
-        track_pc_size=track_pc_size,
     )
 
     # Step through remaining actions
@@ -685,7 +677,6 @@ def _process_demo(
             store_mesh=store_mesh,
             mesh_pc_size=mesh_pc_size,
             store_track=store_track,
-            track_pc_size=track_pc_size,
         )
 
     # Final step: execute last action to get terminal observation

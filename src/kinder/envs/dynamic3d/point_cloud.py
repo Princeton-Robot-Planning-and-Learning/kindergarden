@@ -106,8 +106,8 @@ class MeshPointCloud:
 
     Attributes:
         xyz: (N, 3) float32 array of world-frame XYZ positions.
-        geom_indices: (N,) int32 array mapping each point to its source geom
-            index in ``geom_names``.
+        geom_indices: (N,) int32 array mapping each point to its source geom's
+            0-based sequential position in ``geom_names`` (not a MuJoCo geom ID).
         geom_names: Ordered list of geom/mesh names that contributed points.
     """
 
@@ -746,10 +746,10 @@ def generate_full_point_cloud(
 
 def generate_track_point_cloud(
     sim: MjSim,
-    local_points_dict: dict[str, NDArray[np.float32]] | None,
+    local_points_dict: dict[str, tuple[int, NDArray[np.float32]]] | None,
     *,
     num_points_per_geom: int = 500,
-) -> tuple[MeshPointCloud, dict[str, NDArray[np.float32]]]:
+) -> tuple[MeshPointCloud, dict[str, tuple[int, NDArray[np.float32]]]]:
     """Generate a tracked world-frame point cloud with fixed point identity.
 
     On the first call (``local_points_dict=None``) samples surface points from
@@ -761,7 +761,8 @@ def generate_track_point_cloud(
     Args:
         sim: A ``kinder`` :class:`MjSim` instance (already reset and forwarded).
         local_points_dict: ``None`` on the first call; the dict returned by a
-            previous call on subsequent calls.
+            previous call on subsequent calls.  Maps geom name to
+            ``(geom_id, local_pts)`` — geom_id is the MuJoCo geom index.
         num_points_per_geom: Number of surface points to sample from each geom
             mesh (only used on the first call).
 
@@ -774,19 +775,16 @@ def generate_track_point_cloud(
     data = sim.data.mj_data
 
     if local_points_dict is None:
-        base_meshes = get_scene_meshes(sim)
         local_points_dict = {
-            name: mesh.sample(num_points_per_geom).astype(np.float32)
-            for name, mesh in base_meshes.items()
+            name: (geom_id, mesh.sample(num_points_per_geom).astype(np.float32))
+            for geom_id, name, mesh in _get_scene_geoms(sim)
         }
 
     all_xyz: list[NDArray[np.float32]] = []
     all_idx: list[NDArray[np.int32]] = []
     geom_names: list[str] = []
 
-    for local_idx, (name, local_pts) in enumerate(local_points_dict.items()):
-        geom_id = int(name.rsplit("_geom", 1)[1])
-
+    for local_idx, (name, (geom_id, local_pts)) in enumerate(local_points_dict.items()):
         body_id = int(model.geom_bodyid[geom_id])
         body_transform = np.eye(4)
         body_transform[:3, :3] = data.xmat[body_id].reshape(3, 3)

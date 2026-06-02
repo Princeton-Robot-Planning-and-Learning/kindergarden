@@ -546,11 +546,11 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
                     _rgb_cache[cam] = obs_grp[f"{cam}_rgb"][:]
                 print("  Done.", flush=True)
 
-        # Mutable container so _load_pc can update point_colors before state exists
-        _pc_colors: list[NDArray[np.float64] | None] = [None]
+        _pc_colors: NDArray[np.float64] | None = None
 
         def _load_pc(step: int) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
             """Return (xyz, colors) for the active point-cloud mode."""
+            nonlocal _pc_colors
             if args.trackpointcloud:
                 raw_xyz = (
                     _track_xyz_all[step]
@@ -562,10 +562,10 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
                     if _track_idx_all is not None
                     else obs_grp["track_pc_geom_indices"][step]
                 )
-                xyz, colors, _pc_colors[0] = _load_track_step(
+                xyz, colors, _pc_colors = _load_track_step(
                     raw_xyz,
                     raw_idx,
-                    _pc_colors[0],
+                    _pc_colors,
                     args.max_pts,
                     rng,
                     track_geom=args.track_geom,

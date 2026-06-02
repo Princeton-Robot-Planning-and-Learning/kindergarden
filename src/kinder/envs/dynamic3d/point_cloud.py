@@ -822,6 +822,189 @@ def generate_track_point_cloud(
 
 
 # ---------------------------------------------------------------------------
+# Canonical point cloud + EE pose helpers
+# ---------------------------------------------------------------------------
+
+_EE_SITE_CANDIDATES: tuple[str, ...] = (
+    "robot_pinch_site",
+    "eef_site",
+    "ee_site",
+    "gripper_site",
+    "tcp",
+    "tool_frame",
+    "end_effector_link",
+)
+
+_EE_BODY_CANDIDATES: tuple[str, ...] = (
+    "EE_BODY_R",
+    "end_effector",
+    "eef_link",
+    "ee_link",
+)
+
+
+def find_ee_frame(
+    sim: MjSim,
+    frame_name: str | None = None,
+) -> tuple[str, Literal["site", "body"]]:
+    """Locate the EE frame in the model, supporting both sites and bodies.
+
+    When *frame_name* is given, tries it first as a site then as a body.
+    When *frame_name* is ``None``, tries each name in
+    :data:`_EE_SITE_CANDIDATES` as sites, then each name in
+    :data:`_EE_BODY_CANDIDATES` as bodies.
+
+    Args:
+        sim: A ``kinder`` :class:`MjSim` instance (already reset).
+        frame_name: Explicit site or body name.  ``None`` triggers auto-detect.
+
+    Returns:
+        ``(name, frame_type)`` where *frame_type* is ``"site"`` or ``"body"``.
+
+    Raises:
+        RuntimeError: If no candidate is found in the model.
+    """
+    model = sim.model.mj_model
+
+    def _has_site(name: str) -> bool:
+        return (
+            mujoco.mj_name2id(  # pylint: disable=no-member
+                model, mujoco.mjtObj.mjOBJ_SITE, name  # pylint: disable=no-member
+            )
+            >= 0
+        )
+
+    def _has_body(name: str) -> bool:
+        return (
+            mujoco.mj_name2id(  # pylint: disable=no-member
+                model, mujoco.mjtObj.mjOBJ_BODY, name  # pylint: disable=no-member
+            )
+            >= 0
+        )
+
+    if frame_name is not None:
+        if _has_site(frame_name):
+            return frame_name, "site"
+        if _has_body(frame_name):
+            return frame_name, "body"
+        raise RuntimeError(
+            f"EE frame '{frame_name}' not found as site or body. "
+            "Pass --ee-site with the correct name."
+        )
+
+    for name in _EE_SITE_CANDIDATES:
+        if _has_site(name):
+            return name, "site"
+    for name in _EE_BODY_CANDIDATES:
+        if _has_body(name):
+            return name, "body"
+
+    raise RuntimeError(
+        "No EE frame found in model. "
+        f"Tried sites: {', '.join(_EE_SITE_CANDIDATES)}. "
+        f"Tried bodies: {', '.join(_EE_BODY_CANDIDATES)}. "
+        "Pass --ee-site with the correct site or body name."
+    )
+
+
+def get_ee_pose(
+    sim: MjSim,
+    frame_name: str,
+    frame_type: Literal["site", "body"] = "site",
+) -> NDArray[np.float32]:
+    """Return the 4×4 world pose of the EE frame as float32.
+
+    The returned matrix is:
+    ::
+
+        [[R (3×3), p (3×1)],
+         [0, 0, 0,       1]]
+
+    Args:
+        sim: A ``kinder`` :class:`MjSim` instance (already stepped).
+        frame_name: Site or body name (see :func:`find_ee_frame`).
+        frame_type: ``"site"`` (default) or ``"body"``.
+
+    Returns:
+        (4, 4) float32 homogeneous transform.
+    """
+    model = sim.model.mj_model
+    data = sim.data.mj_data
+    T = np.eye(4, dtype=np.float32)
+    if frame_type == "site":
+        site_id = mujoco.mj_name2id(  # pylint: disable=no-member
+            model, mujoco.mjtObj.mjOBJ_SITE, frame_name  # pylint: disable=no-member
+        )
+        T[:3, :3] = data.site_xmat[site_id].reshape(3, 3).astype(np.float32)
+        T[:3, 3] = data.site_xpos[site_id].astype(np.float32)
+    else:
+        body_id = mujoco.mj_name2id(  # pylint: disable=no-member
+            model, mujoco.mjtObj.mjOBJ_BODY, frame_name  # pylint: disable=no-member
+        )
+        T[:3, :3] = data.xmat[body_id].reshape(3, 3).astype(np.float32)
+        T[:3, 3] = data.xpos[body_id].astype(np.float32)
+    return T
+
+
+def sample_canonical_points(
+    sim: MjSim,
+    *,
+    num_points_per_geom: int = 500,
+) -> dict[str, tuple[int, NDArray[np.float32]]]:
+    """Sample fixed local-frame surface points from every geom.
+
+    Points are sampled once (typically right after ``env.reset()``) and kept
+    fixed.  Combined with :func:`get_geom_world_transforms` they allow
+    world-frame reconstruction at any later timestep without re-sampling.
+
+    Args:
+        sim: A ``kinder`` :class:`MjSim` instance (already reset).
+        num_points_per_geom: Surface points sampled per geom mesh.
+
+    Returns:
+        Mapping from geom name to ``(geom_id, local_pts)`` where
+        *local_pts* is a (P, 3) float32 array of local-frame surface points.
+    """
+    _require_trimesh()
+    return {
+        name: (geom_id, mesh.sample(num_points_per_geom).astype(np.float32))
+        for geom_id, name, mesh in _get_scene_geoms(sim)
+    }
+
+
+def get_geom_world_transforms(
+    sim: MjSim,
+    geom_ids: dict[str, int],
+) -> dict[str, NDArray[np.float32]]:
+    """Return the current 4×4 world transforms for the requested geoms.
+
+    The transform maps local geom coordinates to world coordinates:
+    ``world_pts = (T @ pts_h.T).T[:, :3]``
+
+    Args:
+        sim: A ``kinder`` :class:`MjSim` instance (already stepped).
+        geom_ids: Mapping from geom name to geom ID, as returned by
+            :func:`sample_canonical_points`.
+
+    Returns:
+        Mapping from geom name to (4, 4) float32 homogeneous transform.
+    """
+    model = sim.model.mj_model
+    data = sim.data.mj_data
+    transforms: dict[str, NDArray[np.float32]] = {}
+    for name, geom_id in geom_ids.items():
+        body_id = int(model.geom_bodyid[geom_id])
+        body_T = np.eye(4, dtype=np.float64)
+        body_T[:3, :3] = data.xmat[body_id].reshape(3, 3)
+        body_T[:3, 3] = data.xpos[body_id]
+        local_T = _transform_from_pos_quat(
+            model.geom_pos[geom_id], model.geom_quat[geom_id]
+        )
+        transforms[name] = (body_T @ local_T).astype(np.float32)
+    return transforms
+
+
+# ---------------------------------------------------------------------------
 # Convenience: extract sim from a wrapped kinder env
 # ---------------------------------------------------------------------------
 

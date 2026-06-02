@@ -55,7 +55,7 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import gymnasium
 import h5py
@@ -66,10 +66,14 @@ import kinder
 from kinder.envs.dynamic3d.point_cloud import (
     MeshPointCloud,
     PointCloud,
+    find_ee_frame,
     generate_full_point_cloud,
     generate_scene_point_cloud,
     generate_track_point_cloud,
+    get_ee_pose,
+    get_geom_world_transforms,
     get_sim_from_env,
+    sample_canonical_points,
 )
 from kinder.utils import load_demo
 
@@ -184,6 +188,30 @@ def _parse_args() -> argparse.Namespace:
         ),
     )
     p.add_argument(
+        "--canonicalpointcloud",
+        action="store_true",
+        help=(
+            "Store canonical per-geom surface points (sampled once after reset) "
+            "and per-timestep rigid-body transforms instead of full per-timestep "
+            "point clouds.  Writes canonical_pointcloud/<geom>/xyz, "
+            "geom_transforms/<geom> (T,4,4), obs/ee_pose (T,4,4), and "
+            "actions_delta_ee_transform (T,4,4).  Combinable with "
+            "--completepointcloud, --allpointcloud, and --trackpointcloud."
+        ),
+    )
+    p.add_argument(
+        "--ee-site",
+        type=str,
+        default=None,
+        metavar="NAME",
+        help=(
+            "MuJoCo site or body name to use as the end-effector frame for "
+            "obs/ee_pose and actions_delta_ee_transform.  Sites are tried "
+            "before bodies.  When omitted, common names are auto-detected "
+            "(robot_pinch_site, eef_site, …; then EE_BODY_R, end_effector, …)."
+        ),
+    )
+    p.add_argument(
         "--num-points-per-geom",
         type=int,
         default=500,
@@ -211,6 +239,85 @@ def _make_env(env_id: str) -> gymnasium.Env:
     if "kinematic3d" in entrypoint:
         make_kwargs["realistic_bg"] = False
     return kinder.make(env_id, **make_kwargs)
+
+
+def _hdf5_key(name: str) -> str:
+    """Sanitise a geom name for use as an HDF5 dataset/group key.
+
+    HDF5 treats ``/`` as a path separator, so forward slashes in geom names
+    (e.g. ``gen3/base_link_geom144``) must be escaped.
+    """
+    return name.replace("/", "__")
+
+
+def _se3_inv(T: NDArray[np.float32]) -> NDArray[np.float32]:
+    """Compute the inverse of a 4×4 SE(3) matrix without calling np.linalg.inv."""
+    R = T[:3, :3]
+    p = T[:3, 3]
+    T_inv = np.eye(4, dtype=np.float32)
+    T_inv[:3, :3] = R.T
+    T_inv[:3, 3] = -(R.T @ p)
+    return T_inv
+
+
+def _create_canonical_datasets(
+    grp: h5py.Group,
+    obs_grp: h5py.Group,
+    canonical_pts: dict[str, tuple[int, NDArray[np.float32]]],
+    num_frames: int,
+    ee_frame_name: str,
+    ee_frame_type: Literal["site", "body"],
+) -> None:
+    """Pre-allocate HDF5 datasets for canonical point cloud mode."""
+    str_dt = h5py.string_dtype()
+
+    # canonical_pointcloud/<hdf5_key>/xyz  +  geom_name attr on every group
+    canon_grp = grp.require_group("canonical_pointcloud")
+    for name, (_, pts) in canonical_pts.items():
+        key = _hdf5_key(name)
+        geom_grp = canon_grp.require_group(key)
+        geom_grp.attrs["geom_name"] = name
+        geom_grp.create_dataset("xyz", data=pts, dtype=np.float32, compression="gzip")
+
+    # Demo-level ordered mapping: original names ↔ HDF5 keys
+    orig_names = list(canonical_pts.keys())
+    hdf5_keys = [_hdf5_key(n) for n in orig_names]
+    canon_grp.create_dataset("geom_names", data=orig_names, dtype=str_dt)
+    canon_grp.create_dataset("geom_hdf5_keys", data=hdf5_keys, dtype=str_dt)
+
+    # geom_transforms/<hdf5_key>  +  geom_name attr on every dataset
+    gt_grp = grp.require_group("geom_transforms")
+    for name in canonical_pts:
+        key = _hdf5_key(name)
+        ds = gt_grp.create_dataset(
+            key,
+            shape=(num_frames, 4, 4),
+            dtype=np.float32,
+            compression="gzip",
+        )
+        ds.attrs["geom_name"] = name
+
+    obs_grp.create_dataset(
+        "ee_pose",
+        shape=(num_frames, 4, 4),
+        dtype=np.float32,
+        compression="gzip",
+    )
+    grp.create_dataset(
+        "actions_delta_ee_transform",
+        shape=(num_frames, 4, 4),
+        dtype=np.float32,
+        compression="gzip",
+    )
+
+    # Schema / convention attrs so the file is self-documenting
+    grp.attrs["pointcloud_schema"] = "canonical_pointcloud_v1"
+    grp.attrs["delta_ee_convention"] = (
+        "actions_delta_ee_transform[t] = "
+        "inv(ee_pose_before_action[t]) @ ee_pose_after_action[t]"
+    )
+    grp.attrs["ee_frame_name"] = ee_frame_name
+    grp.attrs["ee_frame_type"] = ee_frame_type
 
 
 def _pad_or_subsample_mesh(
@@ -542,6 +649,8 @@ def _process_demo(
     store_camera: bool = True,
     store_mesh: bool = False,
     store_track: bool = False,
+    store_canonical: bool = False,
+    ee_site: str | None = None,
     num_points_per_geom: int = 500,
 ) -> tuple[gymnasium.Env, list[str], int]:
     """Replay one demo and write it to HDF5.
@@ -583,6 +692,22 @@ def _process_demo(
     elif not store_camera:
         camera_names = camera_names or []
     assert camera_names is not None
+
+    # Canonical setup: sample fixed local-frame points and locate the EE frame
+    # immediately after reset so geometry is in its initial pose.
+    canonical_pts: dict[str, tuple[int, NDArray[np.float32]]] = {}
+    ee_frame_name: str | None = None
+    ee_frame_type: Literal["site", "body"] = "site"
+    if store_canonical:
+        sim = get_sim_from_env(env)
+        ee_frame_name, ee_frame_type = find_ee_frame(sim, ee_site)
+        canonical_pts = sample_canonical_points(
+            sim, num_points_per_geom=num_points_per_geom
+        )
+        print(
+            f"  Canonical: {len(canonical_pts)} geoms, "
+            f"EE {ee_frame_type}='{ee_frame_name}'"
+        )
 
     num_frames = len(actions)
     grp_name = f"demo_{demo_idx}"
@@ -628,6 +753,12 @@ def _process_demo(
         store_mesh=store_mesh,
         store_track=store_track,
     )
+    if store_canonical:
+        assert ee_frame_name is not None
+        _create_canonical_datasets(
+            grp, obs_grp, canonical_pts, num_frames, ee_frame_name, ee_frame_type
+        )
+
     _write_step(
         grp,
         obs_grp,
@@ -644,9 +775,29 @@ def _process_demo(
         store_track=store_track,
     )
 
+    ee_poses_all: list[NDArray[np.float32]] = []
+    geom_transforms_all: dict[str, list[NDArray[np.float32]]] = (
+        {name: [] for name in canonical_pts} if store_canonical else {}
+    )
+    if store_canonical:
+        assert ee_frame_name is not None
+        ee_poses_all.append(get_ee_pose(sim, ee_frame_name, ee_frame_type))
+        for name, xform in get_geom_world_transforms(
+            sim, {n: gid for n, (gid, _) in canonical_pts.items()}
+        ).items():
+            geom_transforms_all[name].append(xform)
+
     # Step through remaining actions
     for step_idx in range(1, num_frames):
         obs_np, _reward, _term, _trunc, _ = env.step(actions[step_idx - 1])
+
+        if store_canonical:
+            assert ee_frame_name is not None
+            ee_poses_all.append(get_ee_pose(sim, ee_frame_name, ee_frame_type))
+            for name, xform in get_geom_world_transforms(
+                sim, {n: gid for n, (gid, _) in canonical_pts.items()}
+            ).items():
+                geom_transforms_all[name].append(xform)
 
         capture, local_points_dict = _capture_step(
             env,
@@ -679,9 +830,28 @@ def _process_demo(
             store_track=store_track,
         )
 
-    # Final step: execute last action to get terminal observation
+    # Final step: execute last action to get terminal observation and EE pose.
     obs_np, _reward, _term, _trunc, _ = env.step(actions[-1])
-    # (terminal obs is not stored; dataset length == len(actions))
+    # terminal obs is not stored; dataset length == len(actions)
+
+    # Capture terminal EE pose (after actions[-1]) for the last delta.
+    if store_canonical:
+        assert ee_frame_name is not None
+        ee_poses_all.append(get_ee_pose(sim, ee_frame_name, ee_frame_type))
+
+    # Write canonical data in one pass after all steps are collected.
+    if store_canonical and ee_poses_all:
+        ee_arr = np.stack(ee_poses_all)  # (num_frames + 1, 4, 4)
+        # delta[t] = inv(ee_before_action[t]) @ ee_after_action[t]
+        #           = inv(ee_arr[t]) @ ee_arr[t+1]
+        delta_arr = np.stack(
+            [_se3_inv(ee_arr[t]) @ ee_arr[t + 1] for t in range(num_frames)]
+        ).astype(np.float32)
+        obs_grp["ee_pose"][:] = ee_arr[:num_frames]
+        grp["actions_delta_ee_transform"][:] = delta_arr
+        gt_grp = grp["geom_transforms"]
+        for name, xforms in geom_transforms_all.items():
+            gt_grp[_hdf5_key(name)][:] = np.stack(xforms).astype(np.float32)
 
     print(f"  demo_{demo_idx}: {num_frames} frames, seed={seed}")
     return env, camera_names, num_frames
@@ -695,6 +865,7 @@ def main() -> None:
     if args.max_demos is not None:
         demo_files = demo_files[: args.max_demos]
 
+    store_canonical = args.canonicalpointcloud
     store_camera = not args.completepointcloud
     store_mesh = args.completepointcloud or args.allpointcloud
     store_track = args.trackpointcloud
@@ -706,6 +877,8 @@ def main() -> None:
     )
     if store_track:
         mode_label += " + track"
+    if store_canonical:
+        mode_label += " + canonical"
     print(f"Found {len(demo_files)} demo(s) in {args.demo_dir}")
     print(f"Output: {args.output}  |  mode: {mode_label}")
 
@@ -740,6 +913,8 @@ def main() -> None:
                     store_camera=store_camera,
                     store_mesh=store_mesh,
                     store_track=store_track,
+                    store_canonical=store_canonical,
+                    ee_site=args.ee_site,
                     num_points_per_geom=args.num_points_per_geom,
                 )
                 total_frames += nf

@@ -186,6 +186,46 @@ def _parse_args() -> argparse.Namespace:
             "all other geoms are shown in grey."
         ),
     )
+    p.add_argument(
+        "--canonicalpointcloud",
+        action="store_true",
+        help=(
+            "Visualise the canonical point cloud written by --canonicalpointcloud "
+            "in demos_to_hdf5_with_pointclouds.py.  Reconstructs world-frame points "
+            "from canonical_pointcloud/<geom>/xyz and geom_transforms/<geom>[step]. "
+            "Use --geom / --geom-substr / --exclude-geom-substr to filter geoms."
+        ),
+    )
+    p.add_argument(
+        "--geom",
+        nargs="+",
+        default=None,
+        metavar="NAME",
+        help=(
+            "Include only these geoms in --canonicalpointcloud mode.  Accepts "
+            "original geom names (from geom_names) or sanitized HDF5 keys."
+        ),
+    )
+    p.add_argument(
+        "--geom-substr",
+        nargs="+",
+        default=None,
+        metavar="STR",
+        help=(
+            "Include geoms whose original name contains any of these substrings "
+            "(--canonicalpointcloud mode).  Combined with --geom via union."
+        ),
+    )
+    p.add_argument(
+        "--exclude-geom-substr",
+        nargs="+",
+        default=None,
+        metavar="STR",
+        help=(
+            "Exclude geoms whose original name contains any of these substrings "
+            "(applied after --geom / --geom-substr inclusion)."
+        ),
+    )
     return p.parse_args()
 
 
@@ -215,6 +255,23 @@ def _print_info(hf: h5py.File) -> None:
             f"  {key}: {grp.attrs.get('num_frames', '?')} frames, "
             f"seed={grp.attrs.get('seed', '?')}, cameras={cams}"
         )
+        if "canonical_pointcloud" in grp:
+            cp = grp["canonical_pointcloud"]
+            n_geoms = sum(
+                1 for k in cp.keys() if k not in ("geom_names", "geom_hdf5_keys")
+            )
+            sample_names: list[str] = []
+            if "geom_names" in cp:
+                raw = cp["geom_names"][:5]
+                sample_names = [n.decode() if isinstance(n, bytes) else n for n in raw]
+            schema = grp.attrs.get("pointcloud_schema", "unknown")
+            ee = grp.attrs.get("ee_frame_name", "?")
+            ee_type = grp.attrs.get("ee_frame_type", "?")
+            print(
+                f"    canonical_pointcloud: {n_geoms} geoms, "
+                f"schema={schema}, EE {ee_type}='{ee}'"
+            )
+            print(f"    sample geom names: {sample_names}")
 
 
 def _load_step(
@@ -366,6 +423,146 @@ def _load_track_step(
 
 
 # ---------------------------------------------------------------------------
+# Canonical point cloud helpers
+# ---------------------------------------------------------------------------
+
+
+def _load_canonical_geom_map(demo_grp: h5py.Group) -> dict[str, str]:
+    """Return a mapping from original geom name to sanitized HDF5 key.
+
+    Reads ``canonical_pointcloud/geom_names`` and ``geom_hdf5_keys`` when
+    present; falls back to reading ``attrs["geom_name"]`` on each subgroup.
+    """
+    cp = demo_grp["canonical_pointcloud"]
+    if "geom_names" in cp and "geom_hdf5_keys" in cp:
+        names = cp["geom_names"][:]
+        keys = cp["geom_hdf5_keys"][:]
+        decode = lambda v: v.decode() if isinstance(v, bytes) else v
+        return {decode(n): decode(k) for n, k in zip(names, keys)}
+    # Fallback: iterate subgroups and read attrs
+    result: dict[str, str] = {}
+    for k in cp.keys():
+        if k in ("geom_names", "geom_hdf5_keys"):
+            continue
+        orig = cp[k].attrs.get("geom_name", k)
+        result[str(orig)] = k
+    return result
+
+
+def _filter_geoms(
+    geom_map: dict[str, str],
+    geom: list[str] | None,
+    geom_substr: list[str] | None,
+    exclude_geom_substr: list[str] | None,
+) -> dict[str, str]:
+    """Return the subset of *geom_map* matching the filter criteria.
+
+    Inclusion:
+    - ``geom``: exact original names **or** sanitized HDF5 keys.
+    - ``geom_substr``: original name contains any substring.
+    - If both are given, their union is used.
+    - If neither is given, all geoms are included.
+
+    Exclusion (applied after inclusion):
+    - ``exclude_geom_substr``: original name contains any substring.
+
+    Raises:
+        ValueError: If the resulting selection is empty.
+    """
+    key_to_orig = {v: k for k, v in geom_map.items()}
+
+    if geom is None and geom_substr is None:
+        selected = dict(geom_map)
+    else:
+        selected: dict[str, str] = {}
+        if geom:
+            for name in geom:
+                if name in geom_map:
+                    selected[name] = geom_map[name]
+                elif name in key_to_orig:
+                    selected[key_to_orig[name]] = name
+        if geom_substr:
+            for orig, key in geom_map.items():
+                if any(s in orig for s in geom_substr):
+                    selected[orig] = key
+
+    if exclude_geom_substr:
+        selected = {
+            orig: key
+            for orig, key in selected.items()
+            if not any(s in orig for s in exclude_geom_substr)
+        }
+
+    if not selected:
+        sample = list(geom_map.keys())[:6]
+        raise ValueError(
+            "No geoms matched the filter. " f"Sample available names: {sample}"
+        )
+
+    return selected
+
+
+def _load_canonical_step(
+    gt_grp: h5py.Group,
+    selected_geom_map: dict[str, str],
+    canon_pts: dict[str, NDArray[np.float32]],
+    gt_cache: dict[str, NDArray[np.float32]],
+    step: int,
+    max_pts: int,
+    rng: np.random.Generator,
+) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+    """Reconstruct world-frame points for *step* from canonical data.
+
+    For each selected geom::
+
+        world_pts = (T @ pts_h.T).T[:, :3]
+
+    Points are coloured by geom index (tab20, cycling every 20 geoms).
+    ``max_pts`` is applied globally after all geoms are concatenated.
+
+    Args:
+        gt_grp: The ``geom_transforms`` HDF5 group (used for on-demand reads).
+        selected_geom_map: Mapping original_name → hdf5_key for selected geoms.
+        canon_pts: Pre-loaded canonical points keyed by hdf5_key.
+        gt_cache: Pre-loaded per-geom transforms keyed by hdf5_key (may be empty).
+        step: Timestep index.
+        max_pts: Global point limit applied after concatenation.
+        rng: Random generator for sub-sampling.
+
+    Returns:
+        xyz    : (N, 3) float64 world-frame positions.
+        colors : (N, 3) float64 RGB in [0, 1].
+    """
+    cmap = plt.get_cmap("tab20")
+    all_xyz: list[NDArray[np.float64]] = []
+    all_colors: list[NDArray[np.float64]] = []
+
+    for local_idx, (_orig, hdf5_key) in enumerate(selected_geom_map.items()):
+        pts: NDArray[np.float32] = canon_pts[hdf5_key]  # (P, 3)
+        T: NDArray[np.float32] = (
+            gt_cache[hdf5_key][step] if hdf5_key in gt_cache else gt_grp[hdf5_key][step]
+        )
+        pts_h = np.hstack([pts, np.ones((len(pts), 1), dtype=np.float32)])
+        world_pts = (T @ pts_h.T).T[:, :3].astype(np.float64)
+        color = np.array(cmap(local_idx % 20)[:3], dtype=np.float64)
+        all_xyz.append(world_pts)
+        all_colors.append(np.tile(color, (len(world_pts), 1)))
+
+    if not all_xyz:
+        return np.empty((0, 3), dtype=np.float64), np.empty((0, 3), dtype=np.float64)
+
+    xyz = np.concatenate(all_xyz, axis=0)
+    colors = np.concatenate(all_colors, axis=0)
+
+    n = len(xyz)
+    if n > max_pts:
+        sel = rng.choice(n, max_pts, replace=False)
+        xyz, colors = xyz[sel], colors[sel]
+
+    return xyz, colors
+
+
+# ---------------------------------------------------------------------------
 # Open3D helpers
 # ---------------------------------------------------------------------------
 
@@ -477,6 +674,13 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
                 file=sys.stderr,
             )
             sys.exit(1)
+        if args.canonicalpointcloud and "canonical_pointcloud" not in demo_grp:
+            print(
+                "Error: canonical_pointcloud not found in this demo. "
+                "Re-generate the HDF5 with --canonicalpointcloud.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
 
         # ---- Resolve cameras (still used for the RGB panel) ---------------
         available_cams = _list_cameras(obs_grp)
@@ -493,11 +697,20 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
         else:
             cameras = available_cams
 
-        if not cameras and not args.completepointcloud and not args.trackpointcloud:
+        if (
+            not cameras
+            and not args.completepointcloud
+            and not args.trackpointcloud
+            and not args.canonicalpointcloud
+        ):
             print("Error: no camera data found.", file=sys.stderr)
             sys.exit(1)
 
-        if args.trackpointcloud:
+        if args.canonicalpointcloud:
+            mode_label = "canonical PC"
+            if args.geom or args.geom_substr:
+                mode_label += " (filtered)"
+        elif args.trackpointcloud:
             if args.track_geom is not None:
                 mode_label = f"track PC (geoms {args.track_geom} highlighted)"
             else:
@@ -517,10 +730,37 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
 
         start_step = min(max(args.step, 0), num_frames - 1)
 
-        # Pre-load all animation data into RAM to avoid per-frame HDF5 reads.
+        # ---- Canonical point cloud setup -----------------------------------
+        _selected_geom_map: dict[str, str] = {}  # orig_name -> hdf5_key
+        _canon_pts: dict[str, NDArray[np.float32]] = {}  # hdf5_key -> (P, 3)
+        _gt_grp: h5py.Group | None = None
+
+        if args.canonicalpointcloud:
+            try:
+                full_geom_map = _load_canonical_geom_map(demo_grp)
+                _selected_geom_map = _filter_geoms(
+                    full_geom_map,
+                    args.geom,
+                    args.geom_substr,
+                    args.exclude_geom_substr,
+                )
+            except ValueError as exc:
+                print(f"Error: {exc}", file=sys.stderr)
+                sys.exit(1)
+            cp_grp = demo_grp["canonical_pointcloud"]
+            for hdf5_key in _selected_geom_map.values():
+                _canon_pts[hdf5_key] = cp_grp[hdf5_key]["xyz"][:]
+            _gt_grp = demo_grp["geom_transforms"]
+            print(
+                f"  Canonical: {len(_selected_geom_map)} geoms selected "
+                f"(of {len(full_geom_map)} total)"
+            )
+
+        # ---- Pre-load animation data into RAM --------------------------------
         _track_xyz_all: NDArray[np.float32] | None = None
         _track_idx_all: NDArray[np.int32] | None = None
         _rgb_cache: dict[str, NDArray[np.uint8]] = {}  # cam -> (T, H, W, 3)
+        _gt_cache: dict[str, NDArray[np.float32]] = {}  # hdf5_key -> (T, 4, 4)
 
         if args.animate:
             if args.trackpointcloud:
@@ -529,6 +769,22 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
                 _track_idx_all = obs_grp["track_pc_geom_indices"][:]
                 track_mb = _track_xyz_all.nbytes / 1e6  # pylint: disable=no-member
                 print(f"  Track data: {track_mb:.0f} MB", flush=True)
+            if args.canonicalpointcloud and _gt_grp is not None:
+                gt_mb = (
+                    sum(
+                        _gt_grp[k].nbytes  # pylint: disable=no-member
+                        for k in _selected_geom_map.values()
+                    )
+                    / 1e6
+                )
+                print(
+                    f"  Pre-loading transforms for {len(_selected_geom_map)} geoms "
+                    f"({gt_mb:.0f} MB)...",
+                    flush=True,
+                )
+                for hdf5_key in _selected_geom_map.values():
+                    _gt_cache[hdf5_key] = _gt_grp[hdf5_key][:]
+                print("  Done.", flush=True)
             if cameras:
                 total_mb = (
                     sum(
@@ -551,6 +807,17 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
         def _load_pc(step: int) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
             """Return (xyz, colors) for the active point-cloud mode."""
             nonlocal _pc_colors
+            if args.canonicalpointcloud:
+                assert _gt_grp is not None
+                return _load_canonical_step(
+                    _gt_grp,
+                    _selected_geom_map,
+                    _canon_pts,
+                    _gt_cache,
+                    step,
+                    args.max_pts,
+                    rng,
+                )
             if args.trackpointcloud:
                 raw_xyz = (
                     _track_xyz_all[step]

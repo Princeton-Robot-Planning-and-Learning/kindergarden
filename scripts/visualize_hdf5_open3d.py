@@ -437,10 +437,9 @@ def _load_canonical_geom_map(demo_grp: h5py.Group) -> dict[str, str]:
     if "geom_names" in cp and "geom_hdf5_keys" in cp:
         names = cp["geom_names"][:]
         keys = cp["geom_hdf5_keys"][:]
-        return {
-            (n.decode() if isinstance(n, bytes) else n): (k.decode() if isinstance(k, bytes) else k)
-            for n, k in zip(names, keys)
-        }
+        def _dec(v: bytes | str) -> str:
+            return v.decode() if isinstance(v, bytes) else v
+        return {_dec(n): _dec(k) for n, k in zip(names, keys)}
     # Fallback: iterate subgroups and read attrs
     result: dict[str, str] = {}
     for k in cp.keys():

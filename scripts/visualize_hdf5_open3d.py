@@ -41,6 +41,14 @@ Usage
 
     # List available demos and cameras
     python scripts/visualize_hdf5_open3d.py data.hdf5 --info
+
+    # Visualise canonical point cloud, filtered to gripper geoms
+    python scripts/visualize_hdf5_open3d.py data.hdf5 \\
+        --canonicalpointcloud --geom-substr gripper --animate
+
+    # Visualise all canonical geoms at a specific step
+    python scripts/visualize_hdf5_open3d.py data.hdf5 \\
+        --canonicalpointcloud --step 50
 """
 
 from __future__ import annotations
@@ -433,12 +441,14 @@ def _load_canonical_geom_map(demo_grp: h5py.Group) -> dict[str, str]:
     Reads ``canonical_pointcloud/geom_names`` and ``geom_hdf5_keys`` when
     present; falls back to reading ``attrs["geom_name"]`` on each subgroup.
     """
+
+    def _dec(v: bytes | str) -> str:
+        return v.decode() if isinstance(v, bytes) else str(v)
+
     cp = demo_grp["canonical_pointcloud"]
     if "geom_names" in cp and "geom_hdf5_keys" in cp:
         names = cp["geom_names"][:]
         keys = cp["geom_hdf5_keys"][:]
-        def _dec(v: bytes | str) -> str:
-            return v.decode() if isinstance(v, bytes) else v
         return {_dec(n): _dec(k) for n, k in zip(names, keys)}
     # Fallback: iterate subgroups and read attrs
     result: dict[str, str] = {}
@@ -446,7 +456,7 @@ def _load_canonical_geom_map(demo_grp: h5py.Group) -> dict[str, str]:
         if k in ("geom_names", "geom_hdf5_keys"):
             continue
         orig = cp[k].attrs.get("geom_name", k)
-        result[str(orig)] = k
+        result[_dec(orig)] = k
     return result
 
 
@@ -539,6 +549,10 @@ def _load_canonical_step(
     all_xyz: list[NDArray[np.float64]] = []
     all_colors: list[NDArray[np.float64]] = []
 
+    # Per-geom cap so small geoms are not starved by large ones.
+    n_geoms = len(selected_geom_map)
+    per_geom_cap = max(1, max_pts // n_geoms) if n_geoms > 0 else max_pts
+
     for local_idx, (_orig, hdf5_key) in enumerate(selected_geom_map.items()):
         pts: NDArray[np.float32] = canon_pts[hdf5_key]  # (P, 3)
         T: NDArray[np.float32] = (
@@ -546,6 +560,9 @@ def _load_canonical_step(
         )
         pts_h = np.hstack([pts, np.ones((len(pts), 1), dtype=np.float32)])
         world_pts = (T @ pts_h.T).T[:, :3].astype(np.float64)
+        if len(world_pts) > per_geom_cap:
+            sel = rng.choice(len(world_pts), per_geom_cap, replace=False)
+            world_pts = world_pts[sel]
         color = np.array(cmap(local_idx % 20)[:3], dtype=np.float64)
         all_xyz.append(world_pts)
         all_colors.append(np.tile(color, (len(world_pts), 1)))
@@ -553,15 +570,7 @@ def _load_canonical_step(
     if not all_xyz:
         return np.empty((0, 3), dtype=np.float64), np.empty((0, 3), dtype=np.float64)
 
-    xyz = np.concatenate(all_xyz, axis=0)
-    colors = np.concatenate(all_colors, axis=0)
-
-    n = len(xyz)
-    if n > max_pts:
-        sel = rng.choice(n, max_pts, replace=False)
-        xyz, colors = xyz[sel], colors[sel]
-
-    return xyz, colors
+    return np.concatenate(all_xyz, axis=0), np.concatenate(all_colors, axis=0)
 
 
 # ---------------------------------------------------------------------------
@@ -683,6 +692,13 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
                 file=sys.stderr,
             )
             sys.exit(1)
+        if args.canonicalpointcloud and "geom_transforms" not in demo_grp:
+            print(
+                "Error: geom_transforms not found in this demo. "
+                "Re-generate the HDF5 with --canonicalpointcloud.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
 
         # ---- Resolve cameras (still used for the RGB panel) ---------------
         available_cams = _list_cameras(obs_grp)
@@ -710,7 +726,7 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
 
         if args.canonicalpointcloud:
             mode_label = "canonical PC"
-            if args.geom or args.geom_substr:
+            if args.geom or args.geom_substr or args.exclude_geom_substr:
                 mode_label += " (filtered)"
         elif args.trackpointcloud:
             if args.track_geom is not None:
@@ -738,6 +754,7 @@ def main() -> None:  # pylint: disable=too-many-locals,too-many-statements
         _gt_grp: h5py.Group | None = None
 
         if args.canonicalpointcloud:
+            full_geom_map: dict[str, str] = {}
             try:
                 full_geom_map = _load_canonical_geom_map(demo_grp)
                 _selected_geom_map = _filter_geoms(

@@ -159,32 +159,20 @@ def _parse_args() -> argparse.Namespace:
         help="Discard point cloud points closer than this distance in metres",
     )
 
-    mode = p.add_mutually_exclusive_group()
-    mode.add_argument(
-        "--completepointcloud",
+    p.add_argument(
+        "--camerapointcloud",
         action="store_true",
         help=(
-            "Store only mesh-based point clouds (obs/mesh_pc_xyz and "
-            "obs/mesh_pc_geom_indices). No camera point clouds are written."
-        ),
-    )
-    mode.add_argument(
-        "--allpointcloud",
-        action="store_true",
-        help=(
-            "Store both camera point clouds (existing behaviour) and mesh "
-            "point clouds (obs/mesh_pc_xyz and obs/mesh_pc_geom_indices)."
+            "Store per-camera point clouds (obs/{cam}_pc_xyz, obs/{cam}_pc_rgb) "
+            "back-projected from RGB-D renders."
         ),
     )
     p.add_argument(
-        "--trackpointcloud",
+        "--completepointcloud",
         action="store_true",
         help=(
-            "Store tracked point clouds with fixed point identity across "
-            "timesteps (obs/track_pc_xyz and obs/track_pc_geom_indices). "
-            "Points are sampled once after env.reset() in local coordinates "
-            "and re-transformed each step. Combinable with "
-            "--completepointcloud and --allpointcloud."
+            "Store mesh-based point clouds (obs/mesh_pc_xyz, "
+            "obs/mesh_pc_geom_indices) sampled directly from geom surfaces."
         ),
     )
     p.add_argument(
@@ -192,11 +180,21 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help=(
             "Store canonical per-geom surface points (sampled once after reset) "
-            "and per-timestep rigid-body transforms instead of full per-timestep "
-            "point clouds.  Writes canonical_pointcloud/<geom>/xyz, "
-            "geom_transforms/<geom> (T,4,4), obs/ee_pose (T,4,4), and "
-            "actions_delta_ee_transform (T,4,4).  Combinable with "
-            "--completepointcloud, --allpointcloud, and --trackpointcloud."
+            "and per-timestep rigid-body transforms.  Writes "
+            "canonical_pointcloud/<geom>/xyz, geom_transforms/<geom> (T,4,4), "
+            "obs/ee_pose (T,4,4), actions_delta_ee_transform (T,4,4), "
+            "actions_delta_ee_7d (T,7), actions_delta_base_3d (T,3), and "
+            "actions_delta_ee_base_10d (T,10)."
+        ),
+    )
+    p.add_argument(
+        "--trackpointcloud",
+        action="store_true",
+        help=(
+            "Store tracked point clouds with fixed point identity across "
+            "timesteps (obs/track_pc_xyz, obs/track_pc_geom_indices). "
+            "Points are sampled once after env.reset() in local coordinates "
+            "and re-transformed each step."
         ),
     )
     p.add_argument(
@@ -260,6 +258,118 @@ def _se3_inv(T: NDArray[np.float32]) -> NDArray[np.float32]:
     return T_inv
 
 
+def _rotmat_to_quat_xyzw(R: NDArray[np.float64]) -> NDArray[np.float32]:
+    """Convert a 3×3 rotation matrix to a unit quaternion [qx, qy, qz, qw].
+
+    Uses Shepperd's method.  Sign is chosen so that qw >= 0.
+    """
+    trace = R[0, 0] + R[1, 1] + R[2, 2]
+    if trace > 0.0:
+        s = 0.5 / float(np.sqrt(trace + 1.0))
+        w = 0.25 / s
+        x = (R[2, 1] - R[1, 2]) * s
+        y = (R[0, 2] - R[2, 0]) * s
+        z = (R[1, 0] - R[0, 1]) * s
+    elif R[0, 0] > R[1, 1] and R[0, 0] > R[2, 2]:
+        s = 2.0 * float(np.sqrt(1.0 + R[0, 0] - R[1, 1] - R[2, 2]))
+        w = (R[2, 1] - R[1, 2]) / s
+        x = 0.25 * s
+        y = (R[0, 1] + R[1, 0]) / s
+        z = (R[0, 2] + R[2, 0]) / s
+    elif R[1, 1] > R[2, 2]:
+        s = 2.0 * float(np.sqrt(1.0 + R[1, 1] - R[0, 0] - R[2, 2]))
+        w = (R[0, 2] - R[2, 0]) / s
+        x = (R[0, 1] + R[1, 0]) / s
+        y = 0.25 * s
+        z = (R[1, 2] + R[2, 1]) / s
+    else:
+        s = 2.0 * float(np.sqrt(1.0 + R[2, 2] - R[0, 0] - R[1, 1]))
+        w = (R[1, 0] - R[0, 1]) / s
+        x = (R[0, 2] + R[2, 0]) / s
+        y = (R[1, 2] + R[2, 1]) / s
+        z = 0.25 * s
+    q = np.array([x, y, z, w], dtype=np.float32)
+    q /= float(np.linalg.norm(q))
+    if q[3] < 0.0:
+        q = -q
+    return q
+
+
+def _delta_T_to_7d(delta_T: NDArray[np.float32]) -> NDArray[np.float32]:
+    """Extract [dx, dy, dz, qx, qy, qz, qw] from a 4×4 SE(3) delta transform."""
+    translation = delta_T[:3, 3].astype(np.float32)
+    quat = _rotmat_to_quat_xyzw(delta_T[:3, :3].astype(np.float64))
+    return np.concatenate([translation, quat])
+
+
+def _get_base_pose_xy_yaw(sim: Any) -> NDArray[np.float32]:
+    """Return [x, y, yaw] of the TidyBot mobile base from MuJoCo qpos.
+
+    Groups joints by name prefix and requires a complete
+    {prefix}_joint_x / _joint_y / _joint_th triplet from the same prefix.
+    Raises RuntimeError for non-TidyBot environments.
+    """
+    import mujoco  # pylint: disable=import-outside-toplevel  # type: ignore[import]
+
+    mj_model = sim.model.mj_model
+    qpos = sim.data.mj_data.qpos
+
+    # Collect suffix → (prefix, qpos_addr) for the three base suffixes.
+    suffixes = {"_joint_x", "_joint_y", "_joint_th"}
+    found: dict[str, tuple[str, int]] = {}  # suffix → (prefix, addr)
+    for i in range(mj_model.njnt):
+        name = mujoco.mj_id2name(  # pylint: disable=no-member
+            mj_model, mujoco.mjtObj.mjOBJ_JOINT, i  # pylint: disable=no-member
+        )
+        if name is None:
+            continue
+        for suffix in suffixes:
+            if name.endswith(suffix):
+                prefix = name[: -len(suffix)]
+                found[suffix] = (prefix, int(mj_model.jnt_qposadr[i]))
+                break
+
+    if len(found) != 3:
+        raise RuntimeError(
+            "Cannot extract TidyBot base pose: expected a complete "
+            "{prefix}_joint_x / _joint_y / _joint_th triplet but found "
+            f"only {list(found.keys())}. "
+            "actions_delta_base_3d is only supported for TidyBot environments."
+        )
+    prefixes = {p for p, _ in found.values()}
+    if len(prefixes) != 1:
+        raise RuntimeError(
+            f"Base joints come from different prefixes {prefixes}; "
+            "expected all three from the same robot."
+        )
+    return np.array(
+        [
+            qpos[found["_joint_x"][1]],
+            qpos[found["_joint_y"][1]],
+            qpos[found["_joint_th"][1]],
+        ],
+        dtype=np.float32,
+    )
+
+
+def _se2_relative_delta(
+    before: NDArray[np.float32], after: NDArray[np.float32]
+) -> NDArray[np.float32]:
+    """Relative SE(2) delta expressed in the *before* frame.
+
+    Returns [dx, dy, dyaw] where dx/dy are in the before base frame and
+    dyaw is wrapped to (-pi, pi].
+    """
+    x1, y1, yaw1 = float(before[0]), float(before[1]), float(before[2])
+    x2, y2, yaw2 = float(after[0]), float(after[1]), float(after[2])
+    c, s = np.cos(yaw1), np.sin(yaw1)
+    dx_world, dy_world = x2 - x1, y2 - y1
+    dx = c * dx_world + s * dy_world
+    dy = -s * dx_world + c * dy_world
+    dyaw = (yaw2 - yaw1 + np.pi) % (2.0 * np.pi) - np.pi
+    return np.array([dx, dy, dyaw], dtype=np.float32)
+
+
 def _create_canonical_datasets(
     grp: h5py.Group,
     obs_grp: h5py.Group,
@@ -309,12 +419,44 @@ def _create_canonical_datasets(
         dtype=np.float32,
         compression="gzip",
     )
+    grp.create_dataset(
+        "actions_delta_ee_7d",
+        shape=(num_frames, 7),
+        dtype=np.float32,
+        compression="gzip",
+    )
+    grp.create_dataset(
+        "actions_delta_base_3d",
+        shape=(num_frames, 3),
+        dtype=np.float32,
+        compression="gzip",
+    )
+    grp.create_dataset(
+        "actions_delta_ee_base_10d",
+        shape=(num_frames, 10),
+        dtype=np.float32,
+        compression="gzip",
+    )
 
     # Schema / convention attrs so the file is self-documenting
     grp.attrs["pointcloud_schema"] = "canonical_pointcloud_v1"
     grp.attrs["delta_ee_convention"] = (
         "actions_delta_ee_transform[t] = "
         "inv(ee_pose_before_action[t]) @ ee_pose_after_action[t]"
+    )
+    grp.attrs["delta_ee_7d_convention"] = (
+        "actions_delta_ee_7d[t] = [dx, dy, dz, qx, qy, qz, qw] "
+        "derived from actions_delta_ee_transform[t]; qw >= 0"
+    )
+    grp.attrs["delta_ee_7d_quaternion_order"] = "xyzw"
+    grp.attrs["delta_base_3d_convention"] = (
+        "actions_delta_base_3d[t] = [dx, dy, dyaw] relative SE(2) delta "
+        "from base_pose_before_action[t] to base_pose_after_action[t]; "
+        "dx/dy in the before-action base frame; dyaw wrapped to (-pi, pi]"
+    )
+    grp.attrs["delta_ee_base_10d_convention"] = (
+        "actions_delta_ee_base_10d[t] = "
+        "concat(actions_delta_ee_7d[t], actions_delta_base_3d[t])"
     )
     grp.attrs["ee_frame_name"] = ee_frame_name
     grp.attrs["ee_frame_type"] = ee_frame_type
@@ -756,7 +898,12 @@ def _process_demo(
     if store_canonical:
         assert ee_frame_name is not None
         _create_canonical_datasets(
-            grp, obs_grp, canonical_pts, num_frames, ee_frame_name, ee_frame_type
+            grp,
+            obs_grp,
+            canonical_pts,
+            num_frames,
+            ee_frame_name,
+            ee_frame_type,
         )
 
     _write_step(
@@ -776,12 +923,14 @@ def _process_demo(
     )
 
     ee_poses_all: list[NDArray[np.float32]] = []
+    base_poses_all: list[NDArray[np.float32]] = []
     geom_transforms_all: dict[str, list[NDArray[np.float32]]] = (
         {name: [] for name in canonical_pts} if store_canonical else {}
     )
     if store_canonical:
         assert ee_frame_name is not None
         ee_poses_all.append(get_ee_pose(sim, ee_frame_name, ee_frame_type))
+        base_poses_all.append(_get_base_pose_xy_yaw(sim))
         for name, xform in get_geom_world_transforms(
             sim, {n: gid for n, (gid, _) in canonical_pts.items()}
         ).items():
@@ -794,6 +943,7 @@ def _process_demo(
         if store_canonical:
             assert ee_frame_name is not None
             ee_poses_all.append(get_ee_pose(sim, ee_frame_name, ee_frame_type))
+            base_poses_all.append(_get_base_pose_xy_yaw(sim))
             for name, xform in get_geom_world_transforms(
                 sim, {n: gid for n, (gid, _) in canonical_pts.items()}
             ).items():
@@ -834,21 +984,43 @@ def _process_demo(
     obs_np, _reward, _term, _trunc, _ = env.step(actions[-1])
     # terminal obs is not stored; dataset length == len(actions)
 
-    # Capture terminal EE pose (after actions[-1]) for the last delta.
+    # Capture terminal EE pose and base pose (after actions[-1]) for last delta.
     if store_canonical:
         assert ee_frame_name is not None
         ee_poses_all.append(get_ee_pose(sim, ee_frame_name, ee_frame_type))
+        base_poses_all.append(_get_base_pose_xy_yaw(sim))
 
     # Write canonical data in one pass after all steps are collected.
     if store_canonical and ee_poses_all:
+        assert (
+            len(ee_poses_all) == num_frames + 1
+        ), f"Expected {num_frames + 1} EE poses, got {len(ee_poses_all)}"
+        assert (
+            len(base_poses_all) == num_frames + 1
+        ), f"Expected {num_frames + 1} base poses, got {len(base_poses_all)}"
+
         ee_arr = np.stack(ee_poses_all)  # (num_frames + 1, 4, 4)
         # delta[t] = inv(ee_before_action[t]) @ ee_after_action[t]
-        #           = inv(ee_arr[t]) @ ee_arr[t+1]
         delta_arr = np.stack(
             [_se3_inv(ee_arr[t]) @ ee_arr[t + 1] for t in range(num_frames)]
         ).astype(np.float32)
+
+        ee_7d = np.stack(
+            [_delta_T_to_7d(delta_arr[t]) for t in range(num_frames)]
+        )  # (T, 7)
+        base_3d = np.stack(
+            [
+                _se2_relative_delta(base_poses_all[t], base_poses_all[t + 1])
+                for t in range(num_frames)
+            ]
+        )  # (T, 3)
+
         obs_grp["ee_pose"][:] = ee_arr[:num_frames]
         grp["actions_delta_ee_transform"][:] = delta_arr
+        grp["actions_delta_ee_7d"][:] = ee_7d
+        grp["actions_delta_base_3d"][:] = base_3d
+        grp["actions_delta_ee_base_10d"][:] = np.concatenate([ee_7d, base_3d], axis=1)
+
         gt_grp = grp["geom_transforms"]
         for name, xforms in geom_transforms_all.items():
             gt_grp[_hdf5_key(name)][:] = np.stack(xforms).astype(np.float32)
@@ -865,16 +1037,18 @@ def main() -> None:
     if args.max_demos is not None:
         demo_files = demo_files[: args.max_demos]
 
+    store_camera = args.camerapointcloud
+    store_mesh = args.completepointcloud
     store_canonical = args.canonicalpointcloud
-    store_camera = not args.completepointcloud
-    store_mesh = args.completepointcloud or args.allpointcloud
     store_track = args.trackpointcloud
 
-    mode_label = (
-        "camera + mesh"
-        if args.allpointcloud
-        else "mesh only" if args.completepointcloud else "camera only"
+    parts = (
+        (["camera"] if store_camera else [])
+        + (["mesh"] if store_mesh else [])
+        + (["canonical"] if store_canonical else [])
+        + (["track"] if store_track else [])
     )
+    mode_label = " + ".join(parts) if parts else "none"
     if store_track:
         mode_label += " + track"
     if store_canonical:

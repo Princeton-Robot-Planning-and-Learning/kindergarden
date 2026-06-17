@@ -1,0 +1,15 @@
+# Minimal dependency set for the dynamic2d environments only (no PyBullet or
+# MuJoCo). Mirrors the non-backend base dependencies plus the `dynamic2d` extra
+# in pyproject.toml. See requirements/kinematic2d.txt for usage.
+gymnasium
+matplotlib
+numpy
+Pillow
+dill
+shapely>=2.1.2
+scipy>=1.14.0
+relational_structs>=0.0.1
+prpl_utils>=0.0.1
+pygame>=2.5.2
+pymunk==7.1.0
+tomsgeoms2d>=0.0.1

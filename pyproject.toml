@@ -35,23 +35,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dynamic2d = [
-   "pygame>=2.5.2",
-   "pymunk==7.1.0",
-   "tomsgeoms2d>=0.0.1",
-]
-kinematic2d = [
-   "tomsgeoms2d>=0.0.1",
-]
-dynamic3d = [
-   "mujoco~=3.3.0",
-   "opencv-python>=4.9.0",
-   "gdown>=6.0.0",
-]
-kinematic3d = [
-   "pybullet-arm64>=3.2.8",
-   "pybullet_helpers>=0.1.0",
-]
+# Per-backend dependency sets are NOT extras: the base install already pulls
+# every backend, so a `[kinematic2d]`-style extra could only add to that, never
+# slim it. To install a single backend, use the matching file in requirements/
+# (see the README). `pointcloud` is a real extra because it adds packages the
+# base install does not include.
 pointcloud = [
    "h5py>=3",
    "open3d>=0.19.0",

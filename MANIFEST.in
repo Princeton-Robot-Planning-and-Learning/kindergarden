@@ -1,6 +1,7 @@
 recursive-include src *.py *.typed
 recursive-include src/kinder/envs *.xml *.obj *.mtl *.stl *.urdf *.png *.jpg *.jpeg *.json
 include pyproject.toml README.md LICENSE
+recursive-include requirements *.txt
 prune demos
 prune docs
 prune tests

@@ -1,0 +1,21 @@
+# Minimal dependency set for the kinematic3d environments only (PyBullet, no
+# MuJoCo). Mirrors the non-backend base dependencies plus the `kinematic3d`
+# extra in pyproject.toml.
+#
+# kindergarden's base install pulls every backend. To install a subset instead,
+# install the package without its dependencies and then this file:
+#
+#     pip install --no-deps kindergarden
+#     pip install -r requirements/kinematic3d.txt
+#
+gymnasium
+matplotlib
+numpy
+Pillow
+dill
+shapely>=2.1.2
+scipy>=1.14.0
+relational_structs>=0.0.1
+prpl_utils>=0.0.1
+pybullet-arm64>=3.2.8
+pybullet_helpers>=0.1.0

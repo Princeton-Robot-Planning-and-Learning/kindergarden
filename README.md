@@ -20,14 +20,24 @@ See [https://prpl-group.com/kinder-site/](https://prpl-group.com/kinder-site/) f
 ### From PyPI
 
 ```bash
-pip install kindergarden                # all environment dependencies
-pip install kindergarden[dynamic2d]     # only dynamic2d environments
-pip install kindergarden[kinematic2d]   # only kinematic2d environments
-pip install kindergarden[kinematic3d]   # only kinematic3d environments
-pip install kindergarden[dynamic3d]     # only dynamic3d environments
+pip install kindergarden   # all environments (PyBullet, MuJoCo, pygame, ...)
 ```
 
-You can also combine extras: `pip install kindergarden[kinematic2d,kinematic3d]`
+#### Installing a single backend (no PyBullet/MuJoCo)
+
+The default install pulls every backend. To install just one — for example the
+kinematic2d environments, which need neither PyBullet nor MuJoCo — install the
+package without its dependencies, then the backend's requirements file:
+
+```bash
+pip install --no-deps kindergarden
+pip install -r https://raw.githubusercontent.com/Princeton-Robot-Planning-and-Learning/kindergarden/main/requirements/kinematic2d.txt
+```
+
+Requirements files are provided for each backend: `kinematic2d`, `dynamic2d`,
+`kinematic3d`, `dynamic3d` (under [`requirements/`](requirements/)). The two-step
+form is needed because pip extras can only *add* dependencies, never remove the
+backends already pulled in by the base install.
 
 ### From Source
 
@@ -39,9 +49,10 @@ cd kindergarden
 uv pip install -e ".[develop]"   # all dependencies + dev tools
 ```
 
-Or install only what you need:
+Or install only one backend (no PyBullet/MuJoCo):
 ```bash
-uv pip install -e ".[dynamic2d]" # only dynamic2d environments
+uv pip install --no-deps -e .
+uv pip install -r requirements/kinematic2d.txt
 ```
 
 To check the installation, run `./run_ci_checks.sh`. It should complete with all green successes.

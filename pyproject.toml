@@ -35,23 +35,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dynamic2d = [
-   "pygame>=2.5.2",
-   "pymunk==7.1.0",
-   "tomsgeoms2d>=0.0.1",
-]
-kinematic2d = [
-   "tomsgeoms2d>=0.0.1",
-]
-dynamic3d = [
-   "mujoco~=3.3.0",
-   "opencv-python>=4.9.0",
-   "gdown>=6.0.0",
-]
-kinematic3d = [
-   "pybullet-arm64>=3.2.8",
-   "pybullet_helpers>=0.1.0",
-]
 pointcloud = [
    "h5py>=3",
    "open3d>=0.19.0",
@@ -73,7 +56,10 @@ develop = [
    "mypy",
    "pylint>=2.14.5",
    "pytest-pylint>=0.18.0",
-   "pytest>=7.2.2",
+   # pytest 9.1 dropped the `path` arg from the pytest_collect_file hookspec,
+   # which pytest-pylint 0.21.0 still uses -- it crashes the lint job. Temporary
+   # cap; see issue #111 for the proper fix.
+   "pytest>=7.2.2,<9.1",
    "coverage",
    "gdown>=6.0.0",
    "scipy-stubs>=1.15.3.0",

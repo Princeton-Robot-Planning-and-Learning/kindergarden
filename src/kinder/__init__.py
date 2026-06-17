@@ -57,9 +57,9 @@ _CATEGORY_DEPS: dict[str, tuple[str, ...]] = {
 def register_all_environments() -> None:
     """Add all benchmark environments to the gymnasium registry.
 
-    Categories whose optional dependencies are not installed are silently
-    skipped.  Install the corresponding extras to enable them, e.g.
-    ``pip install kindergarden[dynamic2d]``.
+    Categories whose backend dependencies are not installed are silently
+    skipped.  The default ``pip install kindergarden`` includes every backend;
+    to install a single one, see the requirements files described in the README.
     """
     # NOTE: ids must start with "kinder/" to be properly registered.
 

@@ -1,6 +1,13 @@
 # Minimal dependency set for the dynamic2d environments only (no PyBullet or
 # MuJoCo). Mirrors the non-backend base dependencies plus the `dynamic2d` extra
-# in pyproject.toml. See requirements/kinematic2d.txt for usage.
+# in pyproject.toml.
+#
+# kindergarden's base install pulls every backend. To install a subset instead,
+# install the package without its dependencies and then this file:
+#
+#     pip install --no-deps kindergarden
+#     pip install -r requirements/dynamic2d.txt
+#
 gymnasium
 matplotlib
 numpy

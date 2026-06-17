@@ -1,6 +1,13 @@
 # Minimal dependency set for the dynamic3d environments only (MuJoCo, no
 # PyBullet). Mirrors the non-backend base dependencies plus the `dynamic3d`
-# extra in pyproject.toml. See requirements/kinematic2d.txt for usage.
+# extra in pyproject.toml.
+#
+# kindergarden's base install pulls every backend. To install a subset instead,
+# install the package without its dependencies and then this file:
+#
+#     pip install --no-deps kindergarden
+#     pip install -r requirements/dynamic3d.txt
+#
 gymnasium
 matplotlib
 numpy

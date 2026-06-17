@@ -35,11 +35,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Per-backend dependency sets are NOT extras: the base install already pulls
-# every backend, so a `[kinematic2d]`-style extra could only add to that, never
-# slim it. To install a single backend, use the matching file in requirements/
-# (see the README). `pointcloud` is a real extra because it adds packages the
-# base install does not include.
 pointcloud = [
    "h5py>=3",
    "open3d>=0.19.0",

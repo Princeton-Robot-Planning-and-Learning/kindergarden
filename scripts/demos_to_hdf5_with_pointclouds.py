@@ -61,6 +61,7 @@ import gymnasium
 import h5py
 import numpy as np
 from numpy.typing import NDArray
+from scipy.spatial.transform import Rotation
 
 import kinder
 from kinder.envs.dynamic3d.point_cloud import (
@@ -183,8 +184,10 @@ def _parse_args() -> argparse.Namespace:
             "and per-timestep rigid-body transforms.  Writes "
             "canonical_pointcloud/<geom>/xyz, geom_transforms/<geom> (T,4,4), "
             "obs/ee_pose (T,4,4), actions_delta_ee_transform (T,4,4), "
-            "actions_delta_ee_7d (T,7), actions_delta_base_3d (T,3), and "
-            "actions_delta_ee_base_10d (T,10)."
+            "actions_delta_ee_7d (T,7), actions_delta_base_3d (T,3), "
+            "actions_delta_ee_base_10d (T,10), "
+            "actions_delta_ee_euler_gripper_7d (T,7), and "
+            "actions_delta_ee_world_euler_gripper_7d (T,7)."
         ),
     )
     p.add_argument(
@@ -242,8 +245,8 @@ def _make_env(env_id: str) -> gymnasium.Env:
 def _hdf5_key(name: str) -> str:
     """Sanitise a geom name for use as an HDF5 dataset/group key.
 
-    HDF5 treats ``/`` as a path separator, so forward slashes in geom names
-    (e.g. ``gen3/base_link_geom144``) must be escaped.
+    HDF5 treats ``/`` as a path separator, so forward slashes in geom names (e.g.
+    ``gen3/base_link_geom144``) must be escaped.
     """
     return name.replace("/", "__")
 
@@ -305,9 +308,9 @@ def _delta_T_to_7d(delta_T: NDArray[np.float32]) -> NDArray[np.float32]:
 def _get_base_pose_xy_yaw(sim: Any) -> NDArray[np.float32]:
     """Return [x, y, yaw] of the TidyBot mobile base from MuJoCo qpos.
 
-    Groups joints by name prefix and requires a complete
-    {prefix}_joint_x / _joint_y / _joint_th triplet from the same prefix.
-    Raises RuntimeError for non-TidyBot environments.
+    Groups joints by name prefix and requires a complete {prefix}_joint_x / _joint_y /
+    _joint_th triplet from the same prefix. Raises RuntimeError for non-TidyBot
+    environments.
     """
     import mujoco  # pylint: disable=import-outside-toplevel  # type: ignore[import]
 
@@ -357,8 +360,8 @@ def _se2_relative_delta(
 ) -> NDArray[np.float32]:
     """Relative SE(2) delta expressed in the *before* frame.
 
-    Returns [dx, dy, dyaw] where dx/dy are in the before base frame and
-    dyaw is wrapped to (-pi, pi].
+    Returns [dx, dy, dyaw] where dx/dy are in the before base frame and dyaw is wrapped
+    to (-pi, pi].
     """
     x1, y1, yaw1 = float(before[0]), float(before[1]), float(before[2])
     x2, y2, yaw2 = float(after[0]), float(after[1]), float(after[2])
@@ -437,6 +440,18 @@ def _create_canonical_datasets(
         dtype=np.float32,
         compression="gzip",
     )
+    grp.create_dataset(
+        "actions_delta_ee_euler_gripper_7d",
+        shape=(num_frames, 7),
+        dtype=np.float32,
+        compression="gzip",
+    )
+    grp.create_dataset(
+        "actions_delta_ee_world_euler_gripper_7d",
+        shape=(num_frames, 7),
+        dtype=np.float32,
+        compression="gzip",
+    )
 
     # Schema / convention attrs so the file is self-documenting
     grp.attrs["pointcloud_schema"] = "canonical_pointcloud_v1"
@@ -458,6 +473,21 @@ def _create_canonical_datasets(
         "actions_delta_ee_base_10d[t] = "
         "concat(actions_delta_ee_7d[t], actions_delta_base_3d[t])"
     )
+    grp.attrs["delta_ee_euler_gripper_7d_convention"] = (
+        "actions_delta_ee_euler_gripper_7d[t] = [dx, dy, dz, rx, ry, rz, gripper]; "
+        "[dx, dy, dz] is the translation of actions_delta_ee_transform[t]; "
+        "[rx, ry, rz] are intrinsic XYZ Euler angles (radians) of its rotation; "
+        "gripper = 1 - 2 * action[t][10], so open=1 and close=-1"
+    )
+    grp.attrs["delta_ee_euler_order"] = "XYZ_intrinsic"
+    grp.attrs["delta_ee_world_euler_gripper_7d_convention"] = (
+        "actions_delta_ee_world_euler_gripper_7d[t] = "
+        "[dx, dy, dz, rx, ry, rz, gripper] expressed in the world frame; "
+        "[dx, dy, dz] = ee_pos_world_after_action[t] - ee_pos_world_before_action[t]; "
+        "[rx, ry, rz] are intrinsic XYZ Euler angles (radians) of "
+        "R_world_after_action[t] @ R_world_before_action[t].T; "
+        "gripper = 1 - 2 * action[t][10], so open=1 and close=-1"
+    )
     grp.attrs["ee_frame_name"] = ee_frame_name
     grp.attrs["ee_frame_type"] = ee_frame_type
 
@@ -470,8 +500,8 @@ def _pad_or_subsample_mesh(
 ) -> tuple[NDArray[np.float32], NDArray[np.int32]]:
     """Return mesh arrays with exactly *max_pts* rows.
 
-    If *n < max_pts*:  pad xyz with NaN, geom_indices with -1.
-    If *n > max_pts*:  randomly sub-sample without replacement.
+    If *n < max_pts*:  pad xyz with NaN, geom_indices with -1. If *n > max_pts*:
+    randomly sub-sample without replacement.
     """
     n = len(xyz)
     if n == max_pts:
@@ -496,8 +526,8 @@ def _pad_or_subsample(
 ) -> tuple[NDArray[np.float32], NDArray[np.uint8]]:
     """Return arrays with exactly *max_pts* rows.
 
-    If *n < max_pts*:  pad xyz with NaN, rgb with 0.
-    If *n > max_pts*:  randomly sub-sample without replacement.
+    If *n < max_pts*:  pad xyz with NaN, rgb with 0. If *n > max_pts*:  randomly sub-
+    sample without replacement.
     """
     n = len(xyz)
     if n == max_pts:
@@ -740,8 +770,8 @@ def _write_step(
 ) -> None:
     """Write one step's data into pre-allocated HDF5 datasets.
 
-    Point cloud arrays are padded or sub-sampled to the fixed sizes established
-    at step 0, so every row has a consistent shape.
+    Point cloud arrays are padded or sub-sampled to the fixed sizes established at step
+    0, so every row has a consistent shape.
     """
     obs_grp["state"][step_idx] = obs.astype(np.float32)
     grp["actions"][step_idx] = np.asarray(action, dtype=np.float32)
@@ -1015,11 +1045,34 @@ def _process_demo(
             ]
         )  # (T, 3)
 
+        # Translation + intrinsic XYZ Euler delta with the flipped/scaled gripper.
+        euler = Rotation.from_matrix(delta_arr[:, :3, :3]).as_euler("XYZ")
+        gripper_raw = np.asarray(actions, dtype=np.float32)[:num_frames, 10]
+        gripper = 1.0 - 2.0 * gripper_raw  # open (0) -> 1, close (1) -> -1
+        euler_gripper_7d = np.concatenate(
+            [delta_arr[:, :3, 3], euler.astype(np.float32), gripper[:, None]],
+            axis=1,
+        ).astype(np.float32)
+
+        # Same fields expressed in the world frame: world translation is the raw
+        # change in EE position; world rotation delta is R_after @ R_before.T.
+        before = ee_arr[:num_frames]
+        after = ee_arr[1 : num_frames + 1]
+        world_trans = after[:, :3, 3] - before[:, :3, 3]
+        world_rot = after[:, :3, :3] @ before[:, :3, :3].transpose(0, 2, 1)
+        world_euler = Rotation.from_matrix(world_rot).as_euler("XYZ")
+        world_euler_gripper_7d = np.concatenate(
+            [world_trans, world_euler.astype(np.float32), gripper[:, None]],
+            axis=1,
+        ).astype(np.float32)
+
         obs_grp["ee_pose"][:] = ee_arr[:num_frames]
         grp["actions_delta_ee_transform"][:] = delta_arr
         grp["actions_delta_ee_7d"][:] = ee_7d
         grp["actions_delta_base_3d"][:] = base_3d
         grp["actions_delta_ee_base_10d"][:] = np.concatenate([ee_7d, base_3d], axis=1)
+        grp["actions_delta_ee_euler_gripper_7d"][:] = euler_gripper_7d
+        grp["actions_delta_ee_world_euler_gripper_7d"][:] = world_euler_gripper_7d
 
         gt_grp = grp["geom_transforms"]
         for name, xforms in geom_transforms_all.items():

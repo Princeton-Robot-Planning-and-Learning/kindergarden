@@ -507,7 +507,7 @@ def test_generate_full_point_cloud_nonempty(sim):
 
 
 def test_generate_full_point_cloud_array_shapes(sim):
-    """xyz and geom_indices have consistent leading dimensions."""
+    """Xyz and geom_indices have consistent leading dimensions."""
     mpc = generate_full_point_cloud(sim, num_points_per_geom=10)
     n = len(mpc)
     assert mpc.xyz.shape == (n, 3)
@@ -515,7 +515,7 @@ def test_generate_full_point_cloud_array_shapes(sim):
 
 
 def test_generate_full_point_cloud_dtypes(sim):
-    """xyz is float32 and geom_indices is int32."""
+    """Xyz is float32 and geom_indices is int32."""
     mpc = generate_full_point_cloud(sim, num_points_per_geom=10)
     assert mpc.xyz.dtype == np.float32
     assert mpc.geom_indices.dtype == np.int32
@@ -586,7 +586,7 @@ def test_mesh_point_cloud_to_dict(sim):
 
 
 def test_mesh_point_cloud_len(sim):
-    """len(mpc) matches the first dimension of xyz."""
+    """Len(mpc) matches the first dimension of xyz."""
     mpc = generate_full_point_cloud(sim, num_points_per_geom=10)
     assert len(mpc) == mpc.xyz.shape[0]
 
@@ -718,7 +718,7 @@ def test_get_geom_world_transforms_shape(sim):
 
 
 def test_delta_ee_near_identity_for_no_motion(env, sim):
-    """delta EE transform is near-identity when the robot doesn't move."""
+    """Delta EE transform is near-identity when the robot doesn't move."""
     name, ft = find_ee_frame(sim)
     T0 = get_ee_pose(sim, name, ft)
     env.step(np.zeros(env.action_space.shape))

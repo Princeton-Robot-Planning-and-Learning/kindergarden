@@ -185,8 +185,9 @@ def _parse_args() -> argparse.Namespace:
             "canonical_pointcloud/<geom>/xyz, geom_transforms/<geom> (T,4,4), "
             "obs/ee_pose (T,4,4), actions_delta_ee_transform (T,4,4), "
             "actions_delta_ee_7d (T,7), actions_delta_base_3d (T,3), "
-            "actions_delta_ee_base_10d (T,10), and "
-            "actions_delta_ee_euler_gripper_7d (T,7)."
+            "actions_delta_ee_base_10d (T,10), "
+            "actions_delta_ee_euler_gripper_7d (T,7), and "
+            "actions_delta_ee_world_euler_gripper_7d (T,7)."
         ),
     )
     p.add_argument(
@@ -445,6 +446,12 @@ def _create_canonical_datasets(
         dtype=np.float32,
         compression="gzip",
     )
+    grp.create_dataset(
+        "actions_delta_ee_world_euler_gripper_7d",
+        shape=(num_frames, 7),
+        dtype=np.float32,
+        compression="gzip",
+    )
 
     # Schema / convention attrs so the file is self-documenting
     grp.attrs["pointcloud_schema"] = "canonical_pointcloud_v1"
@@ -473,6 +480,14 @@ def _create_canonical_datasets(
         "gripper = 1 - 2 * action[t][10], so open=1 and close=-1"
     )
     grp.attrs["delta_ee_euler_order"] = "XYZ_intrinsic"
+    grp.attrs["delta_ee_world_euler_gripper_7d_convention"] = (
+        "actions_delta_ee_world_euler_gripper_7d[t] = "
+        "[dx, dy, dz, rx, ry, rz, gripper] expressed in the world frame; "
+        "[dx, dy, dz] = ee_pos_world_after_action[t] - ee_pos_world_before_action[t]; "
+        "[rx, ry, rz] are intrinsic XYZ Euler angles (radians) of "
+        "R_world_after_action[t] @ R_world_before_action[t].T; "
+        "gripper = 1 - 2 * action[t][10], so open=1 and close=-1"
+    )
     grp.attrs["ee_frame_name"] = ee_frame_name
     grp.attrs["ee_frame_type"] = ee_frame_type
 
@@ -1039,12 +1054,25 @@ def _process_demo(
             axis=1,
         ).astype(np.float32)
 
+        # Same fields expressed in the world frame: world translation is the raw
+        # change in EE position; world rotation delta is R_after @ R_before.T.
+        before = ee_arr[:num_frames]
+        after = ee_arr[1 : num_frames + 1]
+        world_trans = after[:, :3, 3] - before[:, :3, 3]
+        world_rot = after[:, :3, :3] @ before[:, :3, :3].transpose(0, 2, 1)
+        world_euler = Rotation.from_matrix(world_rot).as_euler("XYZ")
+        world_euler_gripper_7d = np.concatenate(
+            [world_trans, world_euler.astype(np.float32), gripper[:, None]],
+            axis=1,
+        ).astype(np.float32)
+
         obs_grp["ee_pose"][:] = ee_arr[:num_frames]
         grp["actions_delta_ee_transform"][:] = delta_arr
         grp["actions_delta_ee_7d"][:] = ee_7d
         grp["actions_delta_base_3d"][:] = base_3d
         grp["actions_delta_ee_base_10d"][:] = np.concatenate([ee_7d, base_3d], axis=1)
         grp["actions_delta_ee_euler_gripper_7d"][:] = euler_gripper_7d
+        grp["actions_delta_ee_world_euler_gripper_7d"][:] = world_euler_gripper_7d
 
         gt_grp = grp["geom_transforms"]
         for name, xforms in geom_transforms_all.items():

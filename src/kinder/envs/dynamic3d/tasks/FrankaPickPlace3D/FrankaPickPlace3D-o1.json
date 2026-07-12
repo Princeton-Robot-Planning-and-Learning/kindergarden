@@ -1,0 +1,73 @@
+{
+    "description": "A 3D tabletop task where a desk-mounted Franka FR3 arm must pick up objects and place them at target locations on the desk.",
+    "variant_description": "The variants require picking and placing different numbers of objects.",
+    "variant_specific_description": "Pick up one cube from the desk and place it in the goal region on the desk.",
+    "robots": {
+        "fr3": {
+            "robot": {
+                "mount_height": 0.75
+            }
+        }
+    },
+    "scene": "lab2",
+    "fixtures": {
+        "table": {
+            "desk_1": {
+                "shape": "rectangle",
+                "height": 0.75,
+                "thickness": 0.04,
+                "length": 1.0,
+                "width": 0.7
+            }
+        }
+    },
+    "regions": {
+        "ground_desk_init_region": {
+            "target": "ground",
+            "ranges": [[0.5, 0.0, 0.5, 0.0]],
+            "yaw_ranges": [[0, 0]]
+        },
+        "robot_mount_region": {
+            "target": "ground",
+            "ranges": [[0.13, -0.02, 0.17, 0.02]],
+            "yaw_ranges": [[0, 0]]
+        },
+        "cube_init_region": {
+            "target": "desk_1",
+            "ranges": [[0.05, -0.15, 0.25, 0.0]],
+            "rgba": [1.0, 1.0, 0.0, 0.0],
+            "yaw_ranges": [[0, 0]]
+        },
+        "goal_region": {
+            "target": "desk_1",
+            "ranges": [[-0.05, 0.12, 0.15, 0.27]],
+            "rgba": [0.0, 0.0, 1.0, 0.0],
+            "yaw_ranges": [[0, 0]]
+        }
+    },
+    "objects": {
+        "cube": {
+            "cube1": {
+                "size": 0.025,
+                "rgba": [0.5, 0.1, 0.1, 1],
+                "mass": 0.05
+            }
+        }
+    },
+    "cameras": {
+        "task_view": {
+            "position": [1.9, -1.2, 1.7],
+            "lookat": [0.5, 0.1, 0.75],
+            "fovy": 42,
+            "resolution": [640, 480]
+        }
+    },
+    "initial_state": [
+        ["on", "desk_1", "ground_desk_init_region"],
+        ["on", "robot", "robot_mount_region"],
+        ["on", "cube1", "cube_init_region"]
+    ],
+    "goal_state": [
+        ["on", "cube1", "goal_region"]
+    ]
+}

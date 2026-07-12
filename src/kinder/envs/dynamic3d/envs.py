@@ -20,6 +20,7 @@ from kinder.envs.dynamic3d.base_env import (
     ObjectCentricDynamic3DRobotEnv,
 )
 from kinder.envs.dynamic3d.object_types import (
+    MujocoFR3RobotObjectType,
     MujocoObjectTypeFeatures,
     MujocoRBY1ARobotObjectType,
     MujocoTidyBotRobotObjectType,
@@ -36,6 +37,8 @@ from kinder.envs.dynamic3d.placement_samplers import (
     sample_collision_free_positions,
 )
 from kinder.envs.dynamic3d.robots import (
+    FR3RobotActionSpace,
+    FR3RobotEnv,
     RBY1ARobotActionSpace,
     RBY1ARobotEnv,
     TidyBot3DRobotActionSpace,
@@ -138,9 +141,14 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
         # Initialize robot environment
         self.robot_type = list(self.task_config["robots"].keys())[0]
         self.robot_name = list(self.task_config["robots"][self.robot_type].keys())[0]
-        robot_cls = {"tidybot": TidyBotRobotEnv, "rby1a": RBY1ARobotEnv}[
-            self.robot_type
-        ]
+        robot_cls = {
+            "tidybot": TidyBotRobotEnv,
+            "rby1a": RBY1ARobotEnv,
+            "fr3": FR3RobotEnv,
+        }[self.robot_type]
+        # Robot-specific settings from the task config (e.g. mount_height)
+        # are forwarded as keyword arguments.
+        robot_config = self.task_config["robots"][self.robot_type][self.robot_name]
         self._robot_env = robot_cls(
             name=self.robot_name,
             control_frequency=self.config.control_frequency,
@@ -151,6 +159,7 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
             camera_height=self.config.camera_height,
             seed=seed if seed is not None else self.seed,
             show_viewer=self.config.show_viewer,
+            **robot_config,
         )
 
         # Update camera names since robot may have added its own cameras.
@@ -824,8 +833,10 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
         self._initialize_robot_pose()
 
         # step several times to get the initial state
+        action_shape = self.action_space.shape
+        assert action_shape is not None, "Action space must have a shape"
         for _ in range(10):
-            self._robot_env.step(np.zeros(TidyBot3DRobotActionSpace().shape))
+            self._robot_env.step(np.zeros(action_shape))
 
         # Get object-centric observation
         self._current_state = self._get_object_centric_state()
@@ -1519,4 +1530,162 @@ Currently returns a small negative reward (-0.01) per timestep to encourage expl
     def _create_references_markdown_description(self) -> str:
         """Create references description."""
         return """TODO
+"""
+
+
+class ObjectCentricFranka3DEnv(ObjectCentricRobotEnv):
+    """Franka FR3-specific implementation of object-centric robot environment."""
+
+    def _create_action_space(  # type: ignore
+        self, config: TidyBot3DConfig
+    ) -> Space[Array]:
+        """Create action space for the FR3's control interface."""
+        return FR3RobotActionSpace()
+
+    def _get_object_centric_robot_data(self) -> dict[Object, dict[str, float]]:
+        assert self.robot_type == "fr3"
+        assert self._robot_env is not None, "Robot environment not initialized"
+        assert isinstance(self._robot_env, FR3RobotEnv)
+        robot = Object(self.robot_name, MujocoFR3RobotObjectType)
+        # Build this super explicitly, even though verbose, to be careful.
+        assert self._robot_env.qpos is not None
+        assert self._robot_env.qvel is not None
+        base_x, base_y, base_yaw = self._robot_env.get_base_pos_yaw()
+        state_dict = {}
+        state_dict[robot] = {
+            "pos_base_x": base_x,
+            "pos_base_y": base_y,
+            "pos_base_rot": base_yaw,
+            "pos_arm_joint1": self._robot_env.qpos["arm"][0],
+            "pos_arm_joint2": self._robot_env.qpos["arm"][1],
+            "pos_arm_joint3": self._robot_env.qpos["arm"][2],
+            "pos_arm_joint4": self._robot_env.qpos["arm"][3],
+            "pos_arm_joint5": self._robot_env.qpos["arm"][4],
+            "pos_arm_joint6": self._robot_env.qpos["arm"][5],
+            "pos_arm_joint7": self._robot_env.qpos["arm"][6],
+            "pos_gripper": self._robot_env.ctrl["gripper"][0] / 255.0,
+            "vel_arm_joint1": self._robot_env.qvel["arm"][0],
+            "vel_arm_joint2": self._robot_env.qvel["arm"][1],
+            "vel_arm_joint3": self._robot_env.qvel["arm"][2],
+            "vel_arm_joint4": self._robot_env.qvel["arm"][3],
+            "vel_arm_joint5": self._robot_env.qvel["arm"][4],
+            "vel_arm_joint6": self._robot_env.qvel["arm"][5],
+            "vel_arm_joint7": self._robot_env.qvel["arm"][6],
+            "vel_gripper": self._robot_env.qvel["gripper"][0],
+        }
+        return state_dict
+
+    def _set_robot_state(self, state: ObjectCentricState) -> None:
+        """Set the robot state in the simulation."""
+        assert self._robot_env is not None, "Robot environment not initialized"
+        assert isinstance(self._robot_env, FR3RobotEnv)
+
+        # Get robot by type instead of by name for flexibility
+        robots = state.get_objects(MujocoFR3RobotObjectType)
+        assert len(robots) == 1, f"Expected exactly 1 robot, got {len(robots)}"
+        robot_obj = list(robots)[0]
+
+        # Reset the fixed base mount pose.
+        self._robot_env.set_robot_base_pos_yaw(
+            state.get(robot_obj, "pos_base_x"),
+            state.get(robot_obj, "pos_base_y"),
+            state.get(robot_obj, "pos_base_rot"),
+        )
+
+        # Reset the robot arm position. For position actuators, the ctrl
+        # targets must also be set so the arm holds the restored pose.
+        robot_arm_pos = [state.get(robot_obj, f"pos_arm_joint{i}") for i in range(1, 8)]
+        assert self._robot_env.qpos is not None
+        self._robot_env.qpos["arm"][:] = robot_arm_pos
+        assert self._robot_env.ctrl is not None
+        self._robot_env.ctrl["arm"][:] = robot_arm_pos
+
+        # Reset the robot gripper position.
+        gripper_pos = state.get(robot_obj, "pos_gripper")
+        self._robot_env.ctrl["gripper"][:] = gripper_pos * 255.0
+
+        # Reset the robot arm velocity.
+        robot_arm_vel = [state.get(robot_obj, f"vel_arm_joint{i}") for i in range(1, 8)]
+        assert self._robot_env.qvel is not None
+        self._robot_env.qvel["arm"][:] = robot_arm_vel
+
+        # Reset the robot gripper velocity.
+        gripper_vel = state.get(robot_obj, "vel_gripper")
+        self._robot_env.qvel["gripper"][:] = gripper_vel
+
+
+class Franka3DEnv(ConstantObjectKinDEREnv):
+    """Franka FR3 env with a constant number of objects."""
+
+    def _create_object_centric_env(self, *args, **kwargs) -> ObjectCentricFranka3DEnv:
+        return ObjectCentricFranka3DEnv(*args, **kwargs)
+
+    def _get_constant_object_names(
+        self, exemplar_state: ObjectCentricState
+    ) -> list[str]:
+        return [o.name for o in sorted(exemplar_state)]
+
+    def _create_env_markdown_description(self) -> str:
+        """Create environment description (policy-agnostic)."""
+        env = self._object_centric_env
+        assert isinstance(env, ObjectCentricFranka3DEnv)
+        intro = env.task_config.get(
+            "description",
+            "A 3D tabletop manipulation environment using a Franka FR3 arm.",
+        )
+        return f"""{intro}
+
+The robot is a fixed-base Franka FR3 7-DOF arm with a Robotiq 2F-85 gripper,
+mounted on a desk surface.
+
+The robot can control:
+- Arm joint positions (7 joints)
+- Gripper position (open/close)
+"""
+
+    def _create_variant_markdown_description(self) -> str:
+        env = self._object_centric_env
+        assert isinstance(env, ObjectCentricFranka3DEnv)
+        return env.task_config.get(
+            "variant_description",
+            "This environment has variants that differ in the number of objects.",
+        )
+
+    def _create_variant_specific_description(self) -> str:
+        env = self._object_centric_env
+        assert isinstance(env, ObjectCentricFranka3DEnv)
+        return env.task_config.get(
+            "variant_specific_description",
+            "No variant-specific description available.",
+        )
+
+    def _create_obs_markdown_description(self) -> str:
+        """Create observation space description."""
+        return """Observation includes:
+- Robot state: base mount pose, arm joint positions/velocities, gripper state
+- Object states: positions and orientations of all objects
+- Camera images: RGB images from scene cameras
+"""
+
+    def _create_action_markdown_description(self) -> str:
+        """Create action space description."""
+        return """Actions control:
+- arm_joints: 7 arm joint position targets (radians) or deltas
+- gripper_pos: [pos] - Gripper open/close position (0=open, 1=closed)
+"""
+
+    def _create_reward_markdown_description(self) -> str:
+        """Create reward description."""
+        return (
+            "The task goal is defined by goal_state predicates in the task "
+            "config. A small negative reward (-0.01) is applied at each "
+            "timestep to encourage efficiency, and the episode terminates "
+            "when all goal predicates hold.\n"
+        )
+
+    def _create_references_markdown_description(self) -> str:
+        """Create references description."""
+        return """Franka FR3: https://franka.de/products/franka-research-3
+Model: MuJoCo Menagerie (franka_fr3, robotiq_2f85 via TidyBot)
+https://github.com/google-deepmind/mujoco_menagerie
 """

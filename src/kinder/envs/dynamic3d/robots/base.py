@@ -11,6 +11,23 @@ from numpy.typing import NDArray
 from kinder.envs.dynamic3d.mujoco_utils import MjObs, MujocoEnv
 
 
+class IndexedView:
+    """A view that provides indexed access to non-contiguous array elements."""
+
+    def __init__(self, array: Any, indices: list[int]) -> None:
+        self.array = array
+        self.indices = indices
+
+    def __setitem__(self, key: int | slice, value: Any) -> None:
+        self.array[self.indices[key]] = value
+
+    def __getitem__(self, key: int) -> Any:
+        return self.array[self.indices[key]]
+
+    def __len__(self) -> int:
+        return len(self.indices)
+
+
 class RobotEnv(MujocoEnv, abc.ABC):
     """Abstract base class for robots in dynamic3d environments."""
 

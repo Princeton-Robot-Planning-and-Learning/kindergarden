@@ -9,7 +9,7 @@ from relational_structs import Array
 
 from kinder.core import RobotActionSpace
 from kinder.envs.dynamic3d.mujoco_utils import MjObs
-from kinder.envs.dynamic3d.robots.base import RobotEnv
+from kinder.envs.dynamic3d.robots.base import IndexedView, RobotEnv
 
 
 class TidyBot3DRobotActionSpace(RobotActionSpace):
@@ -216,24 +216,8 @@ class TidyBotRobotEnv(RobotEnv):
         self._arm_qvel_start = arm_qvel_start
         self._arm_qvel_end = arm_qvel_end
 
-        # Create a custom wrapper that maintains references for
+        # Use an indexed view to maintain references for
         # non-contiguous gripper indices
-        class IndexedView:
-            """A view that provides indexed access to non-contiguous array elements."""
-
-            def __init__(self, array: Any, indices: list[int]) -> None:
-                self.array = array
-                self.indices = indices
-
-            def __setitem__(self, key: int, value: Any) -> None:
-                self.array[self.indices[key]] = value
-
-            def __getitem__(self, key: int) -> Any:
-                return self.array[self.indices[key]]
-
-            def __len__(self) -> int:
-                return len(self.indices)
-
         self.qpos["gripper"] = IndexedView(  # type: ignore[assignment]
             self.sim.data.mj_data.qpos, gripper_qpos_indices
         )

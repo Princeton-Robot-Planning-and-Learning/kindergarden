@@ -1,5 +1,6 @@
 """Register environments and expose them through make()."""
 
+import json
 import os
 import sys
 import warnings
@@ -431,9 +432,15 @@ def _register_dynamic3d() -> None:
                 # Go through variants for this task
                 if task_config.is_file():
                     config_name = task_config.stem
-                    robot = "TidyBot3D"
-                    # Note: we only support one robot at the moment
-                    # In the future, get robot from config.
+                    # Map the robot type declared in the task config to the
+                    # environment class implementing it.
+                    with open(task_config, "r", encoding="utf-8") as f:
+                        robot_key = next(iter(json.load(f)["robots"]))
+                    robot = {
+                        "tidybot": "TidyBot3D",
+                        "fr3": "Franka3D",
+                        "rby1a": "RBY1A3D",
+                    }[robot_key]
                     task_cfg = "-".join(config_name.split("-")[1:])
                     variant_id = f"kinder/{folder_name}-{task_cfg}-v0"
                     _register(

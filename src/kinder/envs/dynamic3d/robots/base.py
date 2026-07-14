@@ -7,6 +7,7 @@ from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
+from relational_structs import Array
 
 from kinder.envs.dynamic3d.mujoco_utils import MjObs, MujocoEnv
 
@@ -238,6 +239,21 @@ class RobotEnv(MujocoEnv, abc.ABC):
 
         # Return the merged XML as string
         return ET.tostring(input_root, encoding="unicode")
+
+    def _update_ctrl(self, action: Array) -> None:
+        """Update control values from action array.
+
+        Splits the action across this robot's ctrl parts in insertion order,
+        rather than writing the full simulation ctrl array.
+
+        Args:
+            action: Action array to apply to robot controls.
+        """
+        start = 0
+        for _, ctrl_part in self.ctrl.items():
+            end = start + len(ctrl_part)
+            ctrl_part[:] = action[start:end]
+            start = end
 
     @abc.abstractmethod
     def reward(self, obs: MjObs) -> float:

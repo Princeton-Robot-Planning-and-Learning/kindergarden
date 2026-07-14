@@ -27,7 +27,9 @@ class RBY1ARobotActionSpace(RobotActionSpace):
     def create_markdown_description(self) -> str:
         """Create a human-readable markdown description of this space."""
         return (
-            """Actions: joint positions for 2 base joints, 6 torso joints, """
+            """Actions: joint positions for 2 base joints, 6 torso joints,"""
+
+
             """7 right arm joints, 7 left arm joints, 2 head joints"""
         )
 
@@ -403,7 +405,6 @@ class RBY1ARobotEnv(RobotEnv):
     @property
     def lambda_mat(self) -> NDArray[np.float64]:
         """Returns the lambda matrix for the robot."""
-
         jacobian = self.jacobian_mat
         mass_matrix_inv = np.linalg.inv(self.mass_mat)
 
@@ -424,14 +425,6 @@ class RBY1ARobotEnv(RobotEnv):
         return self.sim.data.mj_data.qfrc_bias[  # pylint: disable=protected-access
             self.joint_indices
         ]
-
-    def _update_ctrl(self, action: Array) -> None:
-        start = 0
-        for part in self.ctrl:
-            # if part not in self.exclude_parts:
-            end = start + len(self.ctrl[part])
-            self.ctrl[part][:] = action[start:end]
-            start = end
 
     def step(self, action: Array) -> tuple[MjObs, float, bool, bool, dict[str, Any]]:
         """Step the RBY-1A robot environment with the given action.

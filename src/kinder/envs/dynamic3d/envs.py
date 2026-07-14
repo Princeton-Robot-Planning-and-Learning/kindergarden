@@ -149,6 +149,23 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
         # Robot-specific settings from the task config (e.g. mount_height)
         # are forwarded as keyword arguments.
         robot_config = self.task_config["robots"][self.robot_type][self.robot_name]
+        reserved_robot_kwargs = {
+            "name",
+            "control_frequency",
+            "act_delta",
+            "horizon",
+            "camera_names",
+            "camera_width",
+            "camera_height",
+            "seed",
+            "show_viewer",
+        }
+        colliding_keys = reserved_robot_kwargs & robot_config.keys()
+        assert not colliding_keys, (
+            f"Robot config for '{self.robot_name}' in task config "
+            f"{task_config_path} uses reserved keys {sorted(colliding_keys)}; "
+            f"these are set by the environment and cannot be overridden."
+        )
         self._robot_env = robot_cls(
             name=self.robot_name,
             control_frequency=self.config.control_frequency,
@@ -381,7 +398,6 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
 
     def _create_scene_xml(self) -> str:
         """Create the MuJoCo XML string for the current scene configuration."""
-
         # Set model path to local models directory
         model_base_path = Path(__file__).parent / "models" / "stanford_tidybot"
 
@@ -582,7 +598,6 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
 
     def _initialize_object_poses(self) -> None:
         """Initialize object poses in the environment."""
-
         assert self._robot_env is not None, "Robot environment not initialized"
         assert self._robot_env.sim is not None, "Simulation not initialized"
 
@@ -751,7 +766,6 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
 
     def _initialize_robot_pose(self) -> None:
         """Initialize the robot in the environment."""
-
         # Go through predicates, find the ones that specify the robot's initial pose
         init_predicates = self.task_config.get("initial_state", [])
         robot_predicates = []
@@ -810,7 +824,6 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
         options: dict[str, Any] | None = None,
     ) -> tuple[ObjectCentricState, dict[str, Any]]:
         """Reset the environment and return object-centric observation."""
-
         # Reset the random seed
         self._robot_env.seed(seed=seed)
         self.np_random = self._robot_env.np_random
@@ -850,7 +863,6 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
         options: dict[str, Any] | None = None,
     ) -> tuple[ObjectCentricState, dict[str, Any], dict[str, Any]]:
         """Reset the environment and return object-centric observation."""
-
         # Reset the random seed
         self._robot_env.seed(seed=seed)
         self.np_random = self._robot_env.np_random
@@ -1191,7 +1203,6 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
         This method should be implemented by subclasses to provide robot-specific state
         data.
         """
-
     @abc.abstractmethod
     def _set_robot_state(self, state: ObjectCentricState) -> None:
         """Set the robot state in the simulation.
@@ -1199,6 +1210,62 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
         This method should be implemented by subclasses to set the robot's state in the
         simulation.
         """
+
+    def _get_arm_and_gripper_pos_data(self) -> dict[str, float]:
+        """Get position features shared by robots with a 7-joint arm and a [0, 255]
+        gripper actuator: pos_arm_joint1..7 and pos_gripper."""
+        assert self._robot_env is not None, "Robot environment not initialized"
+        assert self._robot_env.qpos is not None
+        assert self._robot_env.ctrl is not None
+        data: dict[str, float] = {
+            f"pos_arm_joint{i}": self._robot_env.qpos["arm"][i - 1] for i in range(1, 8)
+        }
+        data["pos_gripper"] = self._robot_env.ctrl["gripper"][0] / 255.0
+        return data
+
+    def _get_arm_and_gripper_vel_data(self) -> dict[str, float]:
+        """Get velocity features shared by robots with a 7-joint arm and a [0, 255]
+        gripper actuator: vel_arm_joint1..7 and vel_gripper."""
+        assert self._robot_env is not None, "Robot environment not initialized"
+        assert self._robot_env.qvel is not None
+        data: dict[str, float] = {
+            f"vel_arm_joint{i}": self._robot_env.qvel["arm"][i - 1] for i in range(1, 8)
+        }
+        data["vel_gripper"] = self._robot_env.qvel["gripper"][0]
+        return data
+
+    def _set_arm_and_gripper_state(
+        self,
+        state: ObjectCentricState,
+        robot_obj: Object,
+        set_arm_ctrl_targets: bool = False,
+    ) -> None:
+        """Restore the arm and gripper state shared by robots with a 7-joint arm and a
+        [0, 255] gripper actuator.
+
+        Args:
+            state: The object-centric state to restore from.
+            robot_obj: The robot object in the state.
+            set_arm_ctrl_targets: Also write the arm joint positions to ctrl;
+                required for arms driven by position actuators to hold the
+                restored pose.
+        """
+        assert self._robot_env is not None, "Robot environment not initialized"
+        assert self._robot_env.qpos is not None
+        assert self._robot_env.qvel is not None
+        assert self._robot_env.ctrl is not None
+
+        robot_arm_pos = [state.get(robot_obj, f"pos_arm_joint{i}") for i in range(1, 8)]
+        self._robot_env.qpos["arm"][:] = robot_arm_pos
+        if set_arm_ctrl_targets:
+            self._robot_env.ctrl["arm"][:] = robot_arm_pos
+
+        gripper_pos = state.get(robot_obj, "pos_gripper")
+        self._robot_env.ctrl["gripper"][:] = gripper_pos * 255.0
+
+        robot_arm_vel = [state.get(robot_obj, f"vel_arm_joint{i}") for i in range(1, 8)]
+        self._robot_env.qvel["arm"][:] = robot_arm_vel
+        self._robot_env.qvel["gripper"][:] = state.get(robot_obj, "vel_gripper")
 
 
 class ObjectCentricTidyBot3DEnv(ObjectCentricRobotEnv):
@@ -1214,7 +1281,6 @@ class ObjectCentricTidyBot3DEnv(ObjectCentricRobotEnv):
         assert self.robot_type == "tidybot"
         assert self._robot_env is not None, "Robot environment not initialized"
         robot = Object(self.robot_name, MujocoTidyBotRobotObjectType)
-        # Build this super explicitly, even though verbose, to be careful.
         assert self._robot_env.qpos is not None
         assert self._robot_env.qvel is not None
         state_dict = {}
@@ -1222,25 +1288,11 @@ class ObjectCentricTidyBot3DEnv(ObjectCentricRobotEnv):
             "pos_base_x": self._robot_env.qpos["base"][0],
             "pos_base_y": self._robot_env.qpos["base"][1],
             "pos_base_rot": self._robot_env.qpos["base"][2],
-            "pos_arm_joint1": self._robot_env.qpos["arm"][0],
-            "pos_arm_joint2": self._robot_env.qpos["arm"][1],
-            "pos_arm_joint3": self._robot_env.qpos["arm"][2],
-            "pos_arm_joint4": self._robot_env.qpos["arm"][3],
-            "pos_arm_joint5": self._robot_env.qpos["arm"][4],
-            "pos_arm_joint6": self._robot_env.qpos["arm"][5],
-            "pos_arm_joint7": self._robot_env.qpos["arm"][6],
-            "pos_gripper": self._robot_env.ctrl["gripper"][0] / 255.0,
+            **self._get_arm_and_gripper_pos_data(),
             "vel_base_x": self._robot_env.qvel["base"][0],
             "vel_base_y": self._robot_env.qvel["base"][1],
             "vel_base_rot": self._robot_env.qvel["base"][2],
-            "vel_arm_joint1": self._robot_env.qvel["arm"][0],
-            "vel_arm_joint2": self._robot_env.qvel["arm"][1],
-            "vel_arm_joint3": self._robot_env.qvel["arm"][2],
-            "vel_arm_joint4": self._robot_env.qvel["arm"][3],
-            "vel_arm_joint5": self._robot_env.qvel["arm"][4],
-            "vel_arm_joint6": self._robot_env.qvel["arm"][5],
-            "vel_arm_joint7": self._robot_env.qvel["arm"][6],
-            "vel_gripper": self._robot_env.qvel["gripper"][0],
+            **self._get_arm_and_gripper_vel_data(),
         }
         return state_dict
 
@@ -1262,16 +1314,6 @@ class ObjectCentricTidyBot3DEnv(ObjectCentricRobotEnv):
         assert self._robot_env.qpos is not None
         self._robot_env.qpos["base"][:] = robot_base_pos
 
-        # Reset the robot arm position.
-        robot_arm_pos = [state.get(robot_obj, f"pos_arm_joint{i}") for i in range(1, 8)]
-        assert self._robot_env.qpos is not None
-        self._robot_env.qpos["arm"][:] = robot_arm_pos
-
-        # Reset the robot gripper position.
-        gripper_pos = state.get(robot_obj, "pos_gripper")
-        assert self._robot_env.ctrl is not None
-        self._robot_env.ctrl["gripper"][:] = gripper_pos * 255.0
-
         # Reset the robot base velocity.
         robot_base_vel = [
             state.get(robot_obj, "vel_base_x"),
@@ -1281,15 +1323,8 @@ class ObjectCentricTidyBot3DEnv(ObjectCentricRobotEnv):
         assert self._robot_env.qvel is not None
         self._robot_env.qvel["base"][:] = robot_base_vel
 
-        # Reset the robot arm velocity.
-        robot_arm_vel = [state.get(robot_obj, f"vel_arm_joint{i}") for i in range(1, 8)]
-        assert self._robot_env.qvel is not None
-        self._robot_env.qvel["arm"][:] = robot_arm_vel
-
-        # Reset the robot gripper velocity.
-        gripper_vel = state.get(robot_obj, "vel_gripper")
-        assert self._robot_env.qvel is not None
-        self._robot_env.qvel["gripper"][:] = gripper_vel
+        # Reset the arm and gripper.
+        self._set_arm_and_gripper_state(state, robot_obj)
 
 
 class TidyBot3DEnv(ConstantObjectKinDEREnv):
@@ -1341,7 +1376,8 @@ The robot can control:
 
     def _create_obs_markdown_description(self) -> str:
         """Create observation space description."""
-        return """Observation includes:
+        return\
+               """Observation includes:
 - Robot state: base pose, arm position/orientation, gripper state
 - Object states: positions and orientations of all objects
 - Camera images: RGB images from base and wrist cameras
@@ -1350,7 +1386,8 @@ The robot can control:
 
     def _create_action_markdown_description(self) -> str:
         """Create action space description."""
-        return """Actions control:
+        return\
+               """Actions control:
 - base_pose: [x, y, theta] - Mobile base position and orientation
 - arm_pos: [x, y, z] - End effector position in world coordinates
 - arm_quat: [x, y, z, w] - End effector orientation as quaternion
@@ -1374,7 +1411,8 @@ The robot can control:
                 "The episode terminates when all objects are placed at their "
                 "respective targets.\n"
             )
-        return """Reward function depends on the specific task:
+        return\
+               """Reward function depends on the specific task:
 - Object stacking: Reward for successfully stacking objects
 - Drawer/cabinet tasks: Reward for opening/closing and placing objects
 - General manipulation: Reward for successful pick-and-place operations
@@ -1384,16 +1422,16 @@ Currently returns a small negative reward (-0.01) per timestep to encourage expl
 
     def _create_references_markdown_description(self) -> str:
         """Create references description."""
-        return """TidyBot++: An Open-Source Holonomic Mobile Manipulator
-for Robot Learning
-- Jimmy Wu, William Chong, Robert Holmberg, Aaditya Prasad, Yihuai Gao,
-  Oussama Khatib, Shuran Song, Szymon Rusinkiewicz, Jeannette Bohg
-- Conference on Robot Learning (CoRL), 2024
+        return\
+               """TidyBot++: An Open-Source Holonomic Mobile Manipulator.
 
-https://github.com/tidybot2/tidybot2
-"""
+               for Robot Learning
+               - Jimmy Wu, William Chong, Robert Holmberg, Aaditya Prasad, Yihuai Gao,
+                 Oussama Khatib, Shuran Song, Szymon Rusinkiewicz, Jeannette Bohg
+               - Conference on Robot Learning (CoRL), 2024
 
-
+               https://github.com/tidybot2/tidybot2
+               """
 class ObjectCentricRBY1A3DEnv(ObjectCentricRobotEnv):
     """RBY1A-specific implementation of object-centric robot environment."""
 
@@ -1529,10 +1567,7 @@ Currently returns a small negative reward (-0.01) per timestep to encourage expl
 
     def _create_references_markdown_description(self) -> str:
         """Create references description."""
-        return """TODO
-"""
-
-
+        return """TODO."""
 class ObjectCentricFranka3DEnv(ObjectCentricRobotEnv):
     """Franka FR3-specific implementation of object-centric robot environment."""
 
@@ -1547,31 +1582,14 @@ class ObjectCentricFranka3DEnv(ObjectCentricRobotEnv):
         assert self._robot_env is not None, "Robot environment not initialized"
         assert isinstance(self._robot_env, FR3RobotEnv)
         robot = Object(self.robot_name, MujocoFR3RobotObjectType)
-        # Build this super explicitly, even though verbose, to be careful.
-        assert self._robot_env.qpos is not None
-        assert self._robot_env.qvel is not None
         base_x, base_y, base_yaw = self._robot_env.get_base_pos_yaw()
         state_dict = {}
         state_dict[robot] = {
             "pos_base_x": base_x,
             "pos_base_y": base_y,
             "pos_base_rot": base_yaw,
-            "pos_arm_joint1": self._robot_env.qpos["arm"][0],
-            "pos_arm_joint2": self._robot_env.qpos["arm"][1],
-            "pos_arm_joint3": self._robot_env.qpos["arm"][2],
-            "pos_arm_joint4": self._robot_env.qpos["arm"][3],
-            "pos_arm_joint5": self._robot_env.qpos["arm"][4],
-            "pos_arm_joint6": self._robot_env.qpos["arm"][5],
-            "pos_arm_joint7": self._robot_env.qpos["arm"][6],
-            "pos_gripper": self._robot_env.ctrl["gripper"][0] / 255.0,
-            "vel_arm_joint1": self._robot_env.qvel["arm"][0],
-            "vel_arm_joint2": self._robot_env.qvel["arm"][1],
-            "vel_arm_joint3": self._robot_env.qvel["arm"][2],
-            "vel_arm_joint4": self._robot_env.qvel["arm"][3],
-            "vel_arm_joint5": self._robot_env.qvel["arm"][4],
-            "vel_arm_joint6": self._robot_env.qvel["arm"][5],
-            "vel_arm_joint7": self._robot_env.qvel["arm"][6],
-            "vel_gripper": self._robot_env.qvel["gripper"][0],
+            **self._get_arm_and_gripper_pos_data(),
+            **self._get_arm_and_gripper_vel_data(),
         }
         return state_dict
 
@@ -1592,26 +1610,9 @@ class ObjectCentricFranka3DEnv(ObjectCentricRobotEnv):
             state.get(robot_obj, "pos_base_rot"),
         )
 
-        # Reset the robot arm position. For position actuators, the ctrl
-        # targets must also be set so the arm holds the restored pose.
-        robot_arm_pos = [state.get(robot_obj, f"pos_arm_joint{i}") for i in range(1, 8)]
-        assert self._robot_env.qpos is not None
-        self._robot_env.qpos["arm"][:] = robot_arm_pos
-        assert self._robot_env.ctrl is not None
-        self._robot_env.ctrl["arm"][:] = robot_arm_pos
-
-        # Reset the robot gripper position.
-        gripper_pos = state.get(robot_obj, "pos_gripper")
-        self._robot_env.ctrl["gripper"][:] = gripper_pos * 255.0
-
-        # Reset the robot arm velocity.
-        robot_arm_vel = [state.get(robot_obj, f"vel_arm_joint{i}") for i in range(1, 8)]
-        assert self._robot_env.qvel is not None
-        self._robot_env.qvel["arm"][:] = robot_arm_vel
-
-        # Reset the robot gripper velocity.
-        gripper_vel = state.get(robot_obj, "vel_gripper")
-        self._robot_env.qvel["gripper"][:] = gripper_vel
+        # Reset the arm and gripper. The arm uses position actuators, so the
+        # ctrl targets must also be set for the arm to hold the restored pose.
+        self._set_arm_and_gripper_state(state, robot_obj, set_arm_ctrl_targets=True)
 
 
 class Franka3DEnv(ConstantObjectKinDEREnv):
@@ -1661,7 +1662,8 @@ The robot can control:
 
     def _create_obs_markdown_description(self) -> str:
         """Create observation space description."""
-        return """Observation includes:
+        return\
+               """Observation includes:
 - Robot state: base mount pose, arm joint positions/velocities, gripper state
 - Object states: positions and orientations of all objects
 - Camera images: RGB images from scene cameras

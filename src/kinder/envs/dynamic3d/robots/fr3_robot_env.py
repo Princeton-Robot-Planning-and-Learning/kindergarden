@@ -1,5 +1,5 @@
-"""This module defines the FR3RobotEnv class, which is the base class for the
-Franka FR3 robot (with a Robotiq 2F-85 gripper) in simulation."""
+"""This module defines the FR3RobotEnv class, which is the base class for the Franka FR3
+robot (with a Robotiq 2F-85 gripper) in simulation."""
 
 from pathlib import Path
 from typing import Any
@@ -185,8 +185,8 @@ class FR3RobotEnv(RobotEnv):
     def set_robot_base_pos_yaw(self, x: float, y: float, yaw: float) -> None:
         """Set the fixed base mount to the specified position and orientation.
 
-        The FR3 has no base joints; instead, the mount body itself is moved in
-        the model, with z fixed at mount_height.
+        The FR3 has no base joints; instead, the mount body itself is moved in the
+        model, with z fixed at mount_height.
         """
         assert (
             self.sim is not None
@@ -225,18 +225,6 @@ class FR3RobotEnv(RobotEnv):
         self.ctrl["gripper"][:] = 0.0
         self.sim.forward()  # Update the simulation state
 
-    def _update_ctrl(self, action: Array) -> None:
-        """Update control values from action array.
-
-        Args:
-            action: Action array to apply to robot controls.
-        """
-        start = 0
-        for _, ctrl_part in self.ctrl.items():
-            end = start + len(ctrl_part)
-            ctrl_part[:] = action[start:end]
-            start = end
-
     def step(self, action: Array) -> tuple[MjObs, float, bool, bool, dict[str, Any]]:
         """Take a step in the environment.
 
@@ -273,7 +261,7 @@ class FR3RobotEnv(RobotEnv):
     def reward(self, obs: MjObs) -> float:
         """Compute the reward from an observation.
 
-        This is a placeholder implementation since FR3RobotEnv is used as a
-        component in Franka3DEnv which handles rewards separately.
+        This is a placeholder implementation since FR3RobotEnv is used as a component in
+        Franka3DEnv which handles rewards separately.
         """
         return 0.0

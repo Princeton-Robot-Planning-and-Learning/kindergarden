@@ -58,9 +58,9 @@ _CATEGORY_DEPS: dict[str, tuple[str, ...]] = {
 def register_all_environments() -> None:
     """Add all benchmark environments to the gymnasium registry.
 
-    Categories whose backend dependencies are not installed are silently
-    skipped.  The default ``pip install kindergarden`` includes every backend;
-    to install a single one, see the requirements files described in the README.
+    Categories whose backend dependencies are not installed are silently skipped.  The
+    default ``pip install kindergarden`` includes every backend; to install a single
+    one, see the requirements files described in the README.
     """
     # NOTE: ids must start with "kinder/" to be properly registered.
 
@@ -434,13 +434,26 @@ def _register_dynamic3d() -> None:
                     config_name = task_config.stem
                     # Map the robot type declared in the task config to the
                     # environment class implementing it.
-                    with open(task_config, "r", encoding="utf-8") as f:
-                        robot_key = next(iter(json.load(f)["robots"]))
-                    robot = {
+                    robot_env_classes = {
                         "tidybot": "TidyBot3D",
                         "fr3": "Franka3D",
                         "rby1a": "RBY1A3D",
-                    }[robot_key]
+                    }
+                    try:
+                        with open(task_config, "r", encoding="utf-8") as f:
+                            robot_key = next(iter(json.load(f)["robots"]))
+                        robot = robot_env_classes[robot_key]
+                    except (
+                        json.JSONDecodeError,
+                        KeyError,
+                        StopIteration,
+                    ) as e:
+                        raise RuntimeError(
+                            f"Cannot determine the robot for task config "
+                            f"{task_config}: it must be valid JSON with a "
+                            f"non-empty 'robots' dict whose first key is one "
+                            f"of {sorted(robot_env_classes)}."
+                        ) from e
                     task_cfg = "-".join(config_name.split("-")[1:])
                     variant_id = f"kinder/{folder_name}-{task_cfg}-v0"
                     _register(

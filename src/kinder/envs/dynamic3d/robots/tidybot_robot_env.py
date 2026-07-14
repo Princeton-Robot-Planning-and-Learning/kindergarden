@@ -76,7 +76,6 @@ class TidyBotRobotEnv(RobotEnv):
             arm_kp: Custom proportional gains for arm PD controller (7 values).
             arm_kd: Custom derivative gains for arm PD controller (7 values).
         """
-
         robot_camera_names = [f"{name}_base", f"{name}_wrist"]
         if camera_names is None:
             camera_names = []
@@ -361,18 +360,6 @@ class TidyBotRobotEnv(RobotEnv):
         torques = np.clip(torques, -self.ARM_TORQUE_LIMITS, self.ARM_TORQUE_LIMITS)
 
         return torques
-
-    def _update_ctrl(self, action: Array) -> None:
-        """Update control values from action array.
-
-        Args:
-            action: Action array to apply to robot controls.
-        """
-        start = 0
-        for _, ctrl_part in self.ctrl.items():
-            end = start + len(ctrl_part)
-            ctrl_part[:] = action[start:end]
-            start = end
 
     def step(self, action: Array) -> tuple[MjObs, float, bool, bool, dict[str, Any]]:
         """Take a step in the environment.

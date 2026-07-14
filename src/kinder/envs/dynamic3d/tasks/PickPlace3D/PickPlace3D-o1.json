@@ -1,0 +1,55 @@
+{
+    "description": "A 3D task where the robot must pick up objects from the ground and place them at target locations.",
+    "variant_description": "The variants require picking and placing different numbers of objects.",
+    "variant_specific_description": "Pick up one cube from the floor and place it in the goal region on the ground.",
+    "robots": {
+        "tidybot": {
+            "robot": {}
+        }
+    },
+    "scene": "lab2",
+    "regions": {
+        "robot_task_init_region": {
+            "target": "ground",
+            "ranges": [[-0.25, -0.05, -0.15, 0.05]],
+            "rgba": [0.0, 1.0, 0.0, 0.0],
+            "yaw_ranges": [[-5, 5]]
+        },
+        "cube_init_region": {
+            "target": "ground",
+            "ranges": [[0.4, -0.1, 0.6, 0.1]],
+            "rgba": [1.0, 1.0, 0.0, 0.0],
+            "yaw_ranges": [[0, 0]]
+        },
+        "goal_region": {
+            "target": "ground",
+            "ranges": [[1.0, 0.4, 1.2, 0.6]],
+            "rgba": [0.0, 0.0, 1.0, 0.0],
+            "yaw_ranges": [[0, 0]]
+        }
+    },
+    "objects": {
+        "cube": {
+            "cube1": {
+                "size": 0.02,
+                "rgba": [0.5, 0.1, 0.1, 1],
+                "mass": 0.01
+            }
+        }
+    },
+    "cameras": {
+        "task_view": {
+            "position": [2.6, -1.6, 2.2],
+            "lookat": [0.5, 0.2, 0.4],
+            "fovy": 42,
+            "resolution": [640, 480]
+        }
+    },
+    "initial_state": [
+        ["on", "robot", "robot_task_init_region"],
+        ["on", "cube1", "cube_init_region"]
+    ],
+    "goal_state": [
+        ["on", "cube1", "goal_region"]
+    ]
+}

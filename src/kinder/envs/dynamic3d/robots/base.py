@@ -7,8 +7,26 @@ from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
+from relational_structs import Array
 
 from kinder.envs.dynamic3d.mujoco_utils import MjObs, MujocoEnv
+
+
+class IndexedView:
+    """A view that provides indexed access to non-contiguous array elements."""
+
+    def __init__(self, array: Any, indices: list[int]) -> None:
+        self.array = array
+        self.indices = indices
+
+    def __setitem__(self, key: int | slice, value: Any) -> None:
+        self.array[self.indices[key]] = value
+
+    def __getitem__(self, key: int) -> Any:
+        return self.array[self.indices[key]]
+
+    def __len__(self) -> int:
+        return len(self.indices)
 
 
 class RobotEnv(MujocoEnv, abc.ABC):
@@ -221,6 +239,21 @@ class RobotEnv(MujocoEnv, abc.ABC):
 
         # Return the merged XML as string
         return ET.tostring(input_root, encoding="unicode")
+
+    def _update_ctrl(self, action: Array) -> None:
+        """Update control values from action array.
+
+        Splits the action across this robot's ctrl parts in insertion order,
+        rather than writing the full simulation ctrl array.
+
+        Args:
+            action: Action array to apply to robot controls.
+        """
+        start = 0
+        for _, ctrl_part in self.ctrl.items():
+            end = start + len(ctrl_part)
+            ctrl_part[:] = action[start:end]
+            start = end
 
     @abc.abstractmethod
     def reward(self, obs: MjObs) -> float:

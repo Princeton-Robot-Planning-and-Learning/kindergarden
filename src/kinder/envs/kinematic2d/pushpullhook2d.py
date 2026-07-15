@@ -464,10 +464,9 @@ class PushPullHook2DEnv(ConstantObjectKinDEREnv):
         return (
             "A 2D environment with a robot, a hook (L-shape), a movable button, "
             "and a target button."
-            "The robot can use the hook to push the movable button towards "
-            "the target button. "
-            "The movable button only moves if the hook is in contact and "
-            "the robot moves in the direction of contact."
+            "The goal is to move the movable button onto the target button."
+            "The robot has a movable circular base and a retractable arm with a rectangular vacuum end effector.",
+            "Objects can be grasped and ungrasped when the end effector makes contact."
         )
 
     def _create_variant_markdown_description(self) -> str:

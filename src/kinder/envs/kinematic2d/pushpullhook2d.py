@@ -461,7 +461,7 @@ class PushPullHook2DEnv(ConstantObjectKinDEREnv):
             "A 2D environment with a robot, a hook (L-shape), a movable button, "
             "and a target button. "
             "The goal is to move the movable button onto the target button. "
-            "The robot has a movable circular base and a retractable arm with a rectangular vacuum end effector. "
+            "The robot has a movable circular base and a retractable arm with a rectangular vacuum end effector. " # pylint: disable=line-too-long
             "Objects can be grasped and ungrasped when the end effector makes contact."
         )
 

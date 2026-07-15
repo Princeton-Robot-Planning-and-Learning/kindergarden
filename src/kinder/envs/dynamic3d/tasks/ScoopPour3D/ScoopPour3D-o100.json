@@ -1,7 +1,7 @@
 {
-    "description": "A 3D task where the robot must transfer a pile of objects from one bin to another. There is a tool available that may be used for scooping and pouring.",
+    "description": "A 3D task where the robot must transfer a pile of objects from one bin to another.",
     "variant_description": "The variants require scooping and pouring different numbers of objects.",
-    "variant_specific_description": "Use a scoop to transfer 100 cubes from a source bin to a target bin on the kitchen island.",
+    "variant_specific_description": "Transfer 100 cubes from a source bin to a target bin on the kitchen island.",
     "robots": {
         "tidybot": {
             "robot": {}

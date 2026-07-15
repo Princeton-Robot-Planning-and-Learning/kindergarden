@@ -1,6 +1,6 @@
 {
     "description": "A 3D task where an object that is initially on the floor must be transferred to the bin.",
-    "variant_description": "The variants require tossing different numbers of objects into the bin.",
+    "variant_description": "The variants require transferring different numbers of objects to the bin.",
     "variant_specific_description": "Get one cube into the bin.",
     "robots": {
         "tidybot": {

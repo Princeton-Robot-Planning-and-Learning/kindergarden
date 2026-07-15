@@ -1,6 +1,6 @@
 {
     "description": "A 3D task where the robot must transfer a pile of objects from one bin to another.",
-    "variant_description": "The variants require scooping and pouring different numbers of objects.",
+    "variant_description": "The variants require transferring different numbers of objects between bins.",
     "variant_specific_description": "Transfer 10 cubes from a source bin to a target bin on the kitchen island.",
     "robots": {
         "tidybot": {

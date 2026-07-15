@@ -648,9 +648,9 @@ class DynScoopPour2DEnv(ConstantObjectKinDEREnv):
 
     def _create_env_markdown_description(self) -> str:
         # pylint: disable=line-too-long
-        return """A 2D physics-based tool-use environment where a robot must use an L-shaped hook to scoop small objects from the left side of a middle wall and pour them onto the right side. The middle wall is half the height of the world, allowing objects to be scooped over it.
+        return """A 2D physics-based environment where the goal is to move small objects from the left side of a middle wall to the right side. The middle wall is half the height of the world.
 
-The robot has a movable circular base and an extendable arm with gripper fingers. The hook is a kinematic object that can be grasped and used as a tool to scoop the small objects. Small objects are dynamic and follow PyMunk physics, but they cannot be grasped directly by the robot.
+The robot has a movable circular base and an extendable arm with gripper fingers. An L-shaped hook is present as a kinematic object that can be grasped. Small objects are dynamic and follow PyMunk physics, but they cannot be grasped directly by the robot.
 
 All objects include physics properties like mass, moment of inertia, and color information for rendering.
 """

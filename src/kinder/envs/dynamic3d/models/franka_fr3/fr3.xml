@@ -183,6 +183,10 @@
                       <geom name="fr3_link7_collision" class="collision" mesh="link7_coll"/>
                       <site name="attachment_site" pos="0 0 0.107"/>
                       <body name="gripper_base" pos="0 0 0.107" childclass="2f85">
+                        <!-- Grasp-point (pinch) frame between the fingertips, matching the
+                             robot_pinch_site convention used by the gen3/TidyBot 2F-85 so the
+                             EE deltas share one gripper-frame convention across robots. -->
+                        <site name="pinch_site" pos="0 0 0.112038" quat="0.70710678 0 0 -0.70710678"/>
                         <inertial mass="0.777441" pos="0 -2.70394e-05 0.0354675" quat="1 -0.00152849 0 0"
                           diaginertia="0.000260285 0.000225381 0.000152708"/>
                         <geom class="2f85/visual" mesh="base" material="2f85/black"/>

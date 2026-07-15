@@ -189,7 +189,7 @@ class BaseMotion3DEnv(ConstantObjectKinDEREnv):
     def _create_env_markdown_description(self) -> str:
         """Create environment description."""
         # pylint: disable=line-too-long
-        return """A very simple environment where only base motion planning is needed to reach a goal."""
+        return """A simple 3D environment where the goal is to navigate to a target region."""
 
     def _create_variant_markdown_description(self) -> str:
         # pylint: disable=line-too-long

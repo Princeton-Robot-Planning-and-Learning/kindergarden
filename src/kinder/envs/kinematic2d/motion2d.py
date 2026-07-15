@@ -302,7 +302,7 @@ class Motion2DEnv(ConstantObjectKinDEREnv):
 
 There may be narrow passages.
         
-The robot has a movable circular base and a retractable arm with a rectangular vacuum end effector. The arm and vacuum do not need to be used in this environment.
+The robot has a movable circular base and a retractable arm with a rectangular vacuum end effector.
 """
 
     def _create_variant_markdown_description(self) -> str:

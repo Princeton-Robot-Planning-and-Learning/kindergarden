@@ -458,17 +458,15 @@ class Obstruction3DEnv(ConstantObjectKinDEREnv):
         # pylint: disable=line-too-long
         config = self._object_centric_env.config
         assert isinstance(config, Obstruction3DEnvConfig)
-        return f"""A 3D obstruction clearance environment where the goal is to place a target block on a designated target region by first clearing obstructions.
+        return f"""A 3D obstruction clearance environment where the goal is to place a target block on a designated target region, which may be initially obstructed.
 
 The robot is a Kinova Gen-3 with 7 degrees of freedom that can grasp and manipulate objects. The environment consists of:
 - A **table** with dimensions {config.table_half_extents[0]*2:.3f}m × {config.table_half_extents[1]*2:.3f}m × {config.table_half_extents[2]*2:.3f}m
 - A **target region** (purple block) with random dimensions between {config.target_region_half_extents_lb} and {config.target_region_half_extents_ub} half-extents
 - A **target block** that must be placed on the target region, sized at {config.target_block_size_scale}× the target region's x,y dimensions
-- **Obstruction(s)** (red blocks) that may be placed on or near the target region, blocking access
+- **Obstruction(s)** (red blocks) that may be placed on or near the target region
 
 Obstructions have random dimensions between {config.obstruction_half_extents_lb} and {config.obstruction_half_extents_ub} half-extents. During initialization, there's a {config.obstruction_init_on_target_prob} probability that each obstruction will be placed on the target region, requiring clearance.
-
-The task requires planning to grasp and move obstructions out of the way, then place the target block on the target region.
 """
 
     def _create_variant_markdown_description(self) -> str:
@@ -479,8 +477,8 @@ The task requires planning to grasp and move obstructions out of the way, then p
         if self._num_obstructions == 0:
             return "This variant has no obstructions."
         if self._num_obstructions == 1:
-            return "This variant has 1 obstruction to clear."
-        return f"This variant has {self._num_obstructions} obstructions to clear."
+            return "This variant has 1 obstruction."
+        return f"This variant has {self._num_obstructions} obstructions."
 
     def _create_action_space_markdown_description(self) -> str:
         """Create action space description."""
@@ -508,7 +506,7 @@ The goal is considered reached when:
 
 Support is determined based on contact between the target block and target region, within a small distance threshold (1e-4).
 
-This encourages the robot to efficiently clear obstructions and place the target block while avoiding infinite episodes.
+This encourages the robot to place the target block while avoiding infinite episodes.
 """
 
     def _create_references_markdown_description(self) -> str:

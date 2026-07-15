@@ -755,11 +755,11 @@ class DynPushPullHook2DEnv(ConstantObjectKinDEREnv):
 
     def _create_env_markdown_description(self) -> str:
         # pylint: disable=line-too-long
-        return """A 2D physics-based tool-use environment where a robot must use a hook to push/pull a target block onto a middle wall (goal surface). The target block is positioned in the upper region of the world, while the middle wall is located at the center. The robot must manipulate the hook to navigate the target block downward through obstacles.
+        return """A 2D physics-based environment where the goal is for the target block to reach a middle wall (the goal surface). The target block is positioned in the upper region of the world, while the middle wall is located at the center.
 
-The target block is initially surrounded by obstacle blocks.
+The target block is initially surrounded by obstruction blocks.
 
-The robot has a movable circular base and an extendable arm with gripper fingers. The hook is a kinematic object that can be grasped and used as a tool to indirectly manipulate the target block. All dynamic objects follow PyMunk physics including gravity, friction, and collisions.
+The robot has a movable circular base and an extendable arm with gripper fingers. The hook is a kinematic object that can be grasped. All dynamic objects follow PyMunk physics including gravity, friction, and collisions.
 
 Each object includes physics properties like mass, moment of inertia (for dynamic objects), and color information for rendering.
 """

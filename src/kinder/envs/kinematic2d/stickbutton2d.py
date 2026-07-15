@@ -109,11 +109,6 @@ class ObjectCentricStickButton2DEnv(
 ):
     """Environment with a stick and buttons that need to be pressed.
 
-    The robot cannot directly press buttons that are on the table but can directly press
-    buttons that are on the floor (by touching them).
-
-    The stick can be used to press buttons on the table (by touch).
-
     This is an object-centric environment. The vectorized version with Box spaces is
     defined below.
     """

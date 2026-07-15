@@ -1,4 +1,4 @@
-"""Environment where only base motion is required to reach some goal."""
+"""Environment where the goal is to reach a target region."""
 
 from __future__ import annotations
 
@@ -62,7 +62,7 @@ class ObjectCentricBaseMotion3DEnv(
         BaseMotion3DObjectCentricState, BaseMotion3DEnvConfig
     ]
 ):
-    """Environment where only base motion planning is needed to reach a goal."""
+    """Environment where the goal is to reach a target region."""
 
     def __init__(
         self, config: BaseMotion3DEnvConfig = BaseMotion3DEnvConfig(), **kwargs

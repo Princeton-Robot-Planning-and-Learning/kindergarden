@@ -151,8 +151,8 @@ class ObjectCentricDynScoopPour2DEnv(
 ):
     """Object-centric dynamic 2D scoop-pour environment.
 
-    The robot must use an L-shaped hook to scoop small objects from the left side of a
-    middle wall and pour them onto the right side.
+    The goal is to move small objects from the left side of a middle wall to the right
+    side.
     """
 
     def __init__(
@@ -662,7 +662,7 @@ All objects include physics properties like mass, moment of inertia, and color i
     def _create_variant_specific_description(self) -> str:
         total = self._num_small_circles + self._num_small_squares
         if total == 1:
-            return "This variant has 1 small object to scoop."
+            return "This variant has 1 small object."
         return (
             f"This variant has {total} small objects "
             f"({self._num_small_circles} circles, {self._num_small_squares} squares)."

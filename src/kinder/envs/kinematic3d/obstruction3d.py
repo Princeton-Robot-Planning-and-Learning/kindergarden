@@ -1,4 +1,4 @@
-"""Environment where obstructions must be cleared to place a target on a region."""
+"""Environment where the goal is to place a target on a region."""
 
 from __future__ import annotations
 
@@ -146,7 +146,7 @@ class ObjectCentricObstruction3DEnv(
         Obstruction3DObjectCentricState, Obstruction3DEnvConfig
     ]
 ):
-    """Environment where obstructions must be cleared to place a target on a region."""
+    """Environment where the goal is to place a target on a region."""
 
     def __init__(
         self,

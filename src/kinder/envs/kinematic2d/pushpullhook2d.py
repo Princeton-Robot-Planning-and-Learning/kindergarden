@@ -138,11 +138,7 @@ class ObjectCentricPushPullHook2DEnv(
 ):
     """Environment with a hook, a movable button and a target button.
 
-    The robot or hook cannot directly press the target button.
-
-    The robot can grab the hook and then use it to move the movable button towards the
-    target button. The target button is pressed only when the movable button is in
-    contact with it.
+    The target button is pressed only when the movable button is in contact with it.
     """
 
     def __init__(

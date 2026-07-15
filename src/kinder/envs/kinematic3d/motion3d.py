@@ -1,4 +1,4 @@
-"""Environment where only 3D motion planning is needed to reach a goal region."""
+"""Environment where the goal is to reach a target region."""
 
 from __future__ import annotations
 
@@ -61,7 +61,7 @@ class Motion3DObjectCentricState(Kinematic3DObjectCentricState):
 class ObjectCentricMotion3DEnv(
     ObjectCentricKinematic3DRobotEnv[Motion3DObjectCentricState, Motion3DEnvConfig]
 ):
-    """Environment where only 3D motion planning is needed to reach a goal region."""
+    """Environment where the goal is to reach a target region."""
 
     def __init__(
         self, config: Motion3DEnvConfig = Motion3DEnvConfig(), **kwargs

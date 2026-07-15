@@ -1,4 +1,4 @@
-"""Environment where only 2D motion planning is needed to reach a goal region."""
+"""Environment where the goal is to reach a target region."""
 
 from dataclasses import dataclass
 
@@ -115,7 +115,7 @@ class Motion2DEnvConfig(Kinematic2DRobotEnvConfig, metaclass=FinalConfigMeta):
 
 
 class ObjectCentricMotion2DEnv(ObjectCentricKinematic2DRobotEnv[Motion2DEnvConfig]):
-    """Only 2D motion planning is needed to reach a goal region.
+    """Environment where the goal is to reach a target region.
 
     This is an object-centric environment. The vectorized version with Box spaces is
     defined below.

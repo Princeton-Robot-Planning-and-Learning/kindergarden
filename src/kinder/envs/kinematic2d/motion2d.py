@@ -1,4 +1,4 @@
-"""Environment where only 2D motion planning is needed to reach a goal region."""
+"""Environment where the goal is to reach a target region."""
 
 from dataclasses import dataclass
 
@@ -115,7 +115,7 @@ class Motion2DEnvConfig(Kinematic2DRobotEnvConfig, metaclass=FinalConfigMeta):
 
 
 class ObjectCentricMotion2DEnv(ObjectCentricKinematic2DRobotEnv[Motion2DEnvConfig]):
-    """Only 2D motion planning is needed to reach a goal region.
+    """Environment where the goal is to reach a target region.
 
     This is an object-centric environment. The vectorized version with Box spaces is
     defined below.
@@ -302,7 +302,7 @@ class Motion2DEnv(ConstantObjectKinDEREnv):
 
 There may be narrow passages.
         
-The robot has a movable circular base and a retractable arm with a rectangular vacuum end effector. The arm and vacuum do not need to be used in this environment.
+The robot has a movable circular base and a retractable arm with a rectangular vacuum end effector.
 """
 
     def _create_variant_markdown_description(self) -> str:

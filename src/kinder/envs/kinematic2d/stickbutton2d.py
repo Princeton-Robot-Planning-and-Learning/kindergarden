@@ -109,11 +109,6 @@ class ObjectCentricStickButton2DEnv(
 ):
     """Environment with a stick and buttons that need to be pressed.
 
-    The robot cannot directly press buttons that are on the table but can directly press
-    buttons that are on the floor (by touching them).
-
-    The stick can be used to press buttons on the table (by touch).
-
     This is an object-centric environment. The vectorized version with Box spaces is
     defined below.
     """
@@ -361,11 +356,11 @@ class StickButton2DEnv(ConstantObjectKinDEREnv):
     def _create_env_markdown_description(self) -> str:
         num_buttons = len(self._constant_objects) - 2
         # pylint: disable=line-too-long
-        return f"""A 2D environment where the goal is to touch all buttons, possibly by using a stick for buttons that are out of the robot's direct reach.
+        return f"""A 2D environment where the goal is to touch all buttons.
 
 In this environment, there are always {num_buttons} buttons.
 
-The robot has a movable circular base and a retractable arm with a rectangular vacuum end effector.
+The robot has a movable circular base and a retractable arm with a rectangular vacuum end effector. Objects can be grasped and ungrasped when the end effector makes contact.
 """
 
     def _create_variant_markdown_description(self) -> str:

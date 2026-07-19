@@ -305,12 +305,13 @@ def _delta_T_to_7d(delta_T: NDArray[np.float32]) -> NDArray[np.float32]:
     return np.concatenate([translation, quat])
 
 
-def _get_base_pose_xy_yaw(sim: Any) -> NDArray[np.float32]:
+def _get_base_pose_xy_yaw(sim: Any) -> NDArray[np.float32] | None:
     """Return [x, y, yaw] of the TidyBot mobile base from MuJoCo qpos.
 
     Groups joints by name prefix and requires a complete {prefix}_joint_x / _joint_y /
-    _joint_th triplet from the same prefix. Raises RuntimeError for non-TidyBot
-    environments.
+    _joint_th triplet from the same prefix. Returns None for fixed-base robots (e.g. the
+    desk-mounted FR3) that lack such a triplet, so callers can skip the base-relative
+    action datasets.
     """
     import mujoco  # pylint: disable=import-outside-toplevel  # type: ignore[import]
 
@@ -333,12 +334,7 @@ def _get_base_pose_xy_yaw(sim: Any) -> NDArray[np.float32]:
                 break
 
     if len(found) != 3:
-        raise RuntimeError(
-            "Cannot extract TidyBot base pose: expected a complete "
-            "{prefix}_joint_x / _joint_y / _joint_th triplet but found "
-            f"only {list(found.keys())}. "
-            "actions_delta_base_3d is only supported for TidyBot environments."
-        )
+        return None
     prefixes = {p for p, _ in found.values()}
     if len(prefixes) != 1:
         raise RuntimeError(
@@ -380,8 +376,13 @@ def _create_canonical_datasets(
     num_frames: int,
     ee_frame_name: str,
     ee_frame_type: Literal["site", "body"],
+    has_base: bool,
 ) -> None:
-    """Pre-allocate HDF5 datasets for canonical point cloud mode."""
+    """Pre-allocate HDF5 datasets for canonical point cloud mode.
+
+    The base-relative datasets (actions_delta_base_3d, actions_delta_ee_base_10d) are
+    only created when *has_base* is True; fixed-base robots omit them entirely.
+    """
     str_dt = h5py.string_dtype()
 
     # canonical_pointcloud/<hdf5_key>/xyz  +  geom_name attr on every group
@@ -428,18 +429,19 @@ def _create_canonical_datasets(
         dtype=np.float32,
         compression="gzip",
     )
-    grp.create_dataset(
-        "actions_delta_base_3d",
-        shape=(num_frames, 3),
-        dtype=np.float32,
-        compression="gzip",
-    )
-    grp.create_dataset(
-        "actions_delta_ee_base_10d",
-        shape=(num_frames, 10),
-        dtype=np.float32,
-        compression="gzip",
-    )
+    if has_base:
+        grp.create_dataset(
+            "actions_delta_base_3d",
+            shape=(num_frames, 3),
+            dtype=np.float32,
+            compression="gzip",
+        )
+        grp.create_dataset(
+            "actions_delta_ee_base_10d",
+            shape=(num_frames, 10),
+            dtype=np.float32,
+            compression="gzip",
+        )
     grp.create_dataset(
         "actions_delta_ee_euler_gripper_7d",
         shape=(num_frames, 7),
@@ -464,20 +466,21 @@ def _create_canonical_datasets(
         "derived from actions_delta_ee_transform[t]; qw >= 0"
     )
     grp.attrs["delta_ee_7d_quaternion_order"] = "xyzw"
-    grp.attrs["delta_base_3d_convention"] = (
-        "actions_delta_base_3d[t] = [dx, dy, dyaw] relative SE(2) delta "
-        "from base_pose_before_action[t] to base_pose_after_action[t]; "
-        "dx/dy in the before-action base frame; dyaw wrapped to (-pi, pi]"
-    )
-    grp.attrs["delta_ee_base_10d_convention"] = (
-        "actions_delta_ee_base_10d[t] = "
-        "concat(actions_delta_ee_7d[t], actions_delta_base_3d[t])"
-    )
+    if has_base:
+        grp.attrs["delta_base_3d_convention"] = (
+            "actions_delta_base_3d[t] = [dx, dy, dyaw] relative SE(2) delta "
+            "from base_pose_before_action[t] to base_pose_after_action[t]; "
+            "dx/dy in the before-action base frame; dyaw wrapped to (-pi, pi]"
+        )
+        grp.attrs["delta_ee_base_10d_convention"] = (
+            "actions_delta_ee_base_10d[t] = "
+            "concat(actions_delta_ee_7d[t], actions_delta_base_3d[t])"
+        )
     grp.attrs["delta_ee_euler_gripper_7d_convention"] = (
         "actions_delta_ee_euler_gripper_7d[t] = [dx, dy, dz, rx, ry, rz, gripper]; "
         "[dx, dy, dz] is the translation of actions_delta_ee_transform[t]; "
         "[rx, ry, rz] are intrinsic XYZ Euler angles (radians) of its rotation; "
-        "gripper = 1 - 2 * action[t][10], so open=1 and close=-1"
+        "gripper = 1 - 2 * action[t][-1], so open=1 and close=-1"
     )
     grp.attrs["delta_ee_euler_order"] = "XYZ_intrinsic"
     grp.attrs["delta_ee_world_euler_gripper_7d_convention"] = (
@@ -486,7 +489,7 @@ def _create_canonical_datasets(
         "[dx, dy, dz] = ee_pos_world_after_action[t] - ee_pos_world_before_action[t]; "
         "[rx, ry, rz] are intrinsic XYZ Euler angles (radians) of "
         "R_world_after_action[t] @ R_world_before_action[t].T; "
-        "gripper = 1 - 2 * action[t][10], so open=1 and close=-1"
+        "gripper = 1 - 2 * action[t][-1], so open=1 and close=-1"
     )
     grp.attrs["ee_frame_name"] = ee_frame_name
     grp.attrs["ee_frame_type"] = ee_frame_type
@@ -870,15 +873,19 @@ def _process_demo(
     canonical_pts: dict[str, tuple[int, NDArray[np.float32]]] = {}
     ee_frame_name: str | None = None
     ee_frame_type: Literal["site", "body"] = "site"
+    has_base = False
     if store_canonical:
         sim = get_sim_from_env(env)
         ee_frame_name, ee_frame_type = find_ee_frame(sim, ee_site)
         canonical_pts = sample_canonical_points(
             sim, num_points_per_geom=num_points_per_geom
         )
+        # Fixed-base robots (e.g. desk-mounted FR3) lack a mobile base, so the
+        # base-relative action datasets are skipped for them.
+        has_base = _get_base_pose_xy_yaw(sim) is not None
         print(
             f"  Canonical: {len(canonical_pts)} geoms, "
-            f"EE {ee_frame_type}='{ee_frame_name}'"
+            f"EE {ee_frame_type}='{ee_frame_name}', has_base={has_base}"
         )
 
     num_frames = len(actions)
@@ -934,6 +941,7 @@ def _process_demo(
             num_frames,
             ee_frame_name,
             ee_frame_type,
+            has_base,
         )
 
     _write_step(
@@ -960,7 +968,10 @@ def _process_demo(
     if store_canonical:
         assert ee_frame_name is not None
         ee_poses_all.append(get_ee_pose(sim, ee_frame_name, ee_frame_type))
-        base_poses_all.append(_get_base_pose_xy_yaw(sim))
+        if has_base:
+            base_pose = _get_base_pose_xy_yaw(sim)
+            assert base_pose is not None
+            base_poses_all.append(base_pose)
         for name, xform in get_geom_world_transforms(
             sim, {n: gid for n, (gid, _) in canonical_pts.items()}
         ).items():
@@ -973,7 +984,10 @@ def _process_demo(
         if store_canonical:
             assert ee_frame_name is not None
             ee_poses_all.append(get_ee_pose(sim, ee_frame_name, ee_frame_type))
-            base_poses_all.append(_get_base_pose_xy_yaw(sim))
+            if has_base:
+                base_pose = _get_base_pose_xy_yaw(sim)
+                assert base_pose is not None
+                base_poses_all.append(base_pose)
             for name, xform in get_geom_world_transforms(
                 sim, {n: gid for n, (gid, _) in canonical_pts.items()}
             ).items():
@@ -1018,16 +1032,20 @@ def _process_demo(
     if store_canonical:
         assert ee_frame_name is not None
         ee_poses_all.append(get_ee_pose(sim, ee_frame_name, ee_frame_type))
-        base_poses_all.append(_get_base_pose_xy_yaw(sim))
+        if has_base:
+            base_pose = _get_base_pose_xy_yaw(sim)
+            assert base_pose is not None
+            base_poses_all.append(base_pose)
 
     # Write canonical data in one pass after all steps are collected.
     if store_canonical and ee_poses_all:
         assert (
             len(ee_poses_all) == num_frames + 1
         ), f"Expected {num_frames + 1} EE poses, got {len(ee_poses_all)}"
-        assert (
-            len(base_poses_all) == num_frames + 1
-        ), f"Expected {num_frames + 1} base poses, got {len(base_poses_all)}"
+        if has_base:
+            assert (
+                len(base_poses_all) == num_frames + 1
+            ), f"Expected {num_frames + 1} base poses, got {len(base_poses_all)}"
 
         ee_arr = np.stack(ee_poses_all)  # (num_frames + 1, 4, 4)
         # delta[t] = inv(ee_before_action[t]) @ ee_after_action[t]
@@ -1038,16 +1056,12 @@ def _process_demo(
         ee_7d = np.stack(
             [_delta_T_to_7d(delta_arr[t]) for t in range(num_frames)]
         )  # (T, 7)
-        base_3d = np.stack(
-            [
-                _se2_relative_delta(base_poses_all[t], base_poses_all[t + 1])
-                for t in range(num_frames)
-            ]
-        )  # (T, 3)
 
         # Translation + intrinsic XYZ Euler delta with the flipped/scaled gripper.
+        # The gripper is the last action dimension for every robot (TidyBot: index
+        # 10 of 11; FR3: index 7 of 8).
         euler = Rotation.from_matrix(delta_arr[:, :3, :3]).as_euler("XYZ")
-        gripper_raw = np.asarray(actions, dtype=np.float32)[:num_frames, 10]
+        gripper_raw = np.asarray(actions, dtype=np.float32)[:num_frames, -1]
         gripper = 1.0 - 2.0 * gripper_raw  # open (0) -> 1, close (1) -> -1
         euler_gripper_7d = np.concatenate(
             [delta_arr[:, :3, 3], euler.astype(np.float32), gripper[:, None]],
@@ -1069,10 +1083,20 @@ def _process_demo(
         obs_grp["ee_pose"][:] = ee_arr[:num_frames]
         grp["actions_delta_ee_transform"][:] = delta_arr
         grp["actions_delta_ee_7d"][:] = ee_7d
-        grp["actions_delta_base_3d"][:] = base_3d
-        grp["actions_delta_ee_base_10d"][:] = np.concatenate([ee_7d, base_3d], axis=1)
         grp["actions_delta_ee_euler_gripper_7d"][:] = euler_gripper_7d
         grp["actions_delta_ee_world_euler_gripper_7d"][:] = world_euler_gripper_7d
+
+        if has_base:
+            base_3d = np.stack(
+                [
+                    _se2_relative_delta(base_poses_all[t], base_poses_all[t + 1])
+                    for t in range(num_frames)
+                ]
+            )  # (T, 3)
+            grp["actions_delta_base_3d"][:] = base_3d
+            grp["actions_delta_ee_base_10d"][:] = np.concatenate(
+                [ee_7d, base_3d], axis=1
+            )
 
         gt_grp = grp["geom_transforms"]
         for name, xforms in geom_transforms_all.items():

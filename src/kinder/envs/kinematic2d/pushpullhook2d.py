@@ -138,11 +138,7 @@ class ObjectCentricPushPullHook2DEnv(
 ):
     """Environment with a hook, a movable button and a target button.
 
-    The robot or hook cannot directly press the target button.
-
-    The robot can grab the hook and then use it to move the movable button towards the
-    target button. The target button is pressed only when the movable button is in
-    contact with it.
+    The target button is pressed only when the movable button is in contact with it.
     """
 
     def __init__(
@@ -463,11 +459,10 @@ class PushPullHook2DEnv(ConstantObjectKinDEREnv):
     def _create_env_markdown_description(self) -> str:
         return (
             "A 2D environment with a robot, a hook (L-shape), a movable button, "
-            "and a target button."
-            "The robot can use the hook to push the movable button towards "
-            "the target button. "
-            "The movable button only moves if the hook is in contact and "
-            "the robot moves in the direction of contact."
+            "and a target button. "
+            "The goal is to move the movable button onto the target button. "
+            "The robot has a movable circular base and a retractable arm with a rectangular vacuum end effector. " # pylint: disable=line-too-long
+            "Objects can be grasped and ungrasped when the end effector makes contact."
         )
 
     def _create_variant_markdown_description(self) -> str:

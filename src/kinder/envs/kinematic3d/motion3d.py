@@ -1,4 +1,4 @@
-"""Environment where only 3D motion planning is needed to reach a goal region."""
+"""Environment where the goal is to reach a target region."""
 
 from __future__ import annotations
 
@@ -61,7 +61,7 @@ class Motion3DObjectCentricState(Kinematic3DObjectCentricState):
 class ObjectCentricMotion3DEnv(
     ObjectCentricKinematic3DRobotEnv[Motion3DObjectCentricState, Motion3DEnvConfig]
 ):
-    """Environment where only 3D motion planning is needed to reach a goal region."""
+    """Environment where the goal is to reach a target region."""
 
     def __init__(
         self, config: Motion3DEnvConfig = Motion3DEnvConfig(), **kwargs
@@ -174,7 +174,7 @@ class Motion3DEnv(ConstantObjectKinDEREnv):
         # pylint: disable=line-too-long
         config = self._object_centric_env.config
         assert isinstance(config, Motion3DEnvConfig)
-        return f"""A 3D motion planning environment where the goal is to reach a target sphere with the robot's end effector.
+        return f"""A 3D environment where the goal is to reach a target sphere.
 
 The robot is a Kinova Gen-3 with 7 degrees of freedom. The target is a sphere with radius {config.target_radius:.3f}m positioned randomly within the workspace bounds.
 
@@ -182,8 +182,6 @@ The workspace bounds are:
 - X: [{config.target_lower_bound[0]:.1f}, {config.target_upper_bound[0]:.1f}]
 - Y: [{config.target_lower_bound[1]:.1f}, {config.target_upper_bound[1]:.1f}]
 - Z: [{config.target_lower_bound[2]:.1f}, {config.target_upper_bound[2]:.1f}]
-
-Only targets that are reachable via inverse kinematics are sampled.
 """
 
     def _create_variant_markdown_description(self) -> str:

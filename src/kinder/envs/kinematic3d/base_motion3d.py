@@ -1,4 +1,4 @@
-"""Environment where only base motion is required to reach some goal."""
+"""Environment where the goal is to reach a target region."""
 
 from __future__ import annotations
 
@@ -62,7 +62,7 @@ class ObjectCentricBaseMotion3DEnv(
         BaseMotion3DObjectCentricState, BaseMotion3DEnvConfig
     ]
 ):
-    """Environment where only base motion planning is needed to reach a goal."""
+    """Environment where the goal is to reach a target region."""
 
     def __init__(
         self, config: BaseMotion3DEnvConfig = BaseMotion3DEnvConfig(), **kwargs
@@ -189,7 +189,7 @@ class BaseMotion3DEnv(ConstantObjectKinDEREnv):
     def _create_env_markdown_description(self) -> str:
         """Create environment description."""
         # pylint: disable=line-too-long
-        return """A very simple environment where only base motion planning is needed to reach a goal."""
+        return """A simple 3D environment where the goal is to navigate to a target region."""
 
     def _create_variant_markdown_description(self) -> str:
         # pylint: disable=line-too-long

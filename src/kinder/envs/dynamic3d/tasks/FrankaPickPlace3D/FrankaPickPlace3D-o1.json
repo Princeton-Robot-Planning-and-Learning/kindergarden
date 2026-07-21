@@ -5,7 +5,7 @@
     "robots": {
         "fr3": {
             "robot": {
-                "mount_height": 0.75
+                "mount_surface": "desk_1"
             }
         }
     },

@@ -149,6 +149,22 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
         # Robot-specific settings from the task config (e.g. mount_height)
         # are forwarded as keyword arguments.
         robot_config = self.task_config["robots"][self.robot_type][self.robot_name]
+        if self.robot_type == "fr3" and "mount_surface" in robot_config:
+            # The FR3 is the only fixed-base robot: derive its mount_height
+            # from the referenced table fixture's height instead of
+            # requiring a separately-maintained literal, so the two can't
+            # drift out of sync.
+            robot_config = dict(robot_config)
+            mount_surface = robot_config.pop("mount_surface")
+            table_fixtures = self.task_config.get("fixtures", {}).get("table", {})
+            assert mount_surface in table_fixtures, (
+                f"mount_surface '{mount_surface}' for robot '{self.robot_name}' "
+                f"in task config {task_config_path} is not a table fixture; "
+                f"available table fixtures: {sorted(table_fixtures)}."
+            )
+            robot_config["mount_height"] = float(
+                table_fixtures[mount_surface]["height"]
+            )
         reserved_robot_kwargs = {
             "name",
             "control_frequency",

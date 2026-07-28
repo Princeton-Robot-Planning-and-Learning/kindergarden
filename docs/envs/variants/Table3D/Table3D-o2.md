@@ -8,7 +8,7 @@ env = kinder.make("kinder/Table3D-o2-v0")
 ```
 
 ## Description
-This variant has 2 cubes on the table.
+This variant has 2 cubes on the table. The goal is reached when a cube is grasped and lifted more than 0.1m above the table surface.
 
 ## Initial State Distribution
 ![initial state GIF](../../assets/initial_state_gifs/variants/Table3D-o2.gif)
@@ -19,9 +19,9 @@ This variant has 2 cubes on the table.
 **Random Action Stats**: Total Reward: -25.00, Success: No, Steps: 25
 
 ## Example Demonstration
-![demo GIF](../../assets/demo_gifs/Table3D-o2/Table3D-o2_1770158668.gif)
+![demo GIF](../../assets/demo_gifs/Table3D-o2/Table3D-o2_1785252477.gif)
 
-**Demo Stats**: Total Reward: -37.00, Success: No, Steps: 37
+**Demo Stats**: Total Reward: -25.00, Success: Yes, Steps: 28
 
 ## Observation Space
 The entries of an array in this Box space correspond to the following object features:

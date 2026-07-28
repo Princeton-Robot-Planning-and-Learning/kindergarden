@@ -8,7 +8,7 @@ env = kinder.make("kinder/Table3D-o1-v0")
 ```
 
 ## Description
-This variant has 1 cube on the table.
+This variant has 1 cube on the table. The goal is reached when a cube is grasped and lifted more than 0.1m above the table surface.
 
 ## Initial State Distribution
 ![initial state GIF](../../assets/initial_state_gifs/variants/Table3D-o1.gif)

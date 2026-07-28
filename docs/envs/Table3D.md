@@ -5,7 +5,7 @@
 **Random Action Stats**: Total Reward: -25.00, Success: No, Steps: 25
 
 ## Description
-A 3D environment where the goal is to pick up a cube from the table.
+A 3D environment where the goal is to pick up a cube from the table. The goal is reached once a cube is grasped and lifted more than 0.1m above the table surface.
 
 ## Available Variants
 The number of cubes differs between environment variants. For example, Table3D-o1 has 1 cube, while Table3D-o3 has 3 cubes.

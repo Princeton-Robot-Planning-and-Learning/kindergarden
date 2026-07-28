@@ -284,8 +284,11 @@ class Table3DEnv(ConstantObjectKinDEREnv):
 
     def _create_env_markdown_description(self) -> str:
         """Create environment description."""
+        threshold = self._object_centric_env.config.goal_height_above_table
         return (
-            """A 3D environment where the goal is to pick up a cube from the table."""
+            "A 3D environment where the goal is to pick up a cube from the table. "
+            "The goal is reached once a cube is grasped and lifted more than "
+            f"{threshold}m above the table surface."
         )
 
     def _create_variant_markdown_description(self) -> str:
@@ -293,9 +296,15 @@ class Table3DEnv(ConstantObjectKinDEREnv):
         return "The number of cubes differs between environment variants. For example, Table3D-o1 has 1 cube, while Table3D-o3 has 3 cubes."
 
     def _create_variant_specific_description(self) -> str:
+        threshold = self._object_centric_env.config.goal_height_above_table
         if self._num_cubes == 1:
-            return "This variant has 1 cube on the table."
-        return f"This variant has {self._num_cubes} cubes on the table."
+            cube_text = "This variant has 1 cube on the table."
+        else:
+            cube_text = f"This variant has {self._num_cubes} cubes on the table."
+        return (
+            f"{cube_text} The goal is reached when a cube is grasped and lifted "
+            f"more than {threshold}m above the table surface."
+        )
 
     def _create_reward_markdown_description(self) -> str:
         """Create reward description."""

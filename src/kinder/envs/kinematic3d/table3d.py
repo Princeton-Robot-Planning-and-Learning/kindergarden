@@ -12,7 +12,7 @@ from typing import Type as TypingType
 
 import numpy as np
 import pybullet as p
-from pybullet_helpers.geometry import Pose, set_pose
+from pybullet_helpers.geometry import Pose, get_pose, set_pose
 from pybullet_helpers.inverse_kinematics import check_body_collisions
 from pybullet_helpers.utils import create_pybullet_block
 from relational_structs import Object, ObjectCentricState
@@ -54,6 +54,9 @@ class Table3DEnvConfig(Kinematic3DEnvConfig, metaclass=FinalConfigMeta):
     block_size: float = 0.05  # cubes (height = width = length)
     block_rgba: tuple[float, float, float, float] = PURPLE + (1.0,)
 
+    # Goal.
+    goal_height_above_table: float = 0.1
+
     def get_camera_kwargs(self) -> dict[str, Any]:
         """Get kwargs to pass to PyBullet camera."""
         return {
@@ -67,7 +70,6 @@ class Table3DEnvConfig(Kinematic3DEnvConfig, metaclass=FinalConfigMeta):
         self, block_half_extents: tuple[float, float, float], rng: np.random.Generator
     ) -> Pose:
         """Sample an initial block pose given sampled half extents."""
-
         return self._sample_block_on_block_pose(
             block_half_extents, self.table_half_extents, self.table_pose, rng
         )
@@ -247,7 +249,16 @@ class ObjectCentricTable3DEnv(
         return state
 
     def goal_reached(self) -> bool:
-        return False
+        if self._grasped_object is None:
+            return False
+        grasped_object_id = self._grasped_object_id
+        assert grasped_object_id is not None
+        grasped_object_pose = get_pose(grasped_object_id, self.physics_client_id)
+        table_top_z = (
+            self.config.table_pose.position[2] + self.config.table_half_extents[2]
+        )
+        height_above_table = grasped_object_pose.position[2] - table_top_z
+        return height_above_table > self.config.goal_height_above_table
 
 
 class Table3DEnv(ConstantObjectKinDEREnv):

@@ -61,10 +61,10 @@ def test_realistic_bg_creates_body():
         env.close()
 
 
-def test_realistic_bg_with_motion3d():
-    """Test realistic_bg with Motion3D environment."""
+def test_realistic_bg_with_table3d():
+    """Test realistic_bg with Table3D environment."""
     env = kinder.make(
-        "kinder/Motion3D-v0",
+        "kinder/Table3D-o1-v0",
         render_mode="rgb_array",
         use_gui=False,
         realistic_bg=True,

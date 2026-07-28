@@ -264,19 +264,6 @@ def _register_dynamic2d() -> None:
 
 
 def _register_kinematic3d() -> None:
-    # Motion3D environment.
-    variant_id = "kinder/Motion3D-v0"
-    _register(
-        id=variant_id,
-        entry_point="kinder.envs.kinematic3d.motion3d:Motion3DEnv",
-    )
-    _register_env_class(
-        class_name="Motion3D",
-        entry_point="kinder.envs.kinematic3d.motion3d:Motion3DEnv",
-        category="Kinematic3D",
-        variant_ids=[variant_id],
-    )
-
     # BaseMotion3D environment.
     variant_id = "kinder/BaseMotion3D-v0"
     _register(
@@ -288,24 +275,6 @@ def _register_kinematic3d() -> None:
         entry_point="kinder.envs.kinematic3d.base_motion3d:BaseMotion3DEnv",
         category="Kinematic3D",
         variant_ids=[variant_id],
-    )
-
-    # Ground3D environment.
-    num_cubes = [1, 2, 3]
-    variant_ids = []
-    for num_cube in num_cubes:
-        variant_id = f"kinder/Ground3D-o{num_cube}-v0"
-        _register(
-            id=variant_id,
-            entry_point="kinder.envs.kinematic3d.ground3d:Ground3DEnv",
-            kwargs={"num_cubes": num_cube},
-        )
-        variant_ids.append(variant_id)
-    _register_env_class(
-        class_name="Ground3D",
-        entry_point="kinder.envs.kinematic3d.ground3d:Ground3DEnv",
-        category="Kinematic3D",
-        variant_ids=variant_ids,
     )
 
     # Table3D environment.

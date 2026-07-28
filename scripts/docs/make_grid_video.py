@@ -7,9 +7,7 @@ from pathlib import Path
 
 # Kinematic3D environments (from kinder registration)
 KINEMATIC3D_ENVS = {
-    "Motion3D",
     "BaseMotion3D",
-    "Ground3D",
     "Table3D",
     "Transport3D",
     "Shelf3D",

@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import numpy as np
 from relational_structs import Object, ObjectCentricState, Type
 from relational_structs.utils import create_state_from_dict
+from tomsgeoms2d.utils import geom2ds_intersect
 
 from kinder.core import ConstantObjectKinDEREnv, FinalConfigMeta
 from kinder.envs.kinematic2d.base_env import (
@@ -198,6 +199,10 @@ class ObjectCentricClutteredRetrieval2DEnv(
                 )
                 for x, y in target_region_geom.vertices
             ):
+                continue
+            # Check that the target does not start in or overlap its goal region.
+            target_block_geom = rectangle_object_to_geom(full_state, target_block, {})
+            if geom2ds_intersect(target_block_geom, target_region_geom):
                 continue
             # Check that target_region doesn't collide with robot or static objects.
             if state_2d_has_collision(

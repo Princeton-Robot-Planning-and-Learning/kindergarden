@@ -22,7 +22,13 @@ from kinder.envs.kinematic2d.utils import (
     create_walls_from_world_boundaries,
     is_inside,
 )
-from kinder.envs.utils import BROWN, PURPLE, sample_se2_pose, state_2d_has_collision
+from kinder.envs.utils import (
+    BROWN,
+    PURPLE,
+    rectangle_object_to_geom,
+    sample_se2_pose,
+    state_2d_has_collision,
+)
 
 TargetBlockType = Type("target_block", parent=RectangleType)
 TargetRegionType = Type("target_region", parent=RectangleType)
@@ -181,6 +187,18 @@ class ObjectCentricClutteredRetrieval2DEnv(
             target_region = state.get_objects(TargetRegionType)[0]
             full_state = state.copy()
             full_state.data.update(self.initial_constant_state.data)
+            # Check that the full rotated target region is within the world bounds.
+            # Its pose is the bottom-left corner, so constraining only the sampled
+            # x and y coordinates is insufficient when theta is nonzero.
+            target_region_geom = rectangle_object_to_geom(full_state, target_region, {})
+            if any(
+                not (
+                    self.config.world_min_x <= x <= self.config.world_max_x
+                    and self.config.world_min_y <= y <= self.config.world_max_y
+                )
+                for x, y in target_region_geom.vertices
+            ):
+                continue
             # Check that target_region doesn't collide with robot or static objects.
             if state_2d_has_collision(
                 full_state, {target_region}, {robot} | static_objects, {}

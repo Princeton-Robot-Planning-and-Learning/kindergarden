@@ -6,7 +6,9 @@ from gymnasium.wrappers import RecordVideo
 import kinder
 from kinder.envs.kinematic2d.clutteredretrieval2d import (
     ObjectCentricClutteredRetrieval2DEnv,
+    TargetRegionType,
 )
+from kinder.envs.utils import rectangle_object_to_geom
 from tests.conftest import MAKE_VIDEOS
 
 
@@ -34,3 +36,14 @@ def test_clutteredretrieval2d_observation_space():
     for _ in range(5):
         obs, _ = env.reset()
         assert env.observation_space.contains(obs)
+
+
+def test_clutteredretrieval2d_target_region_within_world_bounds():
+    """Tests that the full rotated target region is sampled within the world."""
+    env = ObjectCentricClutteredRetrieval2DEnv(num_obstructions=0)
+    state, _ = env.reset(seed=5)
+    target_region = state.get_objects(TargetRegionType)[0]
+    target_region_geom = rectangle_object_to_geom(state, target_region, {})
+    for x, y in target_region_geom.vertices:
+        assert env.config.world_min_x <= x <= env.config.world_max_x
+        assert env.config.world_min_y <= y <= env.config.world_max_y

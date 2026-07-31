@@ -10,7 +10,8 @@ from kinder.envs.kinematic2d.clutteredretrieval2d import (
     TargetBlockType,
     TargetRegionType,
 )
-from kinder.envs.utils import rectangle_object_to_geom
+from kinder.envs.kinematic2d.object_types import CRVRobotType
+from kinder.envs.utils import object_to_multibody2d, rectangle_object_to_geom
 from tests.conftest import MAKE_VIDEOS
 
 
@@ -60,3 +61,17 @@ def test_clutteredretrieval2d_target_starts_outside_region():
     target_block_geom = rectangle_object_to_geom(state, target_block, {})
     target_region_geom = rectangle_object_to_geom(state, target_region, {})
     assert not geom2ds_intersect(target_block_geom, target_region_geom)
+
+
+def test_clutteredretrieval2d_target_region_does_not_overlap_robot():
+    """Tests that the target region does not initially overlap the robot."""
+    env = ObjectCentricClutteredRetrieval2DEnv(num_obstructions=0)
+    state, _ = env.reset(seed=91)
+    robot = state.get_objects(CRVRobotType)[0]
+    target_region = state.get_objects(TargetRegionType)[0]
+    robot_multibody = object_to_multibody2d(robot, state, {})
+    target_region_geom = rectangle_object_to_geom(state, target_region, {})
+    assert not any(
+        geom2ds_intersect(target_region_geom, body.geom)
+        for body in robot_multibody.bodies
+    )

@@ -26,6 +26,7 @@ from kinder.envs.kinematic2d.utils import (
 from kinder.envs.utils import (
     BROWN,
     PURPLE,
+    object_to_multibody2d,
     rectangle_object_to_geom,
     sample_se2_pose,
     state_2d_has_collision,
@@ -204,9 +205,12 @@ class ObjectCentricClutteredRetrieval2DEnv(
             target_block_geom = rectangle_object_to_geom(full_state, target_block, {})
             if geom2ds_intersect(target_block_geom, target_region_geom):
                 continue
-            # Check that target_region doesn't collide with robot or static objects.
-            if state_2d_has_collision(
-                full_state, {target_region}, {robot} | static_objects, {}
+            # Check that the target region does not overlap the robot. This is an
+            # explicit geometric check because goal regions have ZOrder.NONE.
+            robot_multibody = object_to_multibody2d(robot, full_state, {})
+            if any(
+                geom2ds_intersect(target_region_geom, body.geom)
+                for body in robot_multibody.bodies
             ):
                 continue
             # Check that target_block doesn't collide with obstacles.

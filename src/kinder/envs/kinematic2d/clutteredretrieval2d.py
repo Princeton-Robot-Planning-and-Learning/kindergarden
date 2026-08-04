@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import numpy as np
 from relational_structs import Object, ObjectCentricState, Type
 from relational_structs.utils import create_state_from_dict
+from tomsgeoms2d.utils import geom2ds_intersect
 
 from kinder.core import ConstantObjectKinDEREnv, FinalConfigMeta
 from kinder.envs.kinematic2d.base_env import (
@@ -22,7 +23,14 @@ from kinder.envs.kinematic2d.utils import (
     create_walls_from_world_boundaries,
     is_inside,
 )
-from kinder.envs.utils import BROWN, PURPLE, sample_se2_pose, state_2d_has_collision
+from kinder.envs.utils import (
+    BROWN,
+    PURPLE,
+    object_to_multibody2d,
+    rectangle_object_to_geom,
+    sample_se2_pose,
+    state_2d_has_collision,
+)
 
 TargetBlockType = Type("target_block", parent=RectangleType)
 TargetRegionType = Type("target_region", parent=RectangleType)
@@ -181,9 +189,28 @@ class ObjectCentricClutteredRetrieval2DEnv(
             target_region = state.get_objects(TargetRegionType)[0]
             full_state = state.copy()
             full_state.data.update(self.initial_constant_state.data)
-            # Check that target_region doesn't collide with robot or static objects.
-            if state_2d_has_collision(
-                full_state, {target_region}, {robot} | static_objects, {}
+            # Check that the full rotated target region is within the world bounds.
+            # Its pose is the bottom-left corner, so constraining only the sampled
+            # x and y coordinates is insufficient when theta is nonzero.
+            target_region_geom = rectangle_object_to_geom(full_state, target_region, {})
+            if any(
+                not (
+                    self.config.world_min_x <= x <= self.config.world_max_x
+                    and self.config.world_min_y <= y <= self.config.world_max_y
+                )
+                for x, y in target_region_geom.vertices
+            ):
+                continue
+            # Check that the target does not start in or overlap its goal region.
+            target_block_geom = rectangle_object_to_geom(full_state, target_block, {})
+            if geom2ds_intersect(target_block_geom, target_region_geom):
+                continue
+            # Check that the target region does not overlap the robot. This is an
+            # explicit geometric check because goal regions have ZOrder.NONE.
+            robot_multibody = object_to_multibody2d(robot, full_state, {})
+            if any(
+                geom2ds_intersect(target_region_geom, body.geom)
+                for body in robot_multibody.bodies
             ):
                 continue
             # Check that target_block doesn't collide with obstacles.

@@ -227,9 +227,29 @@ flaky-in-CI or slow demo gets excluded, with a written reason.
 ## Adding an environment
 
 Per `README.md`: implement it under `src/kinder/envs/<category>/`, register it in
-`src/kinder/__init__.py` (ids **must** start with `kinder/`, and register both the
-variants and the class via `_register_env_class`), collect at least one demonstration
-with `scripts/collect_demos.py`, and make a video with `scripts/generate_demo_video.py`.
+`src/kinder/__init__.py`, collect at least one demonstration with
+`scripts/collect_demos.py`, and make a video with `scripts/generate_demo_video.py`.
+
+Registration is not the same job in every category. For 2D and Kinematic3D you write an
+explicit block in the matching `_register_*()` function: ids **must** start with
+`kinder/`, and you register both the variant ids and the class (via
+`_register_env_class`, which is what `docs/` and `get_env_classes()` read).
+
+**Dynamic3D is different — it is derived from the filesystem.** `_register_dynamic3d()`
+walks `src/kinder/envs/dynamic3d/tasks/`, treats each subdirectory as a class and each
+JSON inside it as a variant, and picks the env class from the config's **first `robots`
+key** (`tidybot` → `TidyBot3DEnv`, `fr3` → `Franka3DEnv`, `rby1a` → `RBY1A3DEnv`).
+Consequences:
+
+- Dropping a task JSON into an existing task folder registers a new environment id. No
+  code change needed.
+- A malformed task JSON — bad JSON, missing `robots`, or an unrecognised robot key —
+  raises `RuntimeError` out of `register_all_environments()`, which breaks *every*
+  environment for everyone, not just that task.
+- Variant order follows `Path.iterdir()`, so it is filesystem order, not sorted. Anything
+  that indexes into `variants` (`generate_env_docs.py` picks `variants[len(variants) // 2]`
+  as the representative for a class-level GIF) is picking a variant you cannot predict
+  from the filenames. Do not write code that assumes `-o1` comes first.
 
 ## Docs assets are committed, and regeneration is not automatic
 

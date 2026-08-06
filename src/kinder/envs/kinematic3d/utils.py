@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeAlias
 
 import numpy as np
 import pybullet as p
 from numpy.typing import NDArray
 from pybullet_helpers.geometry import Pose, SE2Pose, set_pose
 from pybullet_helpers.inverse_kinematics import check_body_collisions
-from pybullet_helpers.joint import JointPositions
+from pybullet_helpers.joint import JointPositions, JointVelocities
 from relational_structs import Object, ObjectCentricState
 from scipy.spatial.transform import Rotation
 from shapely.geometry import Polygon
@@ -417,3 +417,148 @@ def sample_collision_free_object_poses(
             raise RuntimeError(
                 f"Failed to sample collision-free pose for object {obj_id}"
             )
+
+
+JointTorques: TypeAlias = list[float]
+
+
+def joint_position_distance(positions: JointPositions, other: JointPositions) -> float:
+    """Distance between two configurations of continuous joints.
+
+    Differences are wrapped into [-pi, pi], so a joint that has wound a full turn counts
+    as being where it looks, rather than a full revolution away.
+    """
+    difference = np.subtract(positions, other)
+    wrapped = np.arctan2(np.sin(difference), np.cos(difference))
+    return float(np.linalg.norm(wrapped))
+
+
+ASSETS_DIR = Path(__file__).parent / "assets"
+HUMAN_ASSETS_DIR = ASSETS_DIR / "human"
+NUM_ROBOT_JOINTS = 7
+NUM_LIMB_JOINTS = 6
+PYBULLET_TIMESTEP = 1.0 / 240.0
+
+
+class LimbRepositioning3DObjectCentricState(ObjectCentricState):
+    """A state in a limb repositioning environment.
+
+    Inherits from ObjectCentricState but adds some convenient look ups.
+    """
+
+    @property
+    def robot(self):
+        """Assumes there is a unique robot object named "robot"."""
+        return self.get_object_from_name("robot")
+
+    @property
+    def limb(self):
+        """Assumes there is a unique passive limb object named "limb"."""
+        return self.get_object_from_name("limb")
+
+    @property
+    def base_pose(self) -> SE2Pose:
+        """The SE2 pose of the robot's mobile base."""
+        return SE2Pose(
+            self.get(self.robot, "pos_base_x"),
+            self.get(self.robot, "pos_base_y"),
+            self.get(self.robot, "pos_base_rot"),
+        )
+
+    @property
+    def robot_joint_positions(self) -> JointPositions:
+        """The robot arm joint positions."""
+        return [
+            self.get(self.robot, f"joint_{i}") for i in range(1, NUM_ROBOT_JOINTS + 1)
+        ]
+
+    @property
+    def robot_joint_velocities(self) -> JointVelocities:
+        """The robot arm joint velocities."""
+        return [
+            self.get(self.robot, f"joint_vel_{i}")
+            for i in range(1, NUM_ROBOT_JOINTS + 1)
+        ]
+
+    @property
+    def limb_joint_positions(self) -> JointPositions:
+        """The passive limb joint positions."""
+        return [
+            self.get(self.limb, f"joint_{i}") for i in range(1, NUM_LIMB_JOINTS + 1)
+        ]
+
+    @property
+    def limb_joint_velocities(self) -> JointVelocities:
+        """The passive limb joint velocities."""
+        return [
+            self.get(self.limb, f"joint_vel_{i}") for i in range(1, NUM_LIMB_JOINTS + 1)
+        ]
+
+    @property
+    def limb_goal_joint_positions(self) -> JointPositions:
+        """The goal joint positions for the passive limb."""
+        return [
+            self.get(self.limb, f"goal_joint_{i}")
+            for i in range(1, NUM_LIMB_JOINTS + 1)
+        ]
+
+    @property
+    def limb_distance_to_goal(self) -> float:
+        """The distance in joint space between the limb and its goal."""
+        return joint_position_distance(
+            self.limb_joint_positions, self.limb_goal_joint_positions
+        )
+
+
+class LimbRepositioning3DRobotActionSpace(RobotActionSpace):
+    """An action space for a torque-controlled 7 DOF robot arm.
+
+    Actions are torques applied to each of the arm joints. The mobile base does not move
+    during a repositioning episode, so it is not part of the action.
+    """
+
+    def __init__(
+        self,
+        torque_lower_limits: JointTorques,
+        torque_upper_limits: JointTorques,
+    ) -> None:
+        assert len(torque_lower_limits) == len(torque_upper_limits) == NUM_ROBOT_JOINTS
+        super().__init__(np.array(torque_lower_limits), np.array(torque_upper_limits))
+
+    def create_markdown_description(self) -> str:
+        """Create a markdown description with a table of action space entries."""
+        # Explicit newlines, since docformatter reflows triple-quoted literals.
+        lines = [
+            "An action space for a torque-controlled 7 DOF robot arm.",
+            "",
+            "Actions are torques on each arm joint, clipped to the environment's torque "
+            "limits. The base does not move, so it is not part of the action.",
+            "",
+            "| **Index** | **Description** |",
+            "| --- | --- |",
+        ]
+        lines += [
+            f"| {i - 1} | torque applied to robot joint {i} |"
+            for i in range(1, NUM_ROBOT_JOINTS + 1)
+        ]
+        return "\n".join(lines)
+
+
+def get_torque_action_from_gui_input(
+    action_space: LimbRepositioning3DRobotActionSpace, gui_input: dict
+) -> NDArray[np.float32]:
+    """Map human inputs to joint torques, for manual control and debugging.
+
+    Number keys 1-7 select a joint; the left stick's vertical axis sets the sign and
+    magnitude of the torque applied to it.
+    """
+    torques = np.zeros(NUM_ROBOT_JOINTS, dtype=np.float32)
+    keys_pressed = gui_input.get("keys", set())
+    _, left_y = gui_input.get("left_stick", (0.0, 0.0))
+    for i in range(NUM_ROBOT_JOINTS):
+        if str(i + 1) in keys_pressed:
+            scale = np.where(
+                left_y >= 0, action_space.high[i], -action_space.low[i]
+            ).item()
+            torques[i] = left_y * scale
+    return torques

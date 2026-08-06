@@ -26,12 +26,11 @@ def _make_env() -> ObjectCentricTidyBot3DEnv:
 
 def _put_cube_at(env: ObjectCentricTidyBot3DEnv, x: float, y: float, z: float) -> None:
     """Teleport cube_0 to the given world position."""
-    current_state = env._get_current_state()  # pylint: disable=protected-access
-    cube = env._objects_dict["cube_0"]  # pylint: disable=protected-access
-    modified_state = current_state.copy()
-    modified_state.set(cube.symbolic_object, "x", x)
-    modified_state.set(cube.symbolic_object, "y", y)
-    modified_state.set(cube.symbolic_object, "z", z)
+    modified_state = env._get_current_state()  # pylint: disable=protected-access
+    cube = modified_state.get_object_from_name("cube_0")
+    modified_state.set(cube, "x", x)
+    modified_state.set(cube, "y", y)
+    modified_state.set(cube, "z", z)
     env.set_state(modified_state)
 
 
@@ -59,12 +58,12 @@ def test_tossing3d_cube_in_bin_is_a_success():
     current_state = env._get_current_state()  # pylint: disable=protected-access
     bin_obj = current_state.get_object_from_name("bin_0")
     bin_config = env.task_config["objects"]["bin"]["bin_0"]
-    cube_size = env.task_config["objects"]["cube"]["cube_0"]["size"]
+    cube_half_extent = env.task_config["objects"]["cube"]["cube_0"]["size"]
     _put_cube_at(
         env,
         current_state.get(bin_obj, "x"),
         current_state.get(bin_obj, "y"),
-        bin_config["wall_thickness"] + cube_size,
+        bin_config["wall_thickness"] + cube_half_extent,
     )
 
     assert env._check_goals(), (  # pylint: disable=protected-access
@@ -88,7 +87,7 @@ def test_tossing3d_cube_short_of_the_bin_is_not_a_success():
     current_state = env._get_current_state()  # pylint: disable=protected-access
     bin_obj = current_state.get_object_from_name("bin_0")
     bin_config = env.task_config["objects"]["bin"]["bin_0"]
-    cube_size = env.task_config["objects"]["cube"]["cube_0"]["size"]
+    cube_half_extent = env.task_config["objects"]["cube"]["cube_0"]["size"]
 
     # A point on the floor one full bin-length short of the bin: outside the
     # bin's footprint entirely, so the cube is lying on the ground.
@@ -96,7 +95,7 @@ def test_tossing3d_cube_short_of_the_bin_is_not_a_success():
         env,
         current_state.get(bin_obj, "x") - bin_config["length"],
         current_state.get(bin_obj, "y"),
-        cube_size,
+        cube_half_extent,
     )
 
     assert (
@@ -107,11 +106,13 @@ def test_tossing3d_cube_short_of_the_bin_is_not_a_success():
 
 
 def test_tossing3d_goal_region_is_covered_by_the_bin():
-    """Test that every position scoring a success lies inside the bin's footprint.
+    """Test that the bin's footprint still covers blocks_goal_region in x and y.
 
     The two tests above sample single points, so they only detect a large drift. This
     one pins the invariant they rely on: because blocks_goal_region reaches down to the
     floor, it encodes "in the bin" only while the bin's footprint covers it in x and y.
+    Only x and y -- in z the region spans [0, 0.15], which reaches below the bin's
+    floor, so a success position is not necessarily inside the bin at all.
     """
     env = _make_env()
     env.reset(seed=0)
@@ -129,8 +130,15 @@ def test_tossing3d_goal_region_is_covered_by_the_bin():
     bin_x = current_state.get(bin_obj, "x")
     bin_y = current_state.get(bin_obj, "y")
 
-    # bin_init_region spans 1 mm in x and in y, so the sampled bin pose sits up to
-    # that far off the nominal one; 2 mm of slack covers it.
+    # The bin's footprint is exactly the size of the inflated goal region -- both
+    # are 0.3 x 0.3, since the region's raw half-extent of 0.10 plus 0.05 of ground
+    # inflation is the bin's length / 2. So the two coincide only when the bin's
+    # centre lands on the region's centre, and there is no margin to spare.
+    # bin_init_region spans 1 mm in x and in y and the bin settles slightly, so in
+    # practice each edge overhangs or falls short by up to about 1 mm. The tolerance
+    # absorbs that placement jitter; it is not slack over an invariant that holds
+    # exactly. It is still tight enough to catch any real drift -- a few mm is
+    # already the regime where a cube on the bare floor scores a success.
     tol = 0.002
     assert (
         bin_x - bin_config["length"] / 2 <= x_min + tol

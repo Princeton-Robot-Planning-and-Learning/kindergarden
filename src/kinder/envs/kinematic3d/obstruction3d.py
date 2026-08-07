@@ -9,7 +9,13 @@ from typing import Type as TypingType
 
 import numpy as np
 import pybullet as p
-from pybullet_helpers.geometry import Pose, SE2Pose, set_pose
+from pybullet_helpers.geometry import (
+    Pose,
+    SE2Pose,
+    get_pose,
+    multiply_poses,
+    set_pose,
+)
 from pybullet_helpers.inverse_kinematics import check_body_collisions
 from pybullet_helpers.utils import create_pybullet_block
 from relational_structs import Object, ObjectCentricState
@@ -427,9 +433,35 @@ class ObjectCentricObstruction3DEnv(
     def goal_reached(self) -> bool:
         if self._grasped_object is not None:
             return False
+        return self._target_block_on_target_region()
+
+    def _target_block_on_target_region(self) -> bool:
+        """Check that the target block rests on the target region's top face
+        with its center inside the region's x/y footprint."""
         assert self._target_block_id is not None
-        target_supports = self._get_surfaces_supporting_object(self._target_block_id)
-        return self._target_region_id in target_supports
+        assert self._target_region_id is not None
+        block_pose = get_pose(self._target_block_id, self.physics_client_id)
+        region_pose = get_pose(self._target_region_id, self.physics_client_id)
+        block_half_extents = np.array(self._target_block_half_extents)
+        region_half_extents = self._target_region_half_extents
+        # Lowest point of the (possibly rotated) block versus the region top.
+        block_rot = np.reshape(
+            p.getMatrixFromQuaternion(block_pose.orientation), (3, 3)
+        )
+        block_bottom = block_pose.position[2] - float(
+            np.abs(block_rot[2]) @ block_half_extents
+        )
+        region_top = region_pose.position[2] + region_half_extents[2]
+        tol = self.config.min_placement_dist
+        if abs(block_bottom - region_top) > tol:
+            return False
+        # Block center must project inside the region footprint (with the same
+        # tolerance, so placements at the footprint edge are not knife-edge).
+        block_in_region = multiply_poses(region_pose.invert(), block_pose)
+        return (
+            abs(block_in_region.position[0]) <= region_half_extents[0] + tol
+            and abs(block_in_region.position[1]) <= region_half_extents[1] + tol
+        )
 
 
 class Obstruction3DEnv(ConstantObjectKinDEREnv):
@@ -501,10 +533,8 @@ The resulting joint positions are clipped to the robot's joint limits before bei
 - **Termination** occurs when the target block is placed on the target region (while not being grasped)
 
 The goal is considered reached when:
-1. The robot is not currently grasping the target block
-2. The target block is resting on (supported by) the target region
-
-Support is determined based on contact between the target block and target region, within a small distance threshold (1e-4).
+1. The robot is not currently grasping any object
+2. The target block is resting on the target region: its bottom face is at the region's top face (within a small distance threshold) and its center lies inside the region's x/y footprint
 
 This encourages the robot to place the target block while avoiding infinite episodes.
 """

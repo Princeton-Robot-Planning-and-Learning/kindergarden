@@ -41,6 +41,11 @@ from kinder.envs.kinematic3d.utils import (
 )
 from kinder.envs.utils import PURPLE
 
+# Keep these dimensions synchronized with the grasp pegs created by the
+# pybullet_helpers ``*_with_peg`` utilities.
+_PART_PEG_HALF_EXTENTS = (0.01, 0.01, 0.025)
+_PENETRATION_TOLERANCE = 1e-6
+
 
 @dataclass(frozen=True)
 class Packing3DEnvConfig(Kinematic3DEnvConfig, metaclass=FinalConfigMeta):
@@ -681,6 +686,12 @@ class ObjectCentricPacking3DEnv(
                     if check_body_collisions(part_id, other_id, self.physics_client_id):
                         collision_exists = True
                         break
+                if not collision_exists:
+                    collision_exists = any(
+                        self._parts_penetrate(name, other_name)
+                        for other_name in self._part_ids
+                        if other_name != name
+                    )
 
                 if not collision_exists:
                     break
@@ -759,6 +770,155 @@ class ObjectCentricPacking3DEnv(
             names.add("rack")
         return names
 
+    @staticmethod
+    def _box_local_geometry(
+        half_extents: tuple[float, float, float],
+        center: tuple[float, float, float] = (0.0, 0.0, 0.0),
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Return vertices, face normals, and edge directions for a local box."""
+        vertices = np.array(
+            [
+                [
+                    center[0] + sx * half_extents[0],
+                    center[1] + sy * half_extents[1],
+                    center[2] + sz * half_extents[2],
+                ]
+                for sx in (-1, 1)
+                for sy in (-1, 1)
+                for sz in (-1, 1)
+            ],
+            dtype=float,
+        )
+        axes = np.eye(3)
+        return vertices, axes, axes
+
+    @staticmethod
+    def _triangle_prism_local_geometry(
+        triangle_type: float,
+        side_a: float,
+        side_b: float,
+        depth: float,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Return convex geometry for an equilateral or right triangular prism."""
+        triangle_vertices = np.asarray(
+            get_triangle_vertices(
+                {0: "equilateral", 1: "right"}[int(triangle_type)],
+                (side_a, side_b),
+            ),
+            dtype=float,
+        )
+        lower = triangle_vertices.copy()
+        upper = triangle_vertices.copy()
+        lower[:, 2] = -depth / 2
+        upper[:, 2] = depth / 2
+        vertices = np.concatenate((lower, upper))
+
+        face_normals = [np.array([0.0, 0.0, 1.0])]
+        edge_directions = [np.array([0.0, 0.0, 1.0])]
+        for index in range(3):
+            edge = triangle_vertices[(index + 1) % 3] - triangle_vertices[index]
+            edge[2] = 0.0
+            edge_directions.append(edge)
+            face_normals.append(np.array([edge[1], -edge[0], 0.0]))
+        return vertices, np.asarray(face_normals), np.asarray(edge_directions)
+
+    def _get_part_convex_components(
+        self, part_name: str
+    ) -> list[tuple[np.ndarray, np.ndarray, np.ndarray]]:
+        """Return the world-frame convex components of a part and its grasp peg."""
+        part_id = self._object_name_to_pybullet_id(part_name)
+        part_type = self._part_ids_to_type[part_id]
+        if part_type == Kinematic3DCuboidType:
+            half_extents = self._part_id_to_half_extents[part_id]
+            main_geometry = self._box_local_geometry(half_extents)
+            peg_center = (0.0, 0.0, half_extents[2] + _PART_PEG_HALF_EXTENTS[2])
+        else:
+            assert part_type == Kinematic3DTriangleType
+            side_a, side_b, depth, triangle_type = self._part_ids_to_triangle_features[
+                part_id
+            ]
+            main_geometry = self._triangle_prism_local_geometry(
+                triangle_type, side_a, side_b, depth
+            )
+            triangle_vertices = np.asarray(
+                get_triangle_vertices(
+                    {0: "equilateral", 1: "right"}[int(triangle_type)],
+                    (side_a, side_b),
+                ),
+                dtype=float,
+            )
+            centroid = np.mean(triangle_vertices, axis=0)
+            peg_center = (
+                float(centroid[0]),
+                float(centroid[1]),
+                depth / 2 + _PART_PEG_HALF_EXTENTS[2],
+            )
+        peg_geometry = self._box_local_geometry(_PART_PEG_HALF_EXTENTS, peg_center)
+
+        pose = get_pose(part_id, self.physics_client_id)
+        rotation = Rotation.from_quat(pose.orientation).as_matrix()
+        translation = np.asarray(pose.position)
+        world_components = []
+        for vertices, face_normals, edge_directions in (main_geometry, peg_geometry):
+            world_components.append(
+                (
+                    (rotation @ vertices.T).T + translation,
+                    (rotation @ face_normals.T).T,
+                    (rotation @ edge_directions.T).T,
+                )
+            )
+        return world_components
+
+    @staticmethod
+    def _convex_components_penetrate(
+        first: tuple[np.ndarray, np.ndarray, np.ndarray],
+        second: tuple[np.ndarray, np.ndarray, np.ndarray],
+    ) -> bool:
+        """Use the separating axis theorem to detect strict 3D penetration."""
+        first_vertices, first_normals, first_edges = first
+        second_vertices, second_normals, second_edges = second
+        candidate_axes = [*first_normals, *second_normals]
+        candidate_axes.extend(
+            np.cross(first_edge, second_edge)
+            for first_edge in first_edges
+            for second_edge in second_edges
+        )
+        for axis in candidate_axes:
+            norm = np.linalg.norm(axis)
+            if norm <= _PENETRATION_TOLERANCE:
+                continue
+            normalized_axis = axis / norm
+            first_projection = first_vertices @ normalized_axis
+            second_projection = second_vertices @ normalized_axis
+            overlap = min(first_projection.max(), second_projection.max()) - max(
+                first_projection.min(), second_projection.min()
+            )
+            if overlap <= _PENETRATION_TOLERANCE:
+                return False
+        return True
+
+    def _parts_penetrate(self, first_name: str, second_name: str) -> bool:
+        """Check exact part geometry, including pegs, without mesh contact queries."""
+        first_components = self._get_part_convex_components(first_name)
+        second_components = self._get_part_convex_components(second_name)
+        return any(
+            self._convex_components_penetrate(first, second)
+            for first in first_components
+            for second in second_components
+        )
+
+    def _robot_or_held_object_collision_exists(self) -> bool:
+        """Also validate held-part collisions with exact Packing3D geometry."""
+        if super()._robot_or_held_object_collision_exists():
+            return True
+        if self._grasped_object is None:
+            return False
+        return any(
+            self._parts_penetrate(self._grasped_object, other_name)
+            for other_name in self._part_ids
+            if other_name != self._grasped_object
+        )
+
     def _get_half_extents(self, object_name: str) -> tuple[float, float, float]:
         if object_name == "rack":
             return self.config.rack_half_extents
@@ -804,19 +964,18 @@ class ObjectCentricPacking3DEnv(
         if self._grasped_object is not None:
             return False
         obs = self._get_obs()
-        part_ids = []
+        part_names = []
         for i in range(self._num_parts):
             part_name = f"part{i}"
             if not self._part_is_seated_in_rack(part_name, obs):
                 return False
-            part_ids.append(self._object_name_to_pybullet_id(part_name))
+            part_names.append(part_name)
 
         # Containment and support are per-part properties, so check separately that
         # the packed parts do not penetrate one another.
-        p.performCollisionDetection(physicsClientId=self.physics_client_id)
-        for i, part_id in enumerate(part_ids):
-            for other_part_id in part_ids[i + 1 :]:
-                if self._bodies_penetrate(part_id, other_part_id):
+        for i, part_name in enumerate(part_names):
+            for other_part_name in part_names[i + 1 :]:
+                if self._parts_penetrate(part_name, other_part_name):
                     return False
 
         return True
@@ -842,37 +1001,25 @@ class ObjectCentricPacking3DEnv(
             rack_half_extents[1] - wall_thickness,
             rack_half_extents[2],
         )
-        rack_inner_polygon = obs._get_box_xy_polygon(  # pylint: disable=protected-access
-            obs.rack_pose, inner_half_extents
+        rack_inner_polygon = (
+            obs._get_box_xy_polygon(  # pylint: disable=protected-access
+                obs.rack_pose, inner_half_extents
+            )
         )
-        part = obs.get_object_from_name(part_name)
-        if part.type == Kinematic3DCuboidType:
-            part_polygon = obs._get_box_xy_polygon(  # pylint: disable=protected-access
-                obs.get_object_pose(part_name),
-                obs.get_object_half_extents_packing3d(part_name)[:3],
-            )
-        else:
-            assert part.type == Kinematic3DTriangleType
-            part_polygon = obs._get_triangle_xy_polygon(  # pylint: disable=protected-access
-                part_name
-            )
+        part_vertices = self._get_part_convex_components(part_name)[0][0]
+        part_polygon = cast(Polygon, Polygon(part_vertices[:, :2]).convex_hull)
         if not rack_inner_polygon.buffer(1e-9).contains(part_polygon):
             return False
 
         part_id = self._object_name_to_pybullet_id(part_name)
-        part_lower, part_upper = p.getAABB(
-            part_id, 0, physicsClientId=self.physics_client_id
-        )
-        rack_floor_z = (
-            obs.rack_pose.position[2]
-            - rack_half_extents[2]
-            + wall_thickness
-        )
+        part_lower_z = float(part_vertices[:, 2].min())
+        part_upper_z = float(part_vertices[:, 2].max())
+        rack_floor_z = obs.rack_pose.position[2] - rack_half_extents[2] + wall_thickness
         rack_rim_z = obs.rack_pose.position[2] + rack_half_extents[2]
         tolerance = self.config.min_placement_dist
-        if not np.isclose(part_lower[2], rack_floor_z, atol=tolerance):
+        if not np.isclose(part_lower_z, rack_floor_z, atol=tolerance):
             return False
-        if part_upper[2] > rack_rim_z + tolerance:
+        if part_upper_z > rack_rim_z + tolerance:
             return False
 
         if self._bodies_penetrate(part_id, self._rack_id):

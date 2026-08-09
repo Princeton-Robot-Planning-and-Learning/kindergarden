@@ -4,6 +4,7 @@ from typing import Any, cast
 
 import numpy as np
 import pybullet as p
+import pytest
 from gymnasium.wrappers import RecordVideo
 from prpl_utils.utils import wrap_angle
 from pybullet_helpers.geometry import Pose, get_pose, multiply_poses, set_pose
@@ -18,7 +19,10 @@ from relational_structs import Object
 from relational_structs.spaces import ObjectCentricBoxSpace
 from shapely.geometry import Polygon
 
-from kinder.envs.kinematic3d.object_types import Kinematic3DTriangleType
+from kinder.envs.kinematic3d.object_types import (
+    Kinematic3DCuboidType,
+    Kinematic3DTriangleType,
+)
 from kinder.envs.kinematic3d.packing3d import (
     ObjectCentricPacking3DEnv,
     Packing3DEnv,
@@ -171,47 +175,198 @@ def test_packing3d_goal_rejects_part_outside_rack_cavity():
     env.close()
 
 
-def test_packing3d_goal_rejects_overlapping_parts() -> None:
-    """Individually seated parts must not penetrate one another."""
-    env = ObjectCentricPacking3DEnv(
-        num_parts=2,
-        use_gui=False,
-        realistic_bg=False,
-        allow_state_access=True,
+def _get_part_shape_name(obs: Packing3DObjectCentricState, part_name: str) -> str:
+    part = obs.get_object_from_name(part_name)
+    if part.type == Kinematic3DCuboidType:
+        return "cuboid"
+    assert part.type == Kinematic3DTriangleType
+    triangle_type = obs.get_object_triangle_features(part_name)[3]
+    return {0: "equilateral", 1: "right"}[int(triangle_type)]
+
+
+def _place_part_on_rack_floor(
+    env: ObjectCentricPacking3DEnv,
+    part_name: str,
+    target_xy: tuple[float, float],
+    yaw: float = 0.0,
+) -> None:
+    part_id = env._part_ids[part_name]
+    old_pose = get_pose(part_id, env.physics_client_id)
+    orientation = Pose.from_rpy((0.0, 0.0, 0.0), (0.0, 0.0, yaw)).orientation
+    set_pose(
+        part_id,
+        Pose(old_pose.position, orientation),
+        env.physics_client_id,
     )
-    env.reset(seed=0)
+    vertices = env._get_part_convex_components(part_name)[0][0]
+    polygon = Polygon(vertices[:, :2]).convex_hull
     rack_pose = get_pose(env._rack_id, env.physics_client_id)
     floor_z = (
         rack_pose.position[2]
         - env.config.rack_half_extents[2]
         + env.config.rack_wall_thickness
     )
-
-    # Put both parts at the same supported pose in the middle of the cavity. Account
-    # for the different base-to-geometry offsets of cuboids and triangles.
-    for part_name in ("part0", "part1"):
-        part_id = env._part_ids[part_name]
-        part_pose = get_pose(part_id, env.physics_client_id)
-        part_lower, _ = p.getAABB(
-            part_id, 0, physicsClientId=env.physics_client_id
-        )
-        lower_z_offset = part_lower[2] - part_pose.position[2]
-        set_pose(
-            part_id,
-            Pose(
-                (
-                    rack_pose.position[0] - 0.03,
-                    rack_pose.position[1] - 0.02,
-                    floor_z + 0.002 - lower_z_offset,
-                )
+    current_pose = get_pose(part_id, env.physics_client_id)
+    set_pose(
+        part_id,
+        Pose(
+            (
+                current_pose.position[0] + target_xy[0] - polygon.centroid.x,
+                current_pose.position[1] + target_xy[1] - polygon.centroid.y,
+                current_pose.position[2] + floor_z + 0.002 - vertices[:, 2].min(),
             ),
-            env.physics_client_id,
+            current_pose.orientation,
+        ),
+        env.physics_client_id,
+    )
+
+
+@pytest.mark.parametrize(
+    ("triangle_probability", "seed", "expected_shapes"),
+    [
+        (1.0, 0, ("cuboid", "cuboid")),
+        (0.5, 0, ("cuboid", "right")),
+        (0.5, 5, ("cuboid", "equilateral")),
+        (0.0, 0, ("right", "right")),
+        (0.0, 1, ("equilateral", "right")),
+        (0.0, 11, ("equilateral", "equilateral")),
+    ],
+)
+def test_packing3d_goal_handles_every_part_shape_pair(
+    triangle_probability: float,
+    seed: int,
+    expected_shapes: tuple[str, str],
+) -> None:
+    """All supported shape pairs reject overlap and accept clear packing."""
+    env = ObjectCentricPacking3DEnv(
+        num_parts=2,
+        config=Packing3DEnvConfig(part_triangular_prob=triangle_probability),
+        use_gui=False,
+        realistic_bg=False,
+        allow_state_access=True,
+    )
+    obs, _ = env.reset(seed=seed)
+    assert (
+        tuple(_get_part_shape_name(obs, f"part{i}") for i in range(2))
+        == expected_shapes
+    )
+    rack_pose = get_pose(env._rack_id, env.physics_client_id)
+
+    # Rotate one part to exercise non-axis-aligned cuboid and triangle geometry.
+    # Both parts occupy the same supported rack region and must be rejected.
+    target_xy = (rack_pose.position[0], rack_pose.position[1])
+    for part_name in ("part0", "part1"):
+        _place_part_on_rack_floor(
+            env, part_name, target_xy, yaw=0.0 if part_name == "part0" else np.pi / 6
         )
 
     obs = env.get_state()
     assert env._part_is_seated_in_rack("part0", obs)
     assert env._part_is_seated_in_rack("part1", obs)
+    assert env._parts_penetrate("part0", "part1")
     assert not env.goal_reached()
+
+    # The same shapes are a valid terminal arrangement when separated.
+    _place_part_on_rack_floor(
+        env, "part0", (rack_pose.position[0], rack_pose.position[1] - 0.07)
+    )
+    _place_part_on_rack_floor(
+        env, "part1", (rack_pose.position[0], rack_pose.position[1] + 0.07)
+    )
+    obs = env.get_state()
+    assert env._part_is_seated_in_rack("part0", obs)
+    assert env._part_is_seated_in_rack("part1", obs)
+    assert not env._parts_penetrate("part0", "part1")
+    assert env.goal_reached()
+    env.close()
+
+
+def test_packing3d_rejects_triangle_overlap_missed_by_pybullet() -> None:
+    """Analytic geometry catches the mesh-query false negative from the replay."""
+    env = ObjectCentricPacking3DEnv(
+        num_parts=2,
+        config=Packing3DEnvConfig(part_triangular_prob=0.0),
+        use_gui=False,
+        realistic_bg=False,
+        allow_state_access=True,
+    )
+    obs, _ = env.reset(seed=0)
+    assert tuple(_get_part_shape_name(obs, f"part{i}") for i in range(2)) == (
+        "right",
+        "right",
+    )
+    rack_pose = get_pose(env._rack_id, env.physics_client_id)
+    _place_part_on_rack_floor(
+        env, "part0", (rack_pose.position[0] - 0.003, rack_pose.position[1] - 0.028)
+    )
+    _place_part_on_rack_floor(
+        env, "part1", (rack_pose.position[0] + 0.003, rack_pose.position[1] + 0.028)
+    )
+
+    part0_id = env._part_ids["part0"]
+    part1_id = env._part_ids["part1"]
+    assert not env._bodies_penetrate(part0_id, part1_id)
+    assert env._parts_penetrate("part0", "part1")
+    assert not env.goal_reached()
+
+    # The same analytic check participates in swept validation while carrying a
+    # triangle; the PyBullet-only result above must not allow this configuration.
+    env._grasped_object = "part0"
+    env._grasped_object_transform = multiply_poses(
+        env.robot.arm.get_end_effector_pose().invert(),
+        get_pose(part0_id, env.physics_client_id),
+    )
+    assert env._robot_or_held_object_collision_exists()
+    env.close()
+
+
+def test_packing3d_part_collision_includes_grasp_pegs() -> None:
+    """The analytic part geometry includes the red peg, not just the main body."""
+    env = ObjectCentricPacking3DEnv(
+        num_parts=2,
+        config=Packing3DEnvConfig(part_triangular_prob=1.0),
+        use_gui=False,
+        realistic_bg=False,
+        allow_state_access=True,
+    )
+    env.reset(seed=0)
+    first_id = env._part_ids["part0"]
+    second_id = env._part_ids["part1"]
+    set_pose(first_id, Pose((0.0, 0.0, 0.0)), env.physics_client_id)
+
+    # The 2-cm-tall main cuboids are vertically separate, but the lower part's
+    # 5-cm grasp peg penetrates the upper part's main body by 5 mm.
+    set_pose(second_id, Pose((0.0, 0.0, 0.065)), env.physics_client_id)
+    first_main = env._get_part_convex_components("part0")[0][0]
+    second_main = env._get_part_convex_components("part1")[0][0]
+    assert first_main[:, 2].max() < second_main[:, 2].min()
+    assert env._parts_penetrate("part0", "part1")
+
+    # Exact contact is allowed; only strict penetration is rejected.
+    set_pose(second_id, Pose((0.0, 0.0, 0.07)), env.physics_client_id)
+    assert not env._parts_penetrate("part0", "part1")
+    env.close()
+
+
+@pytest.mark.parametrize("triangle_probability", [0.0, 0.5, 1.0])
+def test_packing3d_reset_avoids_analytic_part_overlap(
+    triangle_probability: float,
+) -> None:
+    """Initial rejection sampling works for triangle and cuboid mixtures."""
+    env = ObjectCentricPacking3DEnv(
+        num_parts=3,
+        config=Packing3DEnvConfig(part_triangular_prob=triangle_probability),
+        use_gui=False,
+        realistic_bg=False,
+        allow_state_access=True,
+    )
+    for seed in range(10):
+        env.reset(seed=seed)
+        for first_index in range(3):
+            for second_index in range(first_index + 1, 3):
+                assert not env._parts_penetrate(
+                    f"part{first_index}", f"part{second_index}"
+                )
     env.close()
 
 

@@ -3,9 +3,10 @@
 from typing import Any, cast
 
 import numpy as np
+import pybullet as p
 from gymnasium.wrappers import RecordVideo
 from prpl_utils.utils import wrap_angle
-from pybullet_helpers.geometry import Pose, multiply_poses
+from pybullet_helpers.geometry import Pose, get_pose, multiply_poses, set_pose
 from pybullet_helpers.motion_planning import (
     create_joint_distance_fn,
     remap_joint_position_plan_to_constant_distance,
@@ -54,6 +55,7 @@ def test_packing3d_action_magnitude_matches_other_manipulation_envs() -> None:
     env = Packing3DEnv(num_parts=1, use_gui=False, realistic_bg=False)
     assert np.all(env.action_space.low[:10] == -0.2)
     assert np.all(env.action_space.high[:10] == 0.2)
+    assert env.unwrapped._object_centric_env.config.max_collision_check_step == 0.005
     env.close()
 
 
@@ -166,6 +168,89 @@ def test_packing3d_goal_rejects_part_outside_rack_cavity():
     assert "part0" not in updated_obs.available_parts
     assert not env.goal_reached()
 
+    env.close()
+
+
+def test_packing3d_goal_rejects_overlapping_parts() -> None:
+    """Individually seated parts must not penetrate one another."""
+    env = ObjectCentricPacking3DEnv(
+        num_parts=2,
+        use_gui=False,
+        realistic_bg=False,
+        allow_state_access=True,
+    )
+    env.reset(seed=0)
+    rack_pose = get_pose(env._rack_id, env.physics_client_id)
+    floor_z = (
+        rack_pose.position[2]
+        - env.config.rack_half_extents[2]
+        + env.config.rack_wall_thickness
+    )
+
+    # Put both parts at the same supported pose in the middle of the cavity. Account
+    # for the different base-to-geometry offsets of cuboids and triangles.
+    for part_name in ("part0", "part1"):
+        part_id = env._part_ids[part_name]
+        part_pose = get_pose(part_id, env.physics_client_id)
+        part_lower, _ = p.getAABB(
+            part_id, 0, physicsClientId=env.physics_client_id
+        )
+        lower_z_offset = part_lower[2] - part_pose.position[2]
+        set_pose(
+            part_id,
+            Pose(
+                (
+                    rack_pose.position[0] - 0.03,
+                    rack_pose.position[1] - 0.02,
+                    floor_z + 0.002 - lower_z_offset,
+                )
+            ),
+            env.physics_client_id,
+        )
+
+    obs = env.get_state()
+    assert env._part_is_seated_in_rack("part0", obs)
+    assert env._part_is_seated_in_rack("part1", obs)
+    assert not env.goal_reached()
+    env.close()
+
+
+def test_packing3d_goal_rejects_rack_penetration_and_hovering() -> None:
+    """Cavity containment alone is insufficient without valid floor support."""
+    env = ObjectCentricPacking3DEnv(
+        num_parts=1,
+        use_gui=False,
+        realistic_bg=False,
+        allow_state_access=True,
+    )
+    env.reset(seed=0)
+    rack_pose = get_pose(env._rack_id, env.physics_client_id)
+    floor_z = (
+        rack_pose.position[2]
+        - env.config.rack_half_extents[2]
+        + env.config.rack_wall_thickness
+    )
+    part_id = env._part_ids["part0"]
+    part_pose = get_pose(part_id, env.physics_client_id)
+    part_lower, _ = p.getAABB(part_id, 0, physicsClientId=env.physics_client_id)
+    lower_z_offset = part_lower[2] - part_pose.position[2]
+    xy = (rack_pose.position[0] - 0.03, rack_pose.position[1] - 0.02)
+
+    # The footprint is inside and the part is near the floor, but it penetrates it.
+    set_pose(
+        part_id,
+        Pose((*xy, floor_z - 0.002 - lower_z_offset)),
+        env.physics_client_id,
+    )
+    assert not env.goal_reached()
+
+    # The footprint remains inside, but the part is too high to be supported.
+    set_pose(
+        part_id,
+        Pose((*xy, floor_z + 0.01 - lower_z_offset)),
+        env.physics_client_id,
+    )
+    assert not env.goal_reached()
     env.close()
 
 

@@ -48,6 +48,7 @@ class Packing3DEnvConfig(Kinematic3DEnvConfig, metaclass=FinalConfigMeta):
 
     # Robot.
     max_action_mag: float = 0.2
+    max_collision_check_step: float = 0.005
     robot_base_home_pose: SE2Pose = SE2Pose(-0.12, 0, 0)
     robot_base_z: float = -0.4
 
@@ -803,12 +804,32 @@ class ObjectCentricPacking3DEnv(
         if self._grasped_object is not None:
             return False
         obs = self._get_obs()
+        part_ids = []
         for i in range(self._num_parts):
             part_name = f"part{i}"
             if not self._part_is_seated_in_rack(part_name, obs):
                 return False
+            part_ids.append(self._object_name_to_pybullet_id(part_name))
+
+        # Containment and support are per-part properties, so check separately that
+        # the packed parts do not penetrate one another.
+        p.performCollisionDetection(physicsClientId=self.physics_client_id)
+        for i, part_id in enumerate(part_ids):
+            for other_part_id in part_ids[i + 1 :]:
+                if self._bodies_penetrate(part_id, other_part_id):
+                    return False
 
         return True
+
+    def _bodies_penetrate(self, body1: int, body2: int) -> bool:
+        """Check for penetration while allowing nonpenetrating support contact."""
+        contact_points = p.getClosestPoints(
+            body1,
+            body2,
+            distance=0.0,
+            physicsClientId=self.physics_client_id,
+        )
+        return any(point[8] < -1e-6 for point in contact_points)
 
     def _part_is_seated_in_rack(
         self, part_name: str, obs: Packing3DObjectCentricState
@@ -852,6 +873,9 @@ class ObjectCentricPacking3DEnv(
         if not np.isclose(part_lower[2], rack_floor_z, atol=tolerance):
             return False
         if part_upper[2] > rack_rim_z + tolerance:
+            return False
+
+        if self._bodies_penetrate(part_id, self._rack_id):
             return False
 
         return self._rack_id in self._get_surfaces_supporting_object(part_id)

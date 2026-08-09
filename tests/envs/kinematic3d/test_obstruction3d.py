@@ -269,10 +269,23 @@ def test_goal_requires_block_on_target_region():
     set_pose(block_id, on_region_pose, client_id)
     assert oc_env.goal_reached(), "Goal not reached with block on the region"
 
-    # Same placement but yawed (e.g. after a grasp/place cycle): still reached.
-    yawed_pose = Pose.from_rpy(on_region_pose.position, (0.0, 0.0, np.pi / 4))
+    # Same placement with a slight residual yaw (e.g. after a grasp/place
+    # cycle): the corners stay inside the footprint, so still reached.
+    yawed_pose = Pose.from_rpy(on_region_pose.position, (0.0, 0.0, np.pi / 36))
     set_pose(block_id, yawed_pose, client_id)
     assert oc_env.goal_reached(), "Goal not reached with yawed block on the region"
+
+    # Block overhanging the region's edge: the center is inside the footprint
+    # but the far corners are not, so the block is not fully on the region.
+    overhang_pose = Pose(
+        (
+            region_pose.position[0],
+            region_pose.position[1] + region_half[1] - 1e-3,
+            on_region_pose.position[2],
+        )
+    )
+    set_pose(block_id, overhang_pose, client_id)
+    assert not oc_env.goal_reached(), "Goal reached with block overhanging region"
 
     # Block hovering well above the region: not reached.
     hover_pose = Pose(

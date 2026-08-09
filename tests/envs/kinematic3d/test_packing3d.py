@@ -49,6 +49,14 @@ def test_packing3d_env_basic():
         env.close()
 
 
+def test_packing3d_action_magnitude_matches_other_manipulation_envs() -> None:
+    """Packing3D uses the standard fine-grained manipulation action bound."""
+    env = Packing3DEnv(num_parts=1, use_gui=False, realistic_bg=False)
+    assert np.all(env.action_space.low[:10] == -0.2)
+    assert np.all(env.action_space.high[:10] == 0.2)
+    env.close()
+
+
 def test_packing3d_rejects_collision_tunneling_action() -> None:
     """A collision-free endpoint is invalid when the swept motion collides."""
     env = Packing3DEnv(
@@ -86,8 +94,8 @@ def test_packing3d_rejects_collision_tunneling_action() -> None:
     env.close()
 
 
-def test_packing3d_goal():
-    """Test the current triangle containment issue in Packing3D goal checks."""
+def test_packing3d_goal_rejects_part_outside_rack_cavity():
+    """A part on the outer rack footprint is not seated in its cavity."""
     env = ObjectCentricPacking3DEnv(
         num_parts=1,
         use_gui=False,
@@ -156,7 +164,7 @@ def test_packing3d_goal():
         updated_obs.get_object_half_extents_packing3d("part0")[:3],
     )
     assert "part0" not in updated_obs.available_parts
-    assert env.goal_reached()
+    assert not env.goal_reached()
 
     env.close()
 

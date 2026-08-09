@@ -47,6 +47,7 @@ class Packing3DEnvConfig(Kinematic3DEnvConfig, metaclass=FinalConfigMeta):
     """Config for Packing3DEnv()."""
 
     # Robot.
+    max_action_mag: float = 0.2
     robot_base_home_pose: SE2Pose = SE2Pose(-0.12, 0, 0)
     robot_base_z: float = -0.4
 
@@ -798,16 +799,62 @@ class ObjectCentricPacking3DEnv(
         return state
 
     def goal_reached(self) -> bool:
-        # Goal: no parts are grasped and all parts are supported by the rack.
+        # Goal: no parts are grasped and all parts are seated inside the rack cavity.
         if self._grasped_object is not None:
             return False
         obs = self._get_obs()
         for i in range(self._num_parts):
             part_name = f"part{i}"
-            if not obs.is_part_inside_rack(part_name):
+            if not self._part_is_seated_in_rack(part_name, obs):
                 return False
 
         return True
+
+    def _part_is_seated_in_rack(
+        self, part_name: str, obs: Packing3DObjectCentricState
+    ) -> bool:
+        """Check that a part is supported by the floor of the rack cavity."""
+        rack_half_extents = obs.rack_half_extents
+        wall_thickness = self.config.rack_wall_thickness
+        inner_half_extents = (
+            rack_half_extents[0] - wall_thickness,
+            rack_half_extents[1] - wall_thickness,
+            rack_half_extents[2],
+        )
+        rack_inner_polygon = obs._get_box_xy_polygon(  # pylint: disable=protected-access
+            obs.rack_pose, inner_half_extents
+        )
+        part = obs.get_object_from_name(part_name)
+        if part.type == Kinematic3DCuboidType:
+            part_polygon = obs._get_box_xy_polygon(  # pylint: disable=protected-access
+                obs.get_object_pose(part_name),
+                obs.get_object_half_extents_packing3d(part_name)[:3],
+            )
+        else:
+            assert part.type == Kinematic3DTriangleType
+            part_polygon = obs._get_triangle_xy_polygon(  # pylint: disable=protected-access
+                part_name
+            )
+        if not rack_inner_polygon.buffer(1e-9).contains(part_polygon):
+            return False
+
+        part_id = self._object_name_to_pybullet_id(part_name)
+        part_lower, part_upper = p.getAABB(
+            part_id, 0, physicsClientId=self.physics_client_id
+        )
+        rack_floor_z = (
+            obs.rack_pose.position[2]
+            - rack_half_extents[2]
+            + wall_thickness
+        )
+        rack_rim_z = obs.rack_pose.position[2] + rack_half_extents[2]
+        tolerance = self.config.min_placement_dist
+        if not np.isclose(part_lower[2], rack_floor_z, atol=tolerance):
+            return False
+        if part_upper[2] > rack_rim_z + tolerance:
+            return False
+
+        return self._rack_id in self._get_surfaces_supporting_object(part_id)
 
 
 class Packing3DEnv(ConstantObjectKinDEREnv):

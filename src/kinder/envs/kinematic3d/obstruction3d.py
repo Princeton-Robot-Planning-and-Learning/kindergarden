@@ -536,7 +536,7 @@ The resulting joint positions are clipped to the robot's joint limits before bei
 
 The goal is considered reached when:
 1. The robot is not currently grasping any object
-2. The target block is resting on the target region: its bottom face is at the region's top face (within a small distance threshold) and its footprint is completely contained within the region's x/y footprint (all four bottom corners inside)
+2. The target block is resting on the target region, fully within its boundaries
 
 This encourages the robot to place the target block while avoiding infinite episodes.
 """

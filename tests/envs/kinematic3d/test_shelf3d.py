@@ -10,6 +10,7 @@ from pybullet_helpers.geometry import Pose, SE2Pose
 from pybullet_helpers.motion_planning import (
     create_joint_distance_fn,
     remap_joint_position_plan_to_constant_distance,
+    remap_se2_pose_plan_to_constant_distance,
     run_motion_planning,
     run_single_arm_mobile_base_motion_planning,
     run_smooth_motion_planning_to_pose,
@@ -180,6 +181,9 @@ def test_pick_place(env):  # pylint: disable=redefined-outer-name
         seed=123,
     )
     assert base_plan is not None
+    base_plan = remap_se2_pose_plan_to_constant_distance(
+        base_plan, max_distance=config.max_action_mag
+    )
     obs = _execute_base_plan(env, base_plan, obs)
 
     # Step 2: Move arm to pre-grasp pose and then to grasp pose
@@ -267,6 +271,9 @@ def test_pick_place(env):  # pylint: disable=redefined-outer-name
         seed=456,
     )
     assert base_plan is not None
+    base_plan = remap_se2_pose_plan_to_constant_distance(
+        base_plan, max_distance=config.max_action_mag
+    )
     obs = _execute_base_plan(env, base_plan, obs)
 
     # Step 7: Move arm to place the cube on the first shelf layer

@@ -54,8 +54,8 @@ def test_packing3d_env_basic():
         env.close()
 
 
-def test_packing3d_action_magnitude_matches_other_manipulation_envs() -> None:
-    """Packing3D uses the standard fine-grained manipulation action bound."""
+def test_packing3d_uses_standard_action_magnitude() -> None:
+    """Packing3D uses the standard action bound used by the 3D envs."""
     env = Packing3DEnv(num_parts=1, use_gui=False, realistic_bg=False)
     assert np.all(env.action_space.low[:10] == -0.2)
     assert np.all(env.action_space.high[:10] == 0.2)

@@ -55,7 +55,7 @@ def test_packing3d_env_basic():
 
 
 def test_packing3d_uses_standard_action_magnitude() -> None:
-    """Packing3D uses the standard action bound used by the 3D envs."""
+    """Packing3D uses a 0.2 action bound."""
     env = Packing3DEnv(num_parts=1, use_gui=False, realistic_bg=False)
     assert np.all(env.action_space.low[:10] == -0.2)
     assert np.all(env.action_space.high[:10] == 0.2)
@@ -252,8 +252,7 @@ def test_packing3d_goal_handles_every_part_shape_pair(
     )
     rack_pose = get_pose(env._rack_id, env.physics_client_id)
 
-    # Rotate one part to exercise non-axis-aligned cuboid and triangle geometry.
-    # Both parts occupy the same supported rack region and must be rejected.
+    # Overlap two rotated parts inside the rack.
     target_xy = (rack_pose.position[0], rack_pose.position[1])
     for part_name in ("part0", "part1"):
         _place_part_on_rack_floor(
@@ -266,7 +265,6 @@ def test_packing3d_goal_handles_every_part_shape_pair(
     assert env._parts_penetrate("part0", "part1")
     assert not env.goal_reached()
 
-    # The same shapes are a valid terminal arrangement when separated.
     _place_part_on_rack_floor(
         env, "part0", (rack_pose.position[0], rack_pose.position[1] - 0.07)
     )
@@ -282,7 +280,7 @@ def test_packing3d_goal_handles_every_part_shape_pair(
 
 
 def test_packing3d_rejects_triangle_overlap_missed_by_pybullet() -> None:
-    """Analytic geometry catches the mesh-query false negative from the replay."""
+    """Analytic geometry catches triangular-prism penetration."""
     env = ObjectCentricPacking3DEnv(
         num_parts=2,
         config=Packing3DEnvConfig(part_triangular_prob=0.0),
@@ -309,8 +307,7 @@ def test_packing3d_rejects_triangle_overlap_missed_by_pybullet() -> None:
     assert env._parts_penetrate("part0", "part1")
     assert not env.goal_reached()
 
-    # The same analytic check participates in swept validation while carrying a
-    # triangle; the PyBullet-only result above must not allow this configuration.
+    # Held parts use the same analytic collision check.
     env._grasped_object = "part0"
     env._grasped_object_transform = multiply_poses(
         env.robot.arm.get_end_effector_pose().invert(),
@@ -321,7 +318,7 @@ def test_packing3d_rejects_triangle_overlap_missed_by_pybullet() -> None:
 
 
 def test_packing3d_part_collision_includes_grasp_pegs() -> None:
-    """The analytic part geometry includes the red peg, not just the main body."""
+    """Part collision geometry includes grasp pegs."""
     env = ObjectCentricPacking3DEnv(
         num_parts=2,
         config=Packing3DEnvConfig(part_triangular_prob=1.0),
@@ -334,8 +331,7 @@ def test_packing3d_part_collision_includes_grasp_pegs() -> None:
     second_id = env._part_ids["part1"]
     set_pose(first_id, Pose((0.0, 0.0, 0.0)), env.physics_client_id)
 
-    # The 2-cm-tall main cuboids are vertically separate, but the lower part's
-    # 5-cm grasp peg penetrates the upper part's main body by 5 mm.
+    # The main bodies are separate while the lower peg penetrates the upper body.
     set_pose(second_id, Pose((0.0, 0.0, 0.065)), env.physics_client_id)
     first_main = env._get_part_convex_components("part0")[0][0]
     second_main = env._get_part_convex_components("part1")[0][0]

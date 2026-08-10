@@ -41,8 +41,7 @@ from kinder.envs.kinematic3d.utils import (
 )
 from kinder.envs.utils import PURPLE
 
-# Keep these dimensions synchronized with the grasp pegs created by the
-# pybullet_helpers ``*_with_peg`` utilities.
+# Dimensions used by pybullet_helpers' part grasp pegs.
 _PART_PEG_HALF_EXTENTS = (0.01, 0.01, 0.025)
 _PENETRATION_TOLERANCE = 1e-6
 
@@ -908,7 +907,7 @@ class ObjectCentricPacking3DEnv(
         )
 
     def _robot_or_held_object_collision_exists(self) -> bool:
-        """Also validate held-part collisions with exact Packing3D geometry."""
+        """Check analytic collisions for a held part."""
         if super()._robot_or_held_object_collision_exists():
             return True
         if self._grasped_object is None:
@@ -960,7 +959,6 @@ class ObjectCentricPacking3DEnv(
         return state
 
     def goal_reached(self) -> bool:
-        # Goal: no parts are grasped and all parts are seated inside the rack cavity.
         if self._grasped_object is not None:
             return False
         obs = self._get_obs()
@@ -971,8 +969,7 @@ class ObjectCentricPacking3DEnv(
                 return False
             part_names.append(part_name)
 
-        # Containment and support are per-part properties, so check separately that
-        # the packed parts do not penetrate one another.
+        # Reject penetration between seated parts.
         for i, part_name in enumerate(part_names):
             for other_part_name in part_names[i + 1 :]:
                 if self._parts_penetrate(part_name, other_part_name):

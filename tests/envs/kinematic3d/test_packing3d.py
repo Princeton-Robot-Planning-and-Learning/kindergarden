@@ -68,13 +68,14 @@ def test_packing3d_goal():
     assert triangle_type == 1
 
     triangle_vertices = get_triangle_vertices("right", (side_a, side_b))
-    centroid_x = sum(v[0] for v in triangle_vertices) / 3.0
-    centroid_y = sum(v[1] for v in triangle_vertices) / 3.0
     part_x = rack_pose.position[0] - rack_half_extents[0]
     part_y = rack_pose.position[1] - side_b / 2
 
-    obs.set(part, "pose_x", part_x - centroid_x)
-    obs.set(part, "pose_y", part_y - centroid_y)
+    # set_state() restores triangle pose fields as raw PyBullet body poses.
+    # Subtracting the centroid here would encode the old get_object_pose()
+    # restoration behavior and place the true triangle footprint outside the rack.
+    obs.set(part, "pose_x", part_x)
+    obs.set(part, "pose_y", part_y)
     obs.set(part, "pose_z", rack_pose.position[2])
     obs.set(part, "pose_qx", 0.0)
     obs.set(part, "pose_qy", 0.0)
@@ -132,6 +133,29 @@ def get_target_object_from_obs(
     # For simplicity, just choose the first available part.
     target_part_name = available_parts[0]
     return obs.get_object_from_name(target_part_name)
+
+
+def test_triangle_part_set_state_does_not_drift() -> None:
+    """Repeated state restoration should not move triangular parts."""
+    env = ObjectCentricPacking3DEnv(
+        num_parts=1,
+        realistic_bg=False,
+        allow_state_access=True,
+    )
+    obs, _ = env.reset(seed=123)
+    assert isinstance(obs, Packing3DObjectCentricState)
+
+    part = obs.get_object_from_name("part0")
+    initial_pose = (obs.get(part, "pose_x"), obs.get(part, "pose_y"))
+    for _ in range(3):
+        env.set_state(obs)
+        obs = env.get_state()
+        assert isinstance(obs, Packing3DObjectCentricState)
+
+    part = obs.get_object_from_name("part0")
+    final_pose = (obs.get(part, "pose_x"), obs.get(part, "pose_y"))
+    np.testing.assert_allclose(final_pose, initial_pose)
+    env.close()
 
 
 def test_pick_place_on_rack() -> None:

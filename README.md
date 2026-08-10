@@ -158,6 +158,7 @@ obs, info = env.reset(seed=42)
 | StickButton2D | Kinematic2D | `kinder/StickButton2D-b3-v0` |
 | BaseMotion3D | Kinematic3D | `kinder/BaseMotion3D-v0` |
 | KinematicShelf3D | Kinematic3D | `kinder/KinematicShelf3D-o3-v0` |
+| LimbRepositioning3D | Kinematic3D | `kinder/LimbRepositioning3D-wheelchair-left-arm-v0` |
 | Obstruction3D | Kinematic3D | `kinder/Obstruction3D-o2-v0` |
 | Packing3D | Kinematic3D | `kinder/Packing3D-p2-v0` |
 | PrplLab3D | Kinematic3D | `kinder/PrplLab3D-o2-v0` |

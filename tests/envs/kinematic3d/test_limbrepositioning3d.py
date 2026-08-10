@@ -6,6 +6,7 @@ from gymnasium.wrappers import RecordVideo
 from relational_structs.spaces import ObjectCentricBoxSpace
 
 import kinder
+from kinder.envs.kinematic3d.limb_utils import NUM_LIMB_JOINTS, NUM_ROBOT_JOINTS
 from kinder.envs.kinematic3d.limbrepositioning3d import (
     ALL_VARIANTS,
     LimbRepositioning3DEnv,
@@ -13,7 +14,6 @@ from kinder.envs.kinematic3d.limbrepositioning3d import (
     create_variant_config,
 )
 from kinder.envs.kinematic3d.limbs import get_sampling_bounds
-from kinder.envs.kinematic3d.utils import NUM_LIMB_JOINTS, NUM_ROBOT_JOINTS
 from tests.conftest import MAKE_VIDEOS
 
 # One variant per scene type, for the tests that step the simulation.

@@ -22,24 +22,24 @@ from kinder.envs.kinematic3d.base_limbrepositioning3d import (
     Limb3DEnvConfig,
     ObjectCentricLimb3DRobotEnv,
 )
-from kinder.envs.kinematic3d.limb_scenes import (
-    ALL_SCENE_TYPES,
-    LimbRepositioningSceneConfig,
-)
-from kinder.envs.kinematic3d.limbs import ALL_LIMB_NAMES, get_sampling_bounds
-from kinder.envs.kinematic3d.object_types import (
+from kinder.envs.kinematic3d.limb_object_types import (
     Limb3DEnvTypeFeatures,
     Limb3DFixtureType,
     Limb3DLimbType,
     Limb3DRobotType,
 )
-from kinder.envs.kinematic3d.utils import (
+from kinder.envs.kinematic3d.limb_scenes import (
+    ALL_SCENE_TYPES,
+    LimbRepositioningSceneConfig,
+)
+from kinder.envs.kinematic3d.limb_utils import (
     NUM_LIMB_JOINTS,
     NUM_ROBOT_JOINTS,
     LimbRepositioning3DObjectCentricState,
     get_torque_action_from_gui_input,
     joint_position_distance,
 )
+from kinder.envs.kinematic3d.limbs import ALL_LIMB_NAMES, get_sampling_bounds
 
 # Draws before a reset gives up and falls back to the nominal configuration.
 _MAX_INIT_SAMPLE_ATTEMPTS = 20
@@ -216,6 +216,7 @@ class ObjectCentricLimbRepositioning3DEnv(
 
     def goal_reached(self) -> bool:
         distance = joint_position_distance(
+            self.limb.get_arm_joint_infos(),
             self.limb.get_joint_positions(),
             list(self.config.scene.limb_goal_joint_positions),
         )

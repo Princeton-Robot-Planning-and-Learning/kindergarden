@@ -407,6 +407,28 @@ def _register_kinematic3d() -> None:
         variant_ids=variant_ids,
     )
 
+    # LimbRepositioning3D environment, one variant per (scene, limb) pair.
+    from kinder.envs.kinematic3d.limbrepositioning3d import (  # pylint: disable=import-outside-toplevel
+        ALL_VARIANTS,
+    )
+
+    entry_point = "kinder.envs.kinematic3d.limbrepositioning3d:LimbRepositioning3DEnv"
+    variant_ids = []
+    for variant in ALL_VARIANTS:
+        variant_id = f"kinder/LimbRepositioning3D-{variant}-v0"
+        _register(
+            id=variant_id,
+            entry_point=entry_point,
+            kwargs={"variant": variant},
+        )
+        variant_ids.append(variant_id)
+    _register_env_class(
+        class_name="LimbRepositioning3D",
+        entry_point=entry_point,
+        category="Kinematic3D",
+        variant_ids=variant_ids,
+    )
+
 
 def _register_kinematic3d_v2() -> None:
     # VegaMotion3D environment.

@@ -51,8 +51,6 @@ def test_packing3d_env_basic():
 
 def test_packing3d_rejects_collision_tunneling_action() -> None:
     """A collision-free endpoint is invalid when the swept motion collides."""
-    # Retain the old, larger action bound in this regression to isolate swept
-    # collision validation from the separate standardization to 0.2.
     env = Packing3DEnv(
         num_parts=3,
         config=Packing3DEnvConfig(
@@ -64,8 +62,7 @@ def test_packing3d_rejects_collision_tunneling_action() -> None:
     )
     obs, _ = env.reset(seed=7138484576005690180)
 
-    # This action reaches a collision-free grasp endpoint in the old transition,
-    # despite the arm passing through a collision along the way.
+    # The arm crosses a collision before reaching a collision-free endpoint.
     action = np.array(
         [
             0.0417,

@@ -80,8 +80,7 @@ class Kinematic3DEnvConfig(KinDEREnvConfig):
     end_effector_viz_half_extents: tuple[float, float, float] = (0.01, 0.01, 0.035)
     end_effector_viz_color: tuple[float, float, float, float] = (1.0, 0.2, 0.2, 0.0)
     max_action_mag: float = 0.4
-    # Maximum coordinate increment between swept-motion collision checks. When unset,
-    # only the action endpoint is checked, preserving the original transition.
+    # None disables intermediate collision checks.
     max_collision_check_step: float | None = None
     check_base_collisions: bool = False
 
@@ -551,10 +550,7 @@ class ObjectCentricKinematic3DRobotEnv(
             self._robot_arm.joint_lower_limits[:7],
             self._robot_arm.joint_upper_limits[:7],
         ).tolist()
-        # Apply the motion incrementally so that an action cannot tunnel through a
-        # collision and end at a collision-free configuration. This remains a purely
-        # kinematic transition: intermediate states are used only for validity
-        # checking, with no physics integration or contact response.
+        # Validate the action path at evenly spaced configurations.
         max_delta = max(
             np.max(np.abs(base_action)),
             np.max(np.abs(np.asarray(next_joints) - np.asarray(current_joints))),

@@ -438,9 +438,7 @@ class ObjectCentricObstruction3DEnv(
         return self._target_block_on_target_region()
 
     def _target_block_on_target_region(self) -> bool:
-        """Check that the target block rests on top of the target region with
-        its footprint completely inside the region's x/y footprint, mirroring
-        the containment semantics of Obstruction2D's ``is_on``."""
+        """Check that the block rests fully within the target region."""
         assert self._target_block_id is not None
         assert self._target_region_id is not None
         block_pose = get_pose(self._target_block_id, self.physics_client_id)
@@ -450,12 +448,10 @@ class ObjectCentricObstruction3DEnv(
         # Work in the region's frame so a yawed region is handled uniformly.
         block_in_region = multiply_poses(region_pose.invert(), block_pose)
         resting_height = region_half_extents[2] + block_half_extents[2]
-        # Tolerance pads the checks so legal edge placements are not knife-edge.
         tol = self.config.min_placement_dist
         if abs(block_in_region.position[2] - resting_height) > tol:
             return False
-        # All four bottom corners of the block must project inside the region
-        # footprint, so a block overhanging the region does not count.
+        # Require every bottom corner inside the region footprint.
         half_x, half_y, half_z = block_half_extents
         for sign_x, sign_y in ((1, 1), (1, -1), (-1, 1), (-1, -1)):
             corner_offset = Pose((sign_x * half_x, sign_y * half_y, -half_z))

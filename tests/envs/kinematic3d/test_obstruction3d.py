@@ -46,7 +46,7 @@ def test_obstruction3d_env(env):  # pylint: disable=redefined-outer-name
     assert isinstance(obs, np.ndarray)
     assert np.all(env.action_space.low[:10] == -0.2)
     assert np.all(env.action_space.high[:10] == 0.2)
-    config = env.unwrapped._object_centric_env.config
+    config = env.unwrapped._object_centric_env.config  # pylint: disable=protected-access
     assert config.max_collision_check_step == 0.005
 
     for _ in range(10):
@@ -236,7 +236,7 @@ def test_pick_place_no_obstructions(env):  # pylint: disable=redefined-outer-nam
 
 
 def test_goal_requires_block_on_target_region():
-    """Test that the goal is reached only when the block rests on the region."""
+    """The goal requires support and full footprint containment."""
     config = Obstruction3DEnvConfig()
     oc_env = ObjectCentricObstruction3DEnv(
         num_obstructions=0, config=config, realistic_bg=False
@@ -250,8 +250,6 @@ def test_goal_requires_block_on_target_region():
     block_id = oc_env._target_block_id  # pylint: disable=protected-access
     client_id = oc_env.physics_client_id
 
-    # Block on the table right beside the region (1 mm lateral gap to the
-    # region slab): not on the region, so the goal must not be reached.
     beside_pose = Pose(
         (
             region_pose.position[0],
@@ -262,7 +260,6 @@ def test_goal_requires_block_on_target_region():
     set_pose(block_id, beside_pose, client_id)
     assert not oc_env.goal_reached(), "Goal reached with block beside the region"
 
-    # Block resting on top of the region: goal reached.
     on_region_pose = Pose(
         (
             region_pose.position[0],
@@ -273,14 +270,10 @@ def test_goal_requires_block_on_target_region():
     set_pose(block_id, on_region_pose, client_id)
     assert oc_env.goal_reached(), "Goal not reached with block on the region"
 
-    # Same placement with a slight residual yaw (e.g. after a grasp/place
-    # cycle): the corners stay inside the footprint, so still reached.
     yawed_pose = Pose.from_rpy(on_region_pose.position, (0.0, 0.0, np.pi / 36))
     set_pose(block_id, yawed_pose, client_id)
     assert oc_env.goal_reached(), "Goal not reached with yawed block on the region"
 
-    # Block overhanging the region's edge: the center is inside the footprint
-    # but the far corners are not, so the block is not fully on the region.
     overhang_pose = Pose(
         (
             region_pose.position[0],
@@ -291,7 +284,6 @@ def test_goal_requires_block_on_target_region():
     set_pose(block_id, overhang_pose, client_id)
     assert not oc_env.goal_reached(), "Goal reached with block overhanging region"
 
-    # Block hovering well above the region: not reached.
     hover_pose = Pose(
         (
             on_region_pose.position[0],
@@ -302,7 +294,6 @@ def test_goal_requires_block_on_target_region():
     set_pose(block_id, hover_pose, client_id)
     assert not oc_env.goal_reached(), "Goal reached with block hovering above region"
 
-    # Block on the table far away from the region: not reached.
     far_pose = Pose(
         (
             region_pose.position[0],

@@ -30,6 +30,16 @@ DYNAMIC3D_TASKS_DIR = REPO_ROOT / "src" / "kinder" / "envs" / "dynamic3d" / "tas
 DYNAMIC3D_ENVS = sorted([d.name for d in DYNAMIC3D_TASKS_DIR.iterdir() if d.is_dir()])
 
 
+FINE_TIMESTEP_ENVS: dict[str, tuple[int, int]] = {
+    "LimbRepositioning3D": (1500, 30),
+}
+
+
+def get_random_action_gif_params(class_name: str) -> tuple[int, int]:
+    """The number of random actions to take and the render stride, for a class."""
+    return FINE_TIMESTEP_ENVS.get(class_name, (25, 1))
+
+
 def get_changed_files() -> set[Path]:
     """Get the set of files that have changed compared to origin/main."""
     # Get the list of changed files from git diff.
@@ -80,6 +90,7 @@ def create_random_action_gif(
     num_actions: int = 25,
     seed: int = 0,
     default_fps: int = 10,
+    render_every: int = 1,
 ) -> tuple[bool, dict[str, float | bool]]:
     """Create a GIF of taking random actions in the environment.
 
@@ -106,12 +117,13 @@ def create_random_action_gif(
         env.action_space.seed(seed)
         imgs.append(env.render())
 
-        for _ in range(num_actions):
+        for step in range(num_actions):
             action = env.action_space.sample()
             _, reward, terminated, truncated, _ = env.step(action)
             total_reward += float(reward)
             num_steps += 1
-            imgs.append(env.render())
+            if (step + 1) % render_every == 0 or terminated or truncated:
+                imgs.append(env.render())
 
             if terminated or truncated:
                 terminated_successfully = terminated
@@ -218,6 +230,7 @@ def create_variant_random_action_gif(
     variant_name: str,
     env: gymnasium.Env,
     num_actions: int = 25,
+    render_every: int = 1,
     seed: int = 0,
     default_fps: int = 10,
 ) -> tuple[bool, dict[str, float | bool]]:
@@ -246,12 +259,13 @@ def create_variant_random_action_gif(
         env.action_space.seed(seed)
         imgs.append(env.render())
 
-        for _ in range(num_actions):
+        for step in range(num_actions):
             action = env.action_space.sample()
             _, reward, terminated, truncated, _ = env.step(action)
             total_reward += float(reward)
             num_steps += 1
-            imgs.append(env.render())
+            if (step + 1) % render_every == 0 or terminated or truncated:
+                imgs.append(env.render())
 
             if terminated or truncated:
                 terminated_successfully = terminated
@@ -575,8 +589,9 @@ def _main() -> None:
 
         if args.force or args.env or args.env_category or class_changed:
             print(f"  Regenerating {class_name}...")
+            num_actions, render_every = get_random_action_gif_params(class_name)
             has_random_gif, random_action_stats = create_random_action_gif(
-                class_name, env
+                class_name, env, num_actions=num_actions, render_every=render_every
             )
             has_initial_gif = create_initial_state_gif(class_name, variants)
             md = generate_markdown(
@@ -607,7 +622,12 @@ def _main() -> None:
                 (
                     variant_has_random_gif,
                     variant_random_stats,
-                ) = create_variant_random_action_gif(variant_name, variant_env)
+                ) = create_variant_random_action_gif(
+                    variant_name,
+                    variant_env,
+                    num_actions=num_actions,
+                    render_every=render_every,
+                )
                 variant_md = generate_variant_markdown(
                     variant_id,
                     variant_env,

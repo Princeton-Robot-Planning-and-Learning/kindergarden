@@ -21,6 +21,7 @@ from kinder.envs.kinematic3d.object_types import Kinematic3DTriangleType
 from kinder.envs.kinematic3d.packing3d import (
     ObjectCentricPacking3DEnv,
     Packing3DEnv,
+    Packing3DEnvConfig,
     Packing3DObjectCentricState,
 )
 from kinder.envs.kinematic3d.save_utils import DEFAULT_DEMOS_DIR, save_demo
@@ -46,6 +47,46 @@ def test_packing3d_env_basic():
             obs, _, _, _, _ = env.step(act)
 
         env.close()
+
+
+def test_packing3d_rejects_collision_tunneling_action() -> None:
+    """A collision-free endpoint is invalid when the swept motion collides."""
+    # Retain the old, larger action bound in this regression to isolate swept
+    # collision validation from the separate standardization to 0.2.
+    env = Packing3DEnv(
+        num_parts=3,
+        config=Packing3DEnvConfig(
+            max_action_mag=0.4,
+            max_collision_check_step=0.05,
+        ),
+        use_gui=False,
+        realistic_bg=False,
+    )
+    obs, _ = env.reset(seed=7138484576005690180)
+
+    # This action reaches a collision-free grasp endpoint in the old transition,
+    # despite the arm passing through a collision along the way.
+    action = np.array(
+        [
+            0.0417,
+            -0.3489,
+            0.0,
+            -0.0018,
+            0.3679,
+            0.0094,
+            0.0146,
+            -0.0002,
+            0.2311,
+            0.0072,
+            -1.0,
+        ],
+        dtype=np.float32,
+    )
+    next_obs, _, _, _, _ = env.step(action)
+
+    assert np.allclose(next_obs[:11], obs[:11])
+    assert np.all(next_obs[[38, 50, 62]] == 0.0)
+    env.close()
 
 
 def test_packing3d_goal():

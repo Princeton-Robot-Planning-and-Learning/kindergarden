@@ -51,6 +51,7 @@ _CATEGORY_DEPS: dict[str, tuple[str, ...]] = {
     "Kinematic2D": ("tomsgeoms2d",),
     "Dynamic2D": ("pymunk", "tomsgeoms2d"),
     "Kinematic3D": ("pybullet", "pybullet_helpers"),
+    "Kinematic3Dv2": ("pybullet", "prpl_kinematics"),
     "Dynamic3D": ("mujoco",),
 }
 
@@ -81,6 +82,9 @@ def register_all_environments() -> None:
 
     if _check_deps(*_CATEGORY_DEPS["Kinematic3D"]):
         _register_kinematic3d()
+
+    if _check_deps(*_CATEGORY_DEPS["Kinematic3Dv2"]):
+        _register_kinematic3d_v2()
 
     if _check_deps(*_CATEGORY_DEPS["Dynamic3D"]):
         _register_dynamic3d()
@@ -384,6 +388,21 @@ def _register_kinematic3d() -> None:
         entry_point="kinder.envs.kinematic3d.packing3d:Packing3DEnv",
         category="Kinematic3D",
         variant_ids=variant_ids,
+    )
+
+
+def _register_kinematic3d_v2() -> None:
+    # VegaMotion3D environment.
+    variant_id = "kinder/VegaMotion3D-v0"
+    _register(
+        id=variant_id,
+        entry_point="kinder.envs.kinematic3d_v2.vega_motion3d:VegaMotion3DEnv",
+    )
+    _register_env_class(
+        class_name="VegaMotion3D",
+        entry_point="kinder.envs.kinematic3d_v2.vega_motion3d:VegaMotion3DEnv",
+        category="Kinematic3Dv2",
+        variant_ids=[variant_id],
     )
 
 

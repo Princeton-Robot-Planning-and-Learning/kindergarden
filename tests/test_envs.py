@@ -24,7 +24,7 @@ def test_env_make_and_check_env():
         make_kwargs = {"render_mode": "rgb_array"}
         entrypoint = gymnasium.registry[env_id].entry_point
         assert isinstance(entrypoint, str)
-        if "kinematic3d" in entrypoint:
+        if "kinematic3d." in entrypoint:
             make_kwargs["realistic_bg"] = False
         env = kinder.make(env_id, **make_kwargs)
         assert env.render_mode == "rgb_array"

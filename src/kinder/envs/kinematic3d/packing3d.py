@@ -43,7 +43,7 @@ from kinder.envs.utils import PURPLE
 
 # Dimensions used by pybullet_helpers' part grasp pegs.
 _PART_PEG_HALF_EXTENTS = (0.01, 0.01, 0.025)
-_PENETRATION_TOLERANCE = 1e-6
+_OVERLAP_TOLERANCE = 1e-6
 
 
 @dataclass(frozen=True)
@@ -687,7 +687,7 @@ class ObjectCentricPacking3DEnv(
                         break
                 if not collision_exists:
                     collision_exists = any(
-                        self._parts_penetrate(name, other_name)
+                        self._parts_overlap(name, other_name)
                         for other_name in self._part_ids
                         if other_name != name
                     )
@@ -869,11 +869,11 @@ class ObjectCentricPacking3DEnv(
         return world_components
 
     @staticmethod
-    def _convex_components_penetrate(
+    def _convex_components_overlap(
         first: tuple[np.ndarray, np.ndarray, np.ndarray],
         second: tuple[np.ndarray, np.ndarray, np.ndarray],
     ) -> bool:
-        """Use the separating axis theorem to detect strict 3D penetration."""
+        """Use the separating axis theorem to detect strict 3D overlap."""
         first_vertices, first_normals, first_edges = first
         second_vertices, second_normals, second_edges = second
         candidate_axes = [*first_normals, *second_normals]
@@ -884,7 +884,7 @@ class ObjectCentricPacking3DEnv(
         )
         for axis in candidate_axes:
             norm = np.linalg.norm(axis)
-            if norm <= _PENETRATION_TOLERANCE:
+            if norm <= _OVERLAP_TOLERANCE:
                 continue
             normalized_axis = axis / norm
             first_projection = first_vertices @ normalized_axis
@@ -892,16 +892,16 @@ class ObjectCentricPacking3DEnv(
             overlap = min(first_projection.max(), second_projection.max()) - max(
                 first_projection.min(), second_projection.min()
             )
-            if overlap <= _PENETRATION_TOLERANCE:
+            if overlap <= _OVERLAP_TOLERANCE:
                 return False
         return True
 
-    def _parts_penetrate(self, first_name: str, second_name: str) -> bool:
-        """Check exact part geometry, including pegs, without mesh contact queries."""
+    def _parts_overlap(self, first_name: str, second_name: str) -> bool:
+        """Check part overlap using exact geometry, including grasp pegs."""
         first_components = self._get_part_convex_components(first_name)
         second_components = self._get_part_convex_components(second_name)
         return any(
-            self._convex_components_penetrate(first, second)
+            self._convex_components_overlap(first, second)
             for first in first_components
             for second in second_components
         )
@@ -913,7 +913,7 @@ class ObjectCentricPacking3DEnv(
         if self._grasped_object is None:
             return False
         return any(
-            self._parts_penetrate(self._grasped_object, other_name)
+            self._parts_overlap(self._grasped_object, other_name)
             for other_name in self._part_ids
             if other_name != self._grasped_object
         )
@@ -969,16 +969,16 @@ class ObjectCentricPacking3DEnv(
                 return False
             part_names.append(part_name)
 
-        # Reject penetration between seated parts.
+        # Reject overlap between seated parts.
         for i, part_name in enumerate(part_names):
             for other_part_name in part_names[i + 1 :]:
-                if self._parts_penetrate(part_name, other_part_name):
+                if self._parts_overlap(part_name, other_part_name):
                     return False
 
         return True
 
-    def _bodies_penetrate(self, body1: int, body2: int) -> bool:
-        """Check for penetration while allowing nonpenetrating support contact."""
+    def _bodies_overlap(self, body1: int, body2: int) -> bool:
+        """Check body overlap while allowing support contact."""
         contact_points = p.getClosestPoints(
             body1,
             body2,
@@ -1019,7 +1019,7 @@ class ObjectCentricPacking3DEnv(
         if part_upper_z > rack_rim_z + tolerance:
             return False
 
-        if self._bodies_penetrate(part_id, self._rack_id):
+        if self._bodies_overlap(part_id, self._rack_id):
             return False
 
         return self._rack_id in self._get_surfaces_supporting_object(part_id)

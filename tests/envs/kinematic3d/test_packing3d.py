@@ -262,7 +262,7 @@ def test_packing3d_goal_handles_every_part_shape_pair(
     obs = env.get_state()
     assert env._part_is_seated_in_rack("part0", obs)
     assert env._part_is_seated_in_rack("part1", obs)
-    assert env._parts_penetrate("part0", "part1")
+    assert env._parts_overlap("part0", "part1")
     assert not env.goal_reached()
 
     _place_part_on_rack_floor(
@@ -274,13 +274,13 @@ def test_packing3d_goal_handles_every_part_shape_pair(
     obs = env.get_state()
     assert env._part_is_seated_in_rack("part0", obs)
     assert env._part_is_seated_in_rack("part1", obs)
-    assert not env._parts_penetrate("part0", "part1")
+    assert not env._parts_overlap("part0", "part1")
     assert env.goal_reached()
     env.close()
 
 
 def test_packing3d_rejects_triangle_overlap_missed_by_pybullet() -> None:
-    """Analytic geometry catches triangular-prism penetration."""
+    """Analytic geometry catches triangular-prism overlap."""
     env = ObjectCentricPacking3DEnv(
         num_parts=2,
         config=Packing3DEnvConfig(part_triangular_prob=0.0),
@@ -303,8 +303,8 @@ def test_packing3d_rejects_triangle_overlap_missed_by_pybullet() -> None:
 
     part0_id = env._part_ids["part0"]
     part1_id = env._part_ids["part1"]
-    assert not env._bodies_penetrate(part0_id, part1_id)
-    assert env._parts_penetrate("part0", "part1")
+    assert not env._bodies_overlap(part0_id, part1_id)
+    assert env._parts_overlap("part0", "part1")
     assert not env.goal_reached()
 
     # Held parts use the same analytic collision check.
@@ -331,16 +331,16 @@ def test_packing3d_part_collision_includes_grasp_pegs() -> None:
     second_id = env._part_ids["part1"]
     set_pose(first_id, Pose((0.0, 0.0, 0.0)), env.physics_client_id)
 
-    # The main bodies are separate while the lower peg penetrates the upper body.
+    # The main bodies are separate while the lower peg overlaps the upper body.
     set_pose(second_id, Pose((0.0, 0.0, 0.065)), env.physics_client_id)
     first_main = env._get_part_convex_components("part0")[0][0]
     second_main = env._get_part_convex_components("part1")[0][0]
     assert first_main[:, 2].max() < second_main[:, 2].min()
-    assert env._parts_penetrate("part0", "part1")
+    assert env._parts_overlap("part0", "part1")
 
-    # Exact contact is allowed; only strict penetration is rejected.
+    # Exact contact is allowed; only strict overlap is rejected.
     set_pose(second_id, Pose((0.0, 0.0, 0.07)), env.physics_client_id)
-    assert not env._parts_penetrate("part0", "part1")
+    assert not env._parts_overlap("part0", "part1")
     env.close()
 
 
@@ -360,13 +360,13 @@ def test_packing3d_reset_avoids_analytic_part_overlap(
         env.reset(seed=seed)
         for first_index in range(3):
             for second_index in range(first_index + 1, 3):
-                assert not env._parts_penetrate(
+                assert not env._parts_overlap(
                     f"part{first_index}", f"part{second_index}"
                 )
     env.close()
 
 
-def test_packing3d_goal_rejects_rack_penetration_and_hovering() -> None:
+def test_packing3d_goal_rejects_rack_overlap_and_hovering() -> None:
     """Cavity containment alone is insufficient without valid floor support."""
     env = ObjectCentricPacking3DEnv(
         num_parts=1,
@@ -387,7 +387,7 @@ def test_packing3d_goal_rejects_rack_penetration_and_hovering() -> None:
     lower_z_offset = part_lower[2] - part_pose.position[2]
     xy = (rack_pose.position[0] - 0.03, rack_pose.position[1] - 0.02)
 
-    # The footprint is inside and the part is near the floor, but it penetrates it.
+    # The footprint is inside and the part overlaps the rack floor.
     set_pose(
         part_id,
         Pose((*xy, floor_z - 0.002 - lower_z_offset)),

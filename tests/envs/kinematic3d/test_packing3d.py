@@ -7,6 +7,7 @@ from typing import Any, cast
 import numpy as np
 import pybullet as p
 import pytest
+from gymnasium.spaces import Box
 from gymnasium.wrappers import RecordVideo
 from prpl_utils.utils import wrap_angle
 from pybullet_helpers.geometry import Pose, get_pose, multiply_poses, set_pose
@@ -60,9 +61,10 @@ def test_packing3d_env_basic():
 def test_packing3d_uses_standard_action_magnitude() -> None:
     """Packing3D uses a 0.2 action bound."""
     env = Packing3DEnv(num_parts=1, use_gui=False, realistic_bg=False)
+    assert isinstance(env.action_space, Box)
     assert np.all(env.action_space.low[:10] == -0.2)
     assert np.all(env.action_space.high[:10] == 0.2)
-    assert env.unwrapped._object_centric_env.config.max_collision_check_step == 0.005
+    assert env._object_centric_env.config.max_collision_check_step == 0.005
     env.close()
 
 

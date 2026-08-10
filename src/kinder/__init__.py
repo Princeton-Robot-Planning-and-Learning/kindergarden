@@ -1,5 +1,6 @@
 """Register environments and expose them through make()."""
 
+import json
 import os
 import sys
 import warnings
@@ -57,9 +58,9 @@ _CATEGORY_DEPS: dict[str, tuple[str, ...]] = {
 def register_all_environments() -> None:
     """Add all benchmark environments to the gymnasium registry.
 
-    Categories whose optional dependencies are not installed are silently
-    skipped.  Install the corresponding extras to enable them, e.g.
-    ``pip install kindergarden[dynamic2d]``.
+    Categories whose backend dependencies are not installed are silently skipped.  The
+    default ``pip install kindergarden`` includes every backend; to install a single
+    one, see the requirements files described in the README.
     """
     # NOTE: ids must start with "kinder/" to be properly registered.
 
@@ -263,19 +264,6 @@ def _register_dynamic2d() -> None:
 
 
 def _register_kinematic3d() -> None:
-    # Motion3D environment.
-    variant_id = "kinder/Motion3D-v0"
-    _register(
-        id=variant_id,
-        entry_point="kinder.envs.kinematic3d.motion3d:Motion3DEnv",
-    )
-    _register_env_class(
-        class_name="Motion3D",
-        entry_point="kinder.envs.kinematic3d.motion3d:Motion3DEnv",
-        category="Kinematic3D",
-        variant_ids=[variant_id],
-    )
-
     # BaseMotion3D environment.
     variant_id = "kinder/BaseMotion3D-v0"
     _register(
@@ -287,24 +275,6 @@ def _register_kinematic3d() -> None:
         entry_point="kinder.envs.kinematic3d.base_motion3d:BaseMotion3DEnv",
         category="Kinematic3D",
         variant_ids=[variant_id],
-    )
-
-    # Ground3D environment.
-    num_cubes = [1, 2, 3]
-    variant_ids = []
-    for num_cube in num_cubes:
-        variant_id = f"kinder/Ground3D-o{num_cube}-v0"
-        _register(
-            id=variant_id,
-            entry_point="kinder.envs.kinematic3d.ground3d:Ground3DEnv",
-            kwargs={"num_cubes": num_cube},
-        )
-        variant_ids.append(variant_id)
-    _register_env_class(
-        class_name="Ground3D",
-        entry_point="kinder.envs.kinematic3d.ground3d:Ground3DEnv",
-        category="Kinematic3D",
-        variant_ids=variant_ids,
     )
 
     # Table3D environment.
@@ -431,9 +401,28 @@ def _register_dynamic3d() -> None:
                 # Go through variants for this task
                 if task_config.is_file():
                     config_name = task_config.stem
-                    robot = "TidyBot3D"
-                    # Note: we only support one robot at the moment
-                    # In the future, get robot from config.
+                    # Map the robot type declared in the task config to the
+                    # environment class implementing it.
+                    robot_env_classes = {
+                        "tidybot": "TidyBot3D",
+                        "fr3": "Franka3D",
+                        "rby1a": "RBY1A3D",
+                    }
+                    try:
+                        with open(task_config, "r", encoding="utf-8") as f:
+                            robot_key = next(iter(json.load(f)["robots"]))
+                        robot = robot_env_classes[robot_key]
+                    except (
+                        json.JSONDecodeError,
+                        KeyError,
+                        StopIteration,
+                    ) as e:
+                        raise RuntimeError(
+                            f"Cannot determine the robot for task config "
+                            f"{task_config}: it must be valid JSON with a "
+                            f"non-empty 'robots' dict whose first key is one "
+                            f"of {sorted(robot_env_classes)}."
+                        ) from e
                     task_cfg = "-".join(config_name.split("-")[1:])
                     variant_id = f"kinder/{folder_name}-{task_cfg}-v0"
                     _register(

@@ -1,0 +1,20 @@
+# Minimal dependency set for the kinematic2d environments only (no PyBullet,
+# MuJoCo, pygame, or pymunk). Mirrors the non-backend base dependencies plus the
+# `kinematic2d` extra in pyproject.toml.
+#
+# kindergarden's base install pulls every backend. To install a subset instead,
+# install the package without its dependencies and then this file:
+#
+#     pip install --no-deps kindergarden
+#     pip install -r requirements/kinematic2d.txt
+#
+gymnasium
+matplotlib
+numpy
+Pillow
+dill
+shapely>=2.1.2
+scipy>=1.14.0
+relational_structs>=0.0.1
+prpl_utils>=0.0.1
+tomsgeoms2d>=0.0.1

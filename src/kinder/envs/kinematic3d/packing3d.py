@@ -842,8 +842,6 @@ The robot is a Kinova Gen-3 with 7 degrees of freedom that can grasp and manipul
 - A **table** with dimensions {config.table_half_extents[0]*2:.3f}m × {config.table_half_extents[1]*2:.3f}m × {config.table_half_extents[2]*2:.3f}m
 - A **rack** (purple) with half-extents {config.rack_half_extents}
 - **Parts** (green) that must be packed into the rack. Parts are sampled with half-extents in {config.part_half_extents_lb} to {config.part_half_extents_ub} and a probability {config.part_triangular_prob} of being triangle-shaped (triangles are represented as triangular prisms with depth {config.part_triangle_depth:.3f}m when used).
-
-The task requires planning to grasp and place each part into the rack while avoiding collisions and ensuring parts are supported by the rack (on the rack and not grasped) at the end.
 """
 
     def _create_variant_markdown_description(self) -> str:
@@ -887,5 +885,5 @@ This encourages the robot to efficiently pack the parts into the rack while avoi
     def _create_references_markdown_description(self) -> str:
         """Create references description."""
         # pylint: disable=line-too-long
-        return """Packing tasks are common in robotics and automated warehousing literature. This environment is inspired by standard manipulation benchmarks and simple bin-packing problems; it’s intended as a deterministic, physics-based testbed for pick-and-place planning and task-and-motion planning approaches.
+        return """Packing tasks are common in robotics and automated warehousing literature. This environment is inspired by standard manipulation benchmarks and simple bin-packing problems; it’s intended as a deterministic, physics-based testbed.
 """

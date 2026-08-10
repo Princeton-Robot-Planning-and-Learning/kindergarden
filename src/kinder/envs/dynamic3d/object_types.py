@@ -88,6 +88,30 @@ MujocoObjectTypeFeatures[MujocoTidyBotRobotObjectType] = [
     "vel_gripper",
 ]
 
+MujocoFR3RobotObjectType = Type("mujoco_fr3_robot")
+MujocoObjectTypeFeatures[MujocoFR3RobotObjectType] = [
+    # Fixed base mount pose (set once per episode, no velocities).
+    "pos_base_x",
+    "pos_base_y",
+    "pos_base_rot",
+    "pos_arm_joint1",
+    "pos_arm_joint2",
+    "pos_arm_joint3",
+    "pos_arm_joint4",
+    "pos_arm_joint5",
+    "pos_arm_joint6",
+    "pos_arm_joint7",
+    "pos_gripper",
+    "vel_arm_joint1",
+    "vel_arm_joint2",
+    "vel_arm_joint3",
+    "vel_arm_joint4",
+    "vel_arm_joint5",
+    "vel_arm_joint6",
+    "vel_arm_joint7",
+    "vel_gripper",
+]
+
 MujocoRBY1ARobotObjectType = Type("mujoco_rby1a_robot")
 MujocoObjectTypeFeatures[MujocoRBY1ARobotObjectType] = [
     "pos_base_right",

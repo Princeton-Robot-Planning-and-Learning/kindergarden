@@ -165,8 +165,7 @@ class ObjectCentricDynObstruction2DEnv(
     PyMunk physics simulation.
 
     Key difference from Kinematic2DEnv is that the robot can interact with dynamic
-    objects with realistic physics (friction, collisions, etc). This means some objects
-    should be *pushed* instead of *grasped*.
+    objects with realistic physics (friction, collisions, etc).
     """
 
     def __init__(

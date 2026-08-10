@@ -151,20 +151,14 @@ def generate_demo_video(
 
     # Create the environment.
     kinder.register_all_environments()
-    if "TidyBot" in env_id:
-        env = kinder.make(
-            env_id,
-            render_mode="rgb_array",
-            scene_bg=True,
-        )
-    elif "3D" in env_id and "TidyBot" not in env_id:
-        env = kinder.make(
-            env_id,
-            render_mode="rgb_array",
-            realistic_bg=True,
-        )
-    else:
-        env = kinder.make(env_id, render_mode="rgb_array")
+    env = kinder.make(env_id, render_mode="rgb_array")
+    is_dynamic3d = "dynamic3d" in type(env.unwrapped).__module__
+    if is_dynamic3d:
+        env.close()
+        env = kinder.make(env_id, render_mode="rgb_array", scene_bg=True)
+    elif "3D" in env_id:
+        env.close()
+        env = kinder.make(env_id, render_mode="rgb_array", realistic_bg=True)
 
     # Get FPS from environment metadata if not specified.
     if fps is None:

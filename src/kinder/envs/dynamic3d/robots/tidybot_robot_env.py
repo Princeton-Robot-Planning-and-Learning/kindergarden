@@ -9,7 +9,7 @@ from relational_structs import Array
 
 from kinder.core import RobotActionSpace
 from kinder.envs.dynamic3d.mujoco_utils import MjObs
-from kinder.envs.dynamic3d.robots.base import RobotEnv
+from kinder.envs.dynamic3d.robots.base import IndexedView, RobotEnv
 
 
 class TidyBot3DRobotActionSpace(RobotActionSpace):
@@ -76,7 +76,6 @@ class TidyBotRobotEnv(RobotEnv):
             arm_kp: Custom proportional gains for arm PD controller (7 values).
             arm_kd: Custom derivative gains for arm PD controller (7 values).
         """
-
         robot_camera_names = [f"{name}_base", f"{name}_wrist"]
         if camera_names is None:
             camera_names = []
@@ -216,24 +215,8 @@ class TidyBotRobotEnv(RobotEnv):
         self._arm_qvel_start = arm_qvel_start
         self._arm_qvel_end = arm_qvel_end
 
-        # Create a custom wrapper that maintains references for
+        # Use an indexed view to maintain references for
         # non-contiguous gripper indices
-        class IndexedView:
-            """A view that provides indexed access to non-contiguous array elements."""
-
-            def __init__(self, array: Any, indices: list[int]) -> None:
-                self.array = array
-                self.indices = indices
-
-            def __setitem__(self, key: int, value: Any) -> None:
-                self.array[self.indices[key]] = value
-
-            def __getitem__(self, key: int) -> Any:
-                return self.array[self.indices[key]]
-
-            def __len__(self) -> int:
-                return len(self.indices)
-
         self.qpos["gripper"] = IndexedView(  # type: ignore[assignment]
             self.sim.data.mj_data.qpos, gripper_qpos_indices
         )
@@ -377,18 +360,6 @@ class TidyBotRobotEnv(RobotEnv):
         torques = np.clip(torques, -self.ARM_TORQUE_LIMITS, self.ARM_TORQUE_LIMITS)
 
         return torques
-
-    def _update_ctrl(self, action: Array) -> None:
-        """Update control values from action array.
-
-        Args:
-            action: Action array to apply to robot controls.
-        """
-        start = 0
-        for _, ctrl_part in self.ctrl.items():
-            end = start + len(ctrl_part)
-            ctrl_part[:] = action[start:end]
-            start = end
 
     def step(self, action: Array) -> tuple[MjObs, float, bool, bool, dict[str, Any]]:
         """Take a step in the environment.

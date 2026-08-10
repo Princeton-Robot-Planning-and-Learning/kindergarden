@@ -55,18 +55,26 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import gymnasium
 import h5py
 import numpy as np
 from numpy.typing import NDArray
+from scipy.spatial.transform import Rotation
 
 import kinder
 from kinder.envs.dynamic3d.point_cloud import (
+    MeshPointCloud,
     PointCloud,
+    find_ee_frame,
+    generate_full_point_cloud,
     generate_scene_point_cloud,
+    generate_track_point_cloud,
+    get_ee_pose,
+    get_geom_world_transforms,
     get_sim_from_env,
+    sample_canonical_points,
 )
 from kinder.utils import load_demo
 
@@ -151,6 +159,66 @@ def _parse_args() -> argparse.Namespace:
         metavar="M",
         help="Discard point cloud points closer than this distance in metres",
     )
+
+    p.add_argument(
+        "--camerapointcloud",
+        action="store_true",
+        help=(
+            "Store per-camera point clouds (obs/{cam}_pc_xyz, obs/{cam}_pc_rgb) "
+            "back-projected from RGB-D renders."
+        ),
+    )
+    p.add_argument(
+        "--completepointcloud",
+        action="store_true",
+        help=(
+            "Store mesh-based point clouds (obs/mesh_pc_xyz, "
+            "obs/mesh_pc_geom_indices) sampled directly from geom surfaces."
+        ),
+    )
+    p.add_argument(
+        "--canonicalpointcloud",
+        action="store_true",
+        help=(
+            "Store canonical per-geom surface points (sampled once after reset) "
+            "and per-timestep rigid-body transforms.  Writes "
+            "canonical_pointcloud/<geom>/xyz, geom_transforms/<geom> (T,4,4), "
+            "obs/ee_pose (T,4,4), actions_delta_ee_transform (T,4,4), "
+            "actions_delta_ee_7d (T,7), actions_delta_base_3d (T,3), "
+            "actions_delta_ee_base_10d (T,10), "
+            "actions_delta_ee_euler_gripper_7d (T,7), and "
+            "actions_delta_ee_world_euler_gripper_7d (T,7)."
+        ),
+    )
+    p.add_argument(
+        "--trackpointcloud",
+        action="store_true",
+        help=(
+            "Store tracked point clouds with fixed point identity across "
+            "timesteps (obs/track_pc_xyz, obs/track_pc_geom_indices). "
+            "Points are sampled once after env.reset() in local coordinates "
+            "and re-transformed each step."
+        ),
+    )
+    p.add_argument(
+        "--ee-site",
+        type=str,
+        default=None,
+        metavar="NAME",
+        help=(
+            "MuJoCo site or body name to use as the end-effector frame for "
+            "obs/ee_pose and actions_delta_ee_transform.  Sites are tried "
+            "before bodies.  When omitted, common names are auto-detected "
+            "(robot_pinch_site, eef_site, …; then EE_BODY_R, end_effector, …)."
+        ),
+    )
+    p.add_argument(
+        "--num-points-per-geom",
+        type=int,
+        default=500,
+        metavar="N",
+        help="Surface points sampled per geom for mesh-based point clouds",
+    )
     return p.parse_args()
 
 
@@ -174,6 +242,285 @@ def _make_env(env_id: str) -> gymnasium.Env:
     return kinder.make(env_id, **make_kwargs)
 
 
+def _hdf5_key(name: str) -> str:
+    """Sanitise a geom name for use as an HDF5 dataset/group key.
+
+    HDF5 treats ``/`` as a path separator, so forward slashes in geom names (e.g.
+    ``gen3/base_link_geom144``) must be escaped.
+    """
+    return name.replace("/", "__")
+
+
+def _se3_inv(T: NDArray[np.float32]) -> NDArray[np.float32]:
+    """Compute the inverse of a 4×4 SE(3) matrix without calling np.linalg.inv."""
+    R = T[:3, :3]
+    p = T[:3, 3]
+    T_inv = np.eye(4, dtype=np.float32)
+    T_inv[:3, :3] = R.T
+    T_inv[:3, 3] = -(R.T @ p)
+    return T_inv
+
+
+def _rotmat_to_quat_xyzw(R: NDArray[np.float64]) -> NDArray[np.float32]:
+    """Convert a 3×3 rotation matrix to a unit quaternion [qx, qy, qz, qw].
+
+    Uses Shepperd's method.  Sign is chosen so that qw >= 0.
+    """
+    trace = R[0, 0] + R[1, 1] + R[2, 2]
+    if trace > 0.0:
+        s = 0.5 / float(np.sqrt(trace + 1.0))
+        w = 0.25 / s
+        x = (R[2, 1] - R[1, 2]) * s
+        y = (R[0, 2] - R[2, 0]) * s
+        z = (R[1, 0] - R[0, 1]) * s
+    elif R[0, 0] > R[1, 1] and R[0, 0] > R[2, 2]:
+        s = 2.0 * float(np.sqrt(1.0 + R[0, 0] - R[1, 1] - R[2, 2]))
+        w = (R[2, 1] - R[1, 2]) / s
+        x = 0.25 * s
+        y = (R[0, 1] + R[1, 0]) / s
+        z = (R[0, 2] + R[2, 0]) / s
+    elif R[1, 1] > R[2, 2]:
+        s = 2.0 * float(np.sqrt(1.0 + R[1, 1] - R[0, 0] - R[2, 2]))
+        w = (R[0, 2] - R[2, 0]) / s
+        x = (R[0, 1] + R[1, 0]) / s
+        y = 0.25 * s
+        z = (R[1, 2] + R[2, 1]) / s
+    else:
+        s = 2.0 * float(np.sqrt(1.0 + R[2, 2] - R[0, 0] - R[1, 1]))
+        w = (R[1, 0] - R[0, 1]) / s
+        x = (R[0, 2] + R[2, 0]) / s
+        y = (R[1, 2] + R[2, 1]) / s
+        z = 0.25 * s
+    q = np.array([x, y, z, w], dtype=np.float32)
+    q /= float(np.linalg.norm(q))
+    if q[3] < 0.0:
+        q = -q
+    return q
+
+
+def _delta_T_to_7d(delta_T: NDArray[np.float32]) -> NDArray[np.float32]:
+    """Extract [dx, dy, dz, qx, qy, qz, qw] from a 4×4 SE(3) delta transform."""
+    translation = delta_T[:3, 3].astype(np.float32)
+    quat = _rotmat_to_quat_xyzw(delta_T[:3, :3].astype(np.float64))
+    return np.concatenate([translation, quat])
+
+
+def _get_base_pose_xy_yaw(sim: Any) -> NDArray[np.float32] | None:
+    """Return [x, y, yaw] of the TidyBot mobile base from MuJoCo qpos.
+
+    Groups joints by name prefix and requires a complete {prefix}_joint_x / _joint_y /
+    _joint_th triplet from the same prefix. Returns None for fixed-base robots (e.g. the
+    desk-mounted FR3) that lack such a triplet, so callers can skip the base-relative
+    action datasets.
+    """
+    import mujoco  # pylint: disable=import-outside-toplevel  # type: ignore[import]
+
+    mj_model = sim.model.mj_model
+    qpos = sim.data.mj_data.qpos
+
+    # Collect suffix → (prefix, qpos_addr) for the three base suffixes.
+    suffixes = {"_joint_x", "_joint_y", "_joint_th"}
+    found: dict[str, tuple[str, int]] = {}  # suffix → (prefix, addr)
+    for i in range(mj_model.njnt):
+        name = mujoco.mj_id2name(  # pylint: disable=no-member
+            mj_model, mujoco.mjtObj.mjOBJ_JOINT, i  # pylint: disable=no-member
+        )
+        if name is None:
+            continue
+        for suffix in suffixes:
+            if name.endswith(suffix):
+                prefix = name[: -len(suffix)]
+                found[suffix] = (prefix, int(mj_model.jnt_qposadr[i]))
+                break
+
+    if len(found) != 3:
+        return None
+    prefixes = {p for p, _ in found.values()}
+    if len(prefixes) != 1:
+        raise RuntimeError(
+            f"Base joints come from different prefixes {prefixes}; "
+            "expected all three from the same robot."
+        )
+    return np.array(
+        [
+            qpos[found["_joint_x"][1]],
+            qpos[found["_joint_y"][1]],
+            qpos[found["_joint_th"][1]],
+        ],
+        dtype=np.float32,
+    )
+
+
+def _se2_relative_delta(
+    before: NDArray[np.float32], after: NDArray[np.float32]
+) -> NDArray[np.float32]:
+    """Relative SE(2) delta expressed in the *before* frame.
+
+    Returns [dx, dy, dyaw] where dx/dy are in the before base frame and dyaw is wrapped
+    to (-pi, pi].
+    """
+    x1, y1, yaw1 = float(before[0]), float(before[1]), float(before[2])
+    x2, y2, yaw2 = float(after[0]), float(after[1]), float(after[2])
+    c, s = np.cos(yaw1), np.sin(yaw1)
+    dx_world, dy_world = x2 - x1, y2 - y1
+    dx = c * dx_world + s * dy_world
+    dy = -s * dx_world + c * dy_world
+    dyaw = (yaw2 - yaw1 + np.pi) % (2.0 * np.pi) - np.pi
+    return np.array([dx, dy, dyaw], dtype=np.float32)
+
+
+def _create_canonical_datasets(
+    grp: h5py.Group,
+    obs_grp: h5py.Group,
+    canonical_pts: dict[str, tuple[int, NDArray[np.float32]]],
+    num_frames: int,
+    ee_frame_name: str,
+    ee_frame_type: Literal["site", "body"],
+    has_base: bool,
+) -> None:
+    """Pre-allocate HDF5 datasets for canonical point cloud mode.
+
+    The base-relative datasets (actions_delta_base_3d, actions_delta_ee_base_10d) are
+    only created when *has_base* is True; fixed-base robots omit them entirely.
+    """
+    str_dt = h5py.string_dtype()
+
+    # canonical_pointcloud/<hdf5_key>/xyz  +  geom_name attr on every group
+    canon_grp = grp.require_group("canonical_pointcloud")
+    for name, (_, pts) in canonical_pts.items():
+        key = _hdf5_key(name)
+        geom_grp = canon_grp.require_group(key)
+        geom_grp.attrs["geom_name"] = name
+        geom_grp.create_dataset("xyz", data=pts, dtype=np.float32, compression="gzip")
+
+    # Demo-level ordered mapping: original names ↔ HDF5 keys
+    orig_names = list(canonical_pts.keys())
+    hdf5_keys = [_hdf5_key(n) for n in orig_names]
+    canon_grp.create_dataset("geom_names", data=orig_names, dtype=str_dt)
+    canon_grp.create_dataset("geom_hdf5_keys", data=hdf5_keys, dtype=str_dt)
+
+    # geom_transforms/<hdf5_key>  +  geom_name attr on every dataset
+    gt_grp = grp.require_group("geom_transforms")
+    for name in canonical_pts:
+        key = _hdf5_key(name)
+        ds = gt_grp.create_dataset(
+            key,
+            shape=(num_frames, 4, 4),
+            dtype=np.float32,
+            compression="gzip",
+        )
+        ds.attrs["geom_name"] = name
+
+    obs_grp.create_dataset(
+        "ee_pose",
+        shape=(num_frames, 4, 4),
+        dtype=np.float32,
+        compression="gzip",
+    )
+    grp.create_dataset(
+        "actions_delta_ee_transform",
+        shape=(num_frames, 4, 4),
+        dtype=np.float32,
+        compression="gzip",
+    )
+    grp.create_dataset(
+        "actions_delta_ee_7d",
+        shape=(num_frames, 7),
+        dtype=np.float32,
+        compression="gzip",
+    )
+    if has_base:
+        grp.create_dataset(
+            "actions_delta_base_3d",
+            shape=(num_frames, 3),
+            dtype=np.float32,
+            compression="gzip",
+        )
+        grp.create_dataset(
+            "actions_delta_ee_base_10d",
+            shape=(num_frames, 10),
+            dtype=np.float32,
+            compression="gzip",
+        )
+    grp.create_dataset(
+        "actions_delta_ee_euler_gripper_7d",
+        shape=(num_frames, 7),
+        dtype=np.float32,
+        compression="gzip",
+    )
+    grp.create_dataset(
+        "actions_delta_ee_world_euler_gripper_7d",
+        shape=(num_frames, 7),
+        dtype=np.float32,
+        compression="gzip",
+    )
+
+    # Schema / convention attrs so the file is self-documenting
+    grp.attrs["pointcloud_schema"] = "canonical_pointcloud_v1"
+    grp.attrs["delta_ee_convention"] = (
+        "actions_delta_ee_transform[t] = "
+        "inv(ee_pose_before_action[t]) @ ee_pose_after_action[t]"
+    )
+    grp.attrs["delta_ee_7d_convention"] = (
+        "actions_delta_ee_7d[t] = [dx, dy, dz, qx, qy, qz, qw] "
+        "derived from actions_delta_ee_transform[t]; qw >= 0"
+    )
+    grp.attrs["delta_ee_7d_quaternion_order"] = "xyzw"
+    if has_base:
+        grp.attrs["delta_base_3d_convention"] = (
+            "actions_delta_base_3d[t] = [dx, dy, dyaw] relative SE(2) delta "
+            "from base_pose_before_action[t] to base_pose_after_action[t]; "
+            "dx/dy in the before-action base frame; dyaw wrapped to (-pi, pi]"
+        )
+        grp.attrs["delta_ee_base_10d_convention"] = (
+            "actions_delta_ee_base_10d[t] = "
+            "concat(actions_delta_ee_7d[t], actions_delta_base_3d[t])"
+        )
+    grp.attrs["delta_ee_euler_gripper_7d_convention"] = (
+        "actions_delta_ee_euler_gripper_7d[t] = [dx, dy, dz, rx, ry, rz, gripper]; "
+        "[dx, dy, dz] is the translation of actions_delta_ee_transform[t]; "
+        "[rx, ry, rz] are intrinsic XYZ Euler angles (radians) of its rotation; "
+        "gripper = 1 - 2 * action[t][-1], so open=1 and close=-1"
+    )
+    grp.attrs["delta_ee_euler_order"] = "XYZ_intrinsic"
+    grp.attrs["delta_ee_world_euler_gripper_7d_convention"] = (
+        "actions_delta_ee_world_euler_gripper_7d[t] = "
+        "[dx, dy, dz, rx, ry, rz, gripper] expressed in the world frame; "
+        "[dx, dy, dz] = ee_pos_world_after_action[t] - ee_pos_world_before_action[t]; "
+        "[rx, ry, rz] are intrinsic XYZ Euler angles (radians) of "
+        "R_world_after_action[t] @ R_world_before_action[t].T; "
+        "gripper = 1 - 2 * action[t][-1], so open=1 and close=-1"
+    )
+    grp.attrs["ee_frame_name"] = ee_frame_name
+    grp.attrs["ee_frame_type"] = ee_frame_type
+
+
+def _pad_or_subsample_mesh(
+    xyz: NDArray[np.float32],
+    geom_indices: NDArray[np.int32],
+    max_pts: int,
+    rng: np.random.Generator,
+) -> tuple[NDArray[np.float32], NDArray[np.int32]]:
+    """Return mesh arrays with exactly *max_pts* rows.
+
+    If *n < max_pts*:  pad xyz with NaN, geom_indices with -1. If *n > max_pts*:
+    randomly sub-sample without replacement.
+    """
+    n = len(xyz)
+    if n == max_pts:
+        return xyz, geom_indices
+    if n > max_pts:
+        idx = rng.choice(n, max_pts, replace=False)
+        return xyz[idx], geom_indices[idx]
+    pad = max_pts - n
+    xyz_pad = np.full((pad, 3), np.nan, dtype=np.float32)
+    geom_pad = np.full((pad,), -1, dtype=np.int32)
+    return (
+        np.concatenate([xyz, xyz_pad], axis=0),
+        np.concatenate([geom_indices, geom_pad], axis=0),
+    )
+
+
 def _pad_or_subsample(
     xyz: NDArray[np.float32],
     rgb: NDArray[np.uint8],
@@ -182,8 +529,8 @@ def _pad_or_subsample(
 ) -> tuple[NDArray[np.float32], NDArray[np.uint8]]:
     """Return arrays with exactly *max_pts* rows.
 
-    If *n < max_pts*:  pad xyz with NaN, rgb with 0.
-    If *n > max_pts*:  randomly sub-sample without replacement.
+    If *n < max_pts*:  pad xyz with NaN, rgb with 0. If *n > max_pts*:  randomly sub-
+    sample without replacement.
     """
     n = len(xyz)
     if n == max_pts:
@@ -240,47 +587,79 @@ def _capture_step(
     min_depth: float,
     max_pts: int | None,
     rng: np.random.Generator,
-) -> dict[str, Any]:
-    """Capture RGB images and point clouds for all cameras at the current state.
+    *,
+    store_camera: bool = True,
+    store_mesh: bool = False,
+    store_track: bool = False,
+    num_points_per_geom: int = 500,
+    local_points_dict: dict[str, tuple[int, NDArray[np.float32]]] | None = None,
+) -> tuple[dict[str, Any], dict[str, tuple[int, NDArray[np.float32]]] | None]:
+    """Capture RGB images and/or point clouds at the current env state.
 
-    Returns a dict with keys:
+    Returns ``(result, local_points_dict)`` where ``local_points_dict`` must
+    be passed back on the next call when ``store_track=True``.
+
+    Camera mode (``store_camera=True``):
     - ``"{cam}_rgb"``    → (H, W, 3) uint8
     - ``"{cam}_pc_xyz"`` → (N, 3) or (max_pts, 3) float32
     - ``"{cam}_pc_rgb"`` → (N, 3) or (max_pts, 3) uint8
+
+    Mesh mode (``store_mesh=True``):
+    - ``"mesh_pc_xyz"``          → (M, 3) or (max_pts, 3) float32
+    - ``"mesh_pc_geom_indices"`` → (M,)  or (max_pts,)  int32
+
+    Track mode (``store_track=True``):
+    - ``"track_pc_xyz"``          → (M, 3) or (max_pts, 3) float32
+    - ``"track_pc_geom_indices"`` → (M,)  or (max_pts,)  int32
     """
     sim = get_sim_from_env(env)
-
-    # Generate merged point cloud (all cameras in one call for efficiency)
-    full_pc: PointCloud = generate_scene_point_cloud(
-        sim,
-        camera_names=camera_names,
-        width=width,
-        height=height,
-        max_depth=max_depth,
-        min_depth=min_depth,
-    )
-
     result: dict[str, Any] = {}
-    for cam_name in camera_names:
-        # RGB image
-        rgb_img = _render_rgb(env, cam_name, width, height)
-        result[f"{cam_name}_rgb"] = rgb_img
 
-        # Per-camera point cloud
-        if cam_name in full_pc.camera_names:
-            cam_pc = full_pc.filter_by_camera(cam_name)
-            xyz, rgb = cam_pc.xyz, cam_pc.rgb
-        else:
-            xyz = np.empty((0, 3), dtype=np.float32)
-            rgb = np.empty((0, 3), dtype=np.uint8)
+    if store_camera:
+        scene_pc: PointCloud = generate_scene_point_cloud(
+            sim,
+            camera_names=camera_names,
+            width=width,
+            height=height,
+            max_depth=max_depth,
+            min_depth=min_depth,
+        )
+        for cam_name in camera_names:
+            result[f"{cam_name}_rgb"] = _render_rgb(env, cam_name, width, height)
+            if cam_name in scene_pc.camera_names:
+                cam_pc = scene_pc.filter_by_camera(cam_name)
+                xyz, rgb = cam_pc.xyz, cam_pc.rgb
+            else:
+                xyz = np.empty((0, 3), dtype=np.float32)
+                rgb = np.empty((0, 3), dtype=np.uint8)
+            if max_pts is not None:
+                xyz, rgb = _pad_or_subsample(xyz, rgb, max_pts, rng)
+            result[f"{cam_name}_pc_xyz"] = xyz
+            result[f"{cam_name}_pc_rgb"] = rgb
 
+    if store_mesh:
+        mesh_pc: MeshPointCloud = generate_full_point_cloud(
+            sim, num_points_per_geom=num_points_per_geom
+        )
+        xyz_m = mesh_pc.xyz
+        idx_m = mesh_pc.geom_indices
         if max_pts is not None:
-            xyz, rgb = _pad_or_subsample(xyz, rgb, max_pts, rng)
+            xyz_m, idx_m = _pad_or_subsample_mesh(xyz_m, idx_m, max_pts, rng)
+        result["mesh_pc_xyz"] = xyz_m
+        result["mesh_pc_geom_indices"] = idx_m
 
-        result[f"{cam_name}_pc_xyz"] = xyz
-        result[f"{cam_name}_pc_rgb"] = rgb
+    if store_track:
+        track_pc, local_points_dict = generate_track_point_cloud(
+            sim, local_points_dict, num_points_per_geom=num_points_per_geom
+        )
+        xyz_t = track_pc.xyz
+        idx_t = track_pc.geom_indices
+        if max_pts is not None:
+            xyz_t, idx_t = _pad_or_subsample_mesh(xyz_t, idx_t, max_pts, rng)
+        result["track_pc_xyz"] = xyz_t
+        result["track_pc_geom_indices"] = idx_t
 
-    return result
+    return result, local_points_dict
 
 
 # ---------------------------------------------------------------------------
@@ -296,6 +675,10 @@ def _create_datasets(
     actions: list[Any],
     camera_names: list[str],
     num_frames: int,
+    *,
+    store_camera: bool = True,
+    store_mesh: bool = False,
+    store_track: bool = False,
 ) -> None:
     """Pre-allocate HDF5 datasets for one demo group."""
     act_arr = np.array(actions, dtype=np.float32)
@@ -315,28 +698,59 @@ def _create_datasets(
         compression="gzip",
     )
 
-    for cam_name in camera_names:
-        rgb = first_step[f"{cam_name}_rgb"]
-        obs_grp.create_dataset(
-            f"{cam_name}_rgb",
-            shape=(num_frames, *rgb.shape),
-            dtype=np.uint8,
-            compression="gzip",
-        )
+    if store_camera:
+        for cam_name in camera_names:
+            rgb = first_step[f"{cam_name}_rgb"]
+            obs_grp.create_dataset(
+                f"{cam_name}_rgb",
+                shape=(num_frames, *rgb.shape),
+                dtype=np.uint8,
+                compression="gzip",
+            )
+            xyz = first_step[f"{cam_name}_pc_xyz"]
+            obs_grp.create_dataset(
+                f"{cam_name}_pc_xyz",
+                shape=(num_frames, *xyz.shape),
+                dtype=np.float32,
+                compression="gzip",
+            )
+            pc_rgb = first_step[f"{cam_name}_pc_rgb"]
+            obs_grp.create_dataset(
+                f"{cam_name}_pc_rgb",
+                shape=(num_frames, *pc_rgb.shape),
+                dtype=np.uint8,
+                compression="gzip",
+            )
 
-        xyz = first_step[f"{cam_name}_pc_xyz"]
+    if store_mesh:
+        mesh_xyz = first_step["mesh_pc_xyz"]
         obs_grp.create_dataset(
-            f"{cam_name}_pc_xyz",
-            shape=(num_frames, *xyz.shape),
+            "mesh_pc_xyz",
+            shape=(num_frames, *mesh_xyz.shape),
             dtype=np.float32,
             compression="gzip",
         )
-
-        pc_rgb = first_step[f"{cam_name}_pc_rgb"]
+        mesh_idx = first_step["mesh_pc_geom_indices"]
         obs_grp.create_dataset(
-            f"{cam_name}_pc_rgb",
-            shape=(num_frames, *pc_rgb.shape),
-            dtype=np.uint8,
+            "mesh_pc_geom_indices",
+            shape=(num_frames, *mesh_idx.shape),
+            dtype=np.int32,
+            compression="gzip",
+        )
+
+    if store_track:
+        track_xyz = first_step["track_pc_xyz"]
+        obs_grp.create_dataset(
+            "track_pc_xyz",
+            shape=(num_frames, *track_xyz.shape),
+            dtype=np.float32,
+            compression="gzip",
+        )
+        track_idx = first_step["track_pc_geom_indices"]
+        obs_grp.create_dataset(
+            "track_pc_geom_indices",
+            shape=(num_frames, *track_idx.shape),
+            dtype=np.int32,
             compression="gzip",
         )
 
@@ -351,25 +765,42 @@ def _write_step(
     camera_names: list[str],
     cam_sizes: dict[str, int],
     rng: np.random.Generator,
+    *,
+    store_camera: bool = True,
+    store_mesh: bool = False,
+    mesh_pc_size: int = 0,
+    store_track: bool = False,
 ) -> None:
     """Write one step's data into pre-allocated HDF5 datasets.
 
-    Point cloud arrays are padded or sub-sampled to the fixed per-camera sizes
-    established at step 0, so every row has a consistent shape.
+    Point cloud arrays are padded or sub-sampled to the fixed sizes established at step
+    0, so every row has a consistent shape.
     """
     obs_grp["state"][step_idx] = obs.astype(np.float32)
     grp["actions"][step_idx] = np.asarray(action, dtype=np.float32)
 
-    for cam_name in camera_names:
-        obs_grp[f"{cam_name}_rgb"][step_idx] = capture[f"{cam_name}_rgb"]
+    if store_camera:
+        for cam_name in camera_names:
+            obs_grp[f"{cam_name}_rgb"][step_idx] = capture[f"{cam_name}_rgb"]
+            xyz = capture[f"{cam_name}_pc_xyz"]
+            rgb = capture[f"{cam_name}_pc_rgb"]
+            size = cam_sizes[cam_name]
+            if len(xyz) != size:
+                xyz, rgb = _pad_or_subsample(xyz, rgb, size, rng)
+            obs_grp[f"{cam_name}_pc_xyz"][step_idx] = xyz
+            obs_grp[f"{cam_name}_pc_rgb"][step_idx] = rgb
 
-        xyz = capture[f"{cam_name}_pc_xyz"]
-        rgb = capture[f"{cam_name}_pc_rgb"]
-        size = cam_sizes[cam_name]
-        if len(xyz) != size:
-            xyz, rgb = _pad_or_subsample(xyz, rgb, size, rng)
-        obs_grp[f"{cam_name}_pc_xyz"][step_idx] = xyz
-        obs_grp[f"{cam_name}_pc_rgb"][step_idx] = rgb
+    if store_mesh:
+        xyz_m = capture["mesh_pc_xyz"]
+        idx_m = capture["mesh_pc_geom_indices"]
+        if len(xyz_m) != mesh_pc_size:
+            xyz_m, idx_m = _pad_or_subsample_mesh(xyz_m, idx_m, mesh_pc_size, rng)
+        obs_grp["mesh_pc_xyz"][step_idx] = xyz_m
+        obs_grp["mesh_pc_geom_indices"][step_idx] = idx_m
+
+    if store_track:
+        obs_grp["track_pc_xyz"][step_idx] = capture["track_pc_xyz"]
+        obs_grp["track_pc_geom_indices"][step_idx] = capture["track_pc_geom_indices"]
 
 
 # ---------------------------------------------------------------------------
@@ -389,6 +820,13 @@ def _process_demo(
     min_depth: float,
     max_pts: int | None,
     rng: np.random.Generator,
+    *,
+    store_camera: bool = True,
+    store_mesh: bool = False,
+    store_track: bool = False,
+    store_canonical: bool = False,
+    ee_site: str | None = None,
+    num_points_per_geom: int = 500,
 ) -> tuple[gymnasium.Env, list[str], int]:
     """Replay one demo and write it to HDF5.
 
@@ -412,8 +850,8 @@ def _process_demo(
     # Reset
     obs_np, _ = env.reset(seed=seed)
 
-    # Resolve camera names on first use
-    if camera_names is None:
+    # Resolve camera names (skipped when camera-only data is not needed)
+    if store_camera and camera_names is None:
         sim = get_sim_from_env(env)
         import mujoco  # pylint: disable=import-outside-toplevel  # type: ignore[import]
 
@@ -426,6 +864,29 @@ def _process_demo(
             if cam_name is not None:
                 camera_names.append(cam_name)
         print(f"  Auto-detected cameras: {camera_names}")
+    elif not store_camera:
+        camera_names = camera_names or []
+    assert camera_names is not None
+
+    # Canonical setup: sample fixed local-frame points and locate the EE frame
+    # immediately after reset so geometry is in its initial pose.
+    canonical_pts: dict[str, tuple[int, NDArray[np.float32]]] = {}
+    ee_frame_name: str | None = None
+    ee_frame_type: Literal["site", "body"] = "site"
+    has_base = False
+    if store_canonical:
+        sim = get_sim_from_env(env)
+        ee_frame_name, ee_frame_type = find_ee_frame(sim, ee_site)
+        canonical_pts = sample_canonical_points(
+            sim, num_points_per_geom=num_points_per_geom
+        )
+        # Fixed-base robots (e.g. desk-mounted FR3) lack a mobile base, so the
+        # base-relative action datasets are skipped for them.
+        has_base = _get_base_pose_xy_yaw(sim) is not None
+        print(
+            f"  Canonical: {len(canonical_pts)} geoms, "
+            f"EE {ee_frame_type}='{ee_frame_name}', has_base={has_base}"
+        )
 
     num_frames = len(actions)
     grp_name = f"demo_{demo_idx}"
@@ -434,28 +895,118 @@ def _process_demo(
     grp.attrs["seed"] = seed
     obs_grp = grp.require_group("obs")
 
-    # Capture step 0 to establish per-camera point-cloud sizes for the whole
-    # demo.  The number of valid depth pixels fluctuates slightly each step,
-    # so we pin each camera to the count from step 0 (or --max-pts when set)
-    # and pad / sub-sample every subsequent step to match.
-    capture0 = _capture_step(
-        env, camera_names, width, height, max_depth, min_depth, max_pts, rng
+    # Capture step 0 to pin array sizes for the rest of the demo.
+    # local_points_dict starts as None; generate_track_point_cloud populates it
+    # on the first call so the same surface points are re-used every step.
+    local_points_dict: dict[str, tuple[int, NDArray[np.float32]]] | None = None
+    capture0, local_points_dict = _capture_step(
+        env,
+        camera_names,
+        width,
+        height,
+        max_depth,
+        min_depth,
+        max_pts,
+        rng,
+        store_camera=store_camera,
+        store_mesh=store_mesh,
+        store_track=store_track,
+        num_points_per_geom=num_points_per_geom,
+        local_points_dict=local_points_dict,
     )
-    cam_sizes: dict[str, int] = {
-        cam: len(capture0[f"{cam}_pc_xyz"]) for cam in camera_names
-    }
-    _create_datasets(grp, obs_grp, capture0, obs_np, actions, camera_names, num_frames)
+    cam_sizes: dict[str, int] = (
+        {cam: len(capture0[f"{cam}_pc_xyz"]) for cam in camera_names}
+        if store_camera
+        else {}
+    )
+    mesh_pc_size: int = len(capture0["mesh_pc_xyz"]) if store_mesh else 0
+    _create_datasets(
+        grp,
+        obs_grp,
+        capture0,
+        obs_np,
+        actions,
+        camera_names,
+        num_frames,
+        store_camera=store_camera,
+        store_mesh=store_mesh,
+        store_track=store_track,
+    )
+    if store_canonical:
+        assert ee_frame_name is not None
+        _create_canonical_datasets(
+            grp,
+            obs_grp,
+            canonical_pts,
+            num_frames,
+            ee_frame_name,
+            ee_frame_type,
+            has_base,
+        )
+
     _write_step(
-        grp, obs_grp, 0, obs_np, actions[0], capture0, camera_names, cam_sizes, rng
+        grp,
+        obs_grp,
+        0,
+        obs_np,
+        actions[0],
+        capture0,
+        camera_names,
+        cam_sizes,
+        rng,
+        store_camera=store_camera,
+        store_mesh=store_mesh,
+        mesh_pc_size=mesh_pc_size,
+        store_track=store_track,
     )
+
+    ee_poses_all: list[NDArray[np.float32]] = []
+    base_poses_all: list[NDArray[np.float32]] = []
+    geom_transforms_all: dict[str, list[NDArray[np.float32]]] = (
+        {name: [] for name in canonical_pts} if store_canonical else {}
+    )
+    if store_canonical:
+        assert ee_frame_name is not None
+        ee_poses_all.append(get_ee_pose(sim, ee_frame_name, ee_frame_type))
+        if has_base:
+            base_pose = _get_base_pose_xy_yaw(sim)
+            assert base_pose is not None
+            base_poses_all.append(base_pose)
+        for name, xform in get_geom_world_transforms(
+            sim, {n: gid for n, (gid, _) in canonical_pts.items()}
+        ).items():
+            geom_transforms_all[name].append(xform)
 
     # Step through remaining actions
     for step_idx in range(1, num_frames):
         obs_np, _reward, _term, _trunc, _ = env.step(actions[step_idx - 1])
 
-        # Capture AFTER the step that produced this obs
-        capture = _capture_step(
-            env, camera_names, width, height, max_depth, min_depth, max_pts, rng
+        if store_canonical:
+            assert ee_frame_name is not None
+            ee_poses_all.append(get_ee_pose(sim, ee_frame_name, ee_frame_type))
+            if has_base:
+                base_pose = _get_base_pose_xy_yaw(sim)
+                assert base_pose is not None
+                base_poses_all.append(base_pose)
+            for name, xform in get_geom_world_transforms(
+                sim, {n: gid for n, (gid, _) in canonical_pts.items()}
+            ).items():
+                geom_transforms_all[name].append(xform)
+
+        capture, local_points_dict = _capture_step(
+            env,
+            camera_names,
+            width,
+            height,
+            max_depth,
+            min_depth,
+            max_pts,
+            rng,
+            store_camera=store_camera,
+            store_mesh=store_mesh,
+            store_track=store_track,
+            num_points_per_geom=num_points_per_geom,
+            local_points_dict=local_points_dict,
         )
         _write_step(
             grp,
@@ -467,11 +1018,89 @@ def _process_demo(
             camera_names,
             cam_sizes,
             rng,
+            store_camera=store_camera,
+            store_mesh=store_mesh,
+            mesh_pc_size=mesh_pc_size,
+            store_track=store_track,
         )
 
-    # Final step: execute last action to get terminal observation
+    # Final step: execute last action to get terminal observation and EE pose.
     obs_np, _reward, _term, _trunc, _ = env.step(actions[-1])
-    # (terminal obs is not stored; dataset length == len(actions))
+    # terminal obs is not stored; dataset length == len(actions)
+
+    # Capture terminal EE pose and base pose (after actions[-1]) for last delta.
+    if store_canonical:
+        assert ee_frame_name is not None
+        ee_poses_all.append(get_ee_pose(sim, ee_frame_name, ee_frame_type))
+        if has_base:
+            base_pose = _get_base_pose_xy_yaw(sim)
+            assert base_pose is not None
+            base_poses_all.append(base_pose)
+
+    # Write canonical data in one pass after all steps are collected.
+    if store_canonical and ee_poses_all:
+        assert (
+            len(ee_poses_all) == num_frames + 1
+        ), f"Expected {num_frames + 1} EE poses, got {len(ee_poses_all)}"
+        if has_base:
+            assert (
+                len(base_poses_all) == num_frames + 1
+            ), f"Expected {num_frames + 1} base poses, got {len(base_poses_all)}"
+
+        ee_arr = np.stack(ee_poses_all)  # (num_frames + 1, 4, 4)
+        # delta[t] = inv(ee_before_action[t]) @ ee_after_action[t]
+        delta_arr = np.stack(
+            [_se3_inv(ee_arr[t]) @ ee_arr[t + 1] for t in range(num_frames)]
+        ).astype(np.float32)
+
+        ee_7d = np.stack(
+            [_delta_T_to_7d(delta_arr[t]) for t in range(num_frames)]
+        )  # (T, 7)
+
+        # Translation + intrinsic XYZ Euler delta with the flipped/scaled gripper.
+        # The gripper is the last action dimension for every robot (TidyBot: index
+        # 10 of 11; FR3: index 7 of 8).
+        euler = Rotation.from_matrix(delta_arr[:, :3, :3]).as_euler("XYZ")
+        gripper_raw = np.asarray(actions, dtype=np.float32)[:num_frames, -1]
+        gripper = 1.0 - 2.0 * gripper_raw  # open (0) -> 1, close (1) -> -1
+        euler_gripper_7d = np.concatenate(
+            [delta_arr[:, :3, 3], euler.astype(np.float32), gripper[:, None]],
+            axis=1,
+        ).astype(np.float32)
+
+        # Same fields expressed in the world frame: world translation is the raw
+        # change in EE position; world rotation delta is R_after @ R_before.T.
+        before = ee_arr[:num_frames]
+        after = ee_arr[1 : num_frames + 1]
+        world_trans = after[:, :3, 3] - before[:, :3, 3]
+        world_rot = after[:, :3, :3] @ before[:, :3, :3].transpose(0, 2, 1)
+        world_euler = Rotation.from_matrix(world_rot).as_euler("XYZ")
+        world_euler_gripper_7d = np.concatenate(
+            [world_trans, world_euler.astype(np.float32), gripper[:, None]],
+            axis=1,
+        ).astype(np.float32)
+
+        obs_grp["ee_pose"][:] = ee_arr[:num_frames]
+        grp["actions_delta_ee_transform"][:] = delta_arr
+        grp["actions_delta_ee_7d"][:] = ee_7d
+        grp["actions_delta_ee_euler_gripper_7d"][:] = euler_gripper_7d
+        grp["actions_delta_ee_world_euler_gripper_7d"][:] = world_euler_gripper_7d
+
+        if has_base:
+            base_3d = np.stack(
+                [
+                    _se2_relative_delta(base_poses_all[t], base_poses_all[t + 1])
+                    for t in range(num_frames)
+                ]
+            )  # (T, 3)
+            grp["actions_delta_base_3d"][:] = base_3d
+            grp["actions_delta_ee_base_10d"][:] = np.concatenate(
+                [ee_7d, base_3d], axis=1
+            )
+
+        gt_grp = grp["geom_transforms"]
+        for name, xforms in geom_transforms_all.items():
+            gt_grp[_hdf5_key(name)][:] = np.stack(xforms).astype(np.float32)
 
     print(f"  demo_{demo_idx}: {num_frames} frames, seed={seed}")
     return env, camera_names, num_frames
@@ -485,8 +1114,24 @@ def main() -> None:
     if args.max_demos is not None:
         demo_files = demo_files[: args.max_demos]
 
+    store_camera = args.camerapointcloud
+    store_mesh = args.completepointcloud
+    store_canonical = args.canonicalpointcloud
+    store_track = args.trackpointcloud
+
+    parts = (
+        (["camera"] if store_camera else [])
+        + (["mesh"] if store_mesh else [])
+        + (["canonical"] if store_canonical else [])
+        + (["track"] if store_track else [])
+    )
+    mode_label = " + ".join(parts) if parts else "none"
+    if store_track:
+        mode_label += " + track"
+    if store_canonical:
+        mode_label += " + canonical"
     print(f"Found {len(demo_files)} demo(s) in {args.demo_dir}")
-    print(f"Output: {args.output}")
+    print(f"Output: {args.output}  |  mode: {mode_label}")
 
     rng = np.random.default_rng(0)
 
@@ -516,6 +1161,12 @@ def main() -> None:
                     min_depth=args.min_depth,
                     max_pts=args.max_pts,
                     rng=rng,
+                    store_camera=store_camera,
+                    store_mesh=store_mesh,
+                    store_track=store_track,
+                    store_canonical=store_canonical,
+                    ee_site=args.ee_site,
+                    num_points_per_geom=args.num_points_per_geom,
                 )
                 total_frames += nf
             except Exception as exc:  # pylint: disable=broad-except

@@ -57,8 +57,13 @@ def test_base_table3d_env(env):  # pylint: disable=redefined-outer-name
     #     p.stepSimulation(env.unwrapped._object_centric_env.physics_client_id)
 
 
-def test_pick_place_after_moving(env) -> None:  # pylint: disable=redefined-outer-name
-    """Test moving in front of a block, picking it up, and placing it."""
+def test_goal_reached_after_pick(env) -> None:  # pylint: disable=redefined-outer-name
+    """Test moving in front of a block, picking it up, and lifting it clear of the
+    table.
+
+    The goal should be reached once the grasped cube is lifted above the table by more
+    than the configured threshold.
+    """
     assert isinstance(env.observation_space, ObjectCentricBoxSpace)
     config = (
         env.unwrapped._object_centric_env.config  # pylint: disable=protected-access
@@ -177,14 +182,20 @@ def test_pick_place_after_moving(env) -> None:  # pylint: disable=redefined-oute
     # The cube should now be grasped
     assert obs.grasped_object == "cube1"
 
-    # Step 4: Move up to lift the cube
+    # The goal should not yet be reached: the cube is grasped but still resting
+    # on the table, well within the goal height threshold.
+    assert not terminated
+
+    # Step 4: Move up to lift the cube well above the goal height threshold.
     sim.set_state(obs)
     current_end_effector_pose = sim.robot.arm.get_end_effector_pose()
     lifted_pose = Pose(
         (
             current_end_effector_pose.position[0],
             current_end_effector_pose.position[1],
-            current_end_effector_pose.position[2] + 0.1,
+            current_end_effector_pose.position[2]
+            + config.goal_height_above_table
+            + 0.1,
         ),
         current_end_effector_pose.orientation,
     )
@@ -219,73 +230,13 @@ def test_pick_place_after_moving(env) -> None:  # pylint: disable=redefined-oute
     # Verify cube is still grasped after lifting
     assert obs.grasped_object == "cube1"
 
-    # Step 5: Place it back down
-    sim.set_state(obs)
-    current_end_effector_pose = sim.robot.arm.get_end_effector_pose()
-    placement_pose = Pose(
-        (
-            current_end_effector_pose.position[0] + 0.1,
-            current_end_effector_pose.position[1],
-            obs.get_cuboid_pose("table").position[2]
-            + config.table_half_extents[2] / 2
-            + obs.get_cuboid_half_extents("cube1")[2],
-        ),
-        current_end_effector_pose.orientation,
+    # The goal is reached once the grasped cube is lifted above the table by
+    # more than the configured threshold.
+    object_centric_env = (
+        env.unwrapped._object_centric_env  # pylint: disable=protected-access
     )
-
-    joint_plan = smoothly_follow_end_effector_path(
-        sim.robot.arm,
-        [current_end_effector_pose, placement_pose],
-        sim.robot.arm.get_joint_positions(),
-        collision_ids=set(),
-        joint_distance_fn=joint_distance_fn,
-        max_smoothing_iters_per_step=max_candidate_plans,
-    )
-
-    if joint_plan is not None:
-        joint_plan = remap_joint_position_plan_to_constant_distance(
-            joint_plan, sim.robot.arm, max_distance=config.max_action_mag / 2
-        )
-
-        for target_joints in joint_plan[1:]:
-            delta = np.subtract(target_joints[:7], obs.joint_positions)
-            delta_lst = [wrap_angle(a) for a in delta]
-            action_lst = [0.0] * 3 + delta_lst + [0.0]
-            action = np.array(action_lst, dtype=np.float32)
-            vec_obs, reward, terminated, truncated, _ = env.step(action)
-            # Collect trajectory data
-            traj_observations.append(vec_obs.copy())
-            traj_actions.append(action.copy())
-            traj_rewards.append(float(reward))
-            ep_terminated = ep_terminated or terminated
-            ep_truncated = ep_truncated or truncated
-            oc_obs = env.observation_space.devectorize(vec_obs)
-            obs = Table3DObjectCentricState(oc_obs.data, oc_obs.type_features)
-
-    # Debug: Check if cube is close to table
-    sim.set_state(obs)
-    cube_id = sim._cubes["cube1"]  # pylint: disable=protected-access
-    # fmt: off
-    surface_supports = sim._get_surfaces_supporting_object(  # pylint: disable=protected-access
-        cube_id
-    )
-    # fmt: on
-    print(f"Surface supports: {surface_supports}")  # Should not be empty!
-
-    # Step 6: Open the gripper to place the cube
-    for _ in range(5):
-        action = np.array([0.0] * 3 + [0.0] * 7 + [1.0], dtype=np.float32)
-        vec_obs, reward, terminated, truncated, _ = env.step(action)
-        # Collect trajectory data
-        traj_observations.append(vec_obs.copy())
-        traj_actions.append(action.copy())
-        traj_rewards.append(float(reward))
-        ep_terminated = ep_terminated or terminated
-        ep_truncated = ep_truncated or truncated
-        oc_obs = env.observation_space.devectorize(vec_obs)
-        obs = Table3DObjectCentricState(oc_obs.data, oc_obs.type_features)
-
-    assert obs.grasped_object is None, "Object not released"
+    assert terminated
+    assert object_centric_env.goal_reached()
 
     # Save trajectory to pickle file
     if SAVE_TRAJECTORIES and len(traj_actions) > 0:

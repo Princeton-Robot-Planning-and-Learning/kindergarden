@@ -35,9 +35,25 @@ pip install -r https://raw.githubusercontent.com/Princeton-Robot-Planning-and-Le
 ```
 
 Requirements files are provided for each backend: `kinematic2d`, `dynamic2d`,
-`kinematic3d`, `dynamic3d` (under [`requirements/`](requirements/)). The two-step
-form is needed because pip extras can only *add* dependencies, never remove the
-backends already pulled in by the base install.
+`kinematic3d`, `kinematic3d_v2`, `dynamic3d` (under [`requirements/`](requirements/)).
+The two-step form is needed because pip extras can only *add* dependencies, never remove
+the backends already pulled in by the base install.
+
+#### The prpl_kinematics backend
+
+The `kinematic3d_v2` environments — currently `VegaMotion3D`, which uses the Dexmate Vega
+— are built on [prpl_kinematics](https://github.com/Princeton-Robot-Planning-and-Learning/prpl-mono/tree/main/prpl-kinematics)
+rather than pybullet_helpers. Because those two packages overlap heavily and are both
+large, a base install pulls in neither pair; add prpl_kinematics on top:
+
+```bash
+pip install "kindergarden[prpl-kinematics]"
+```
+
+Environments whose backend is missing are silently skipped at registration, so
+`kinder.make("kinder/VegaMotion3D-v0")` raises a gymnasium lookup error until
+prpl_kinematics is installed. To install the backend *alone*, use
+`requirements/kinematic3d_v2.txt` with the two-step form above.
 
 ### From Source
 
@@ -146,6 +162,7 @@ obs, info = env.reset(seed=42)
 | PrplLab3D | Kinematic3D | `kinder/PrplLab3D-o2-v0` |
 | Table3D | Kinematic3D | `kinder/Table3D-o2-v0` |
 | Transport3D | Kinematic3D | `kinder/Transport3D-o2-v0` |
+| VegaMotion3D | Kinematic3Dv2 | `kinder/VegaMotion3D-v0` |
 | DynObstruction2D | Dynamic2D | `kinder/DynObstruction2D-o2-v0` |
 | DynPushPullHook2D | Dynamic2D | `kinder/DynPushPullHook2D-o1-v0` |
 | DynPushT2D | Dynamic2D | `kinder/DynPushT2D-t1-v0` |

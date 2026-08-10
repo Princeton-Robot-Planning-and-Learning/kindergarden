@@ -22,7 +22,13 @@ def generate_env_list_markdown() -> str:
 
     # Build a list of (class_name, category, example_id) tuples
     # Sort categories in specific order
-    category_order = ["Kinematic2D", "Kinematic3D", "Dynamic2D", "Dynamic3D"]
+    category_order = [
+        "Kinematic2D",
+        "Kinematic3D",
+        "Kinematic3Dv2",
+        "Dynamic2D",
+        "Dynamic3D",
+    ]
     env_list = []
     for category in category_order:
         if category not in env_categories:

@@ -40,6 +40,8 @@ class Obstruction3DEnvConfig(Kinematic3DEnvConfig, metaclass=FinalConfigMeta):
     """Config for Obstruction3DEnv()."""
 
     # Robot.
+    max_action_mag: float = 0.2
+    max_collision_check_step: float = 0.005
     robot_base_home_pose: SE2Pose = SE2Pose(-0.12, 0, 0)
     robot_base_z: float = -0.4
 

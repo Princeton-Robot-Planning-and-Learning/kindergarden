@@ -44,6 +44,10 @@ def test_obstruction3d_env(env):  # pylint: disable=redefined-outer-name
     """Tests for basic methods in obstruction3d env."""
     obs, _ = env.reset(seed=123)
     assert isinstance(obs, np.ndarray)
+    assert np.all(env.action_space.low[:10] == -0.2)
+    assert np.all(env.action_space.high[:10] == 0.2)
+    config = env.unwrapped._object_centric_env.config
+    assert config.max_collision_check_step == 0.005
 
     for _ in range(10):
         act = env.action_space.sample()

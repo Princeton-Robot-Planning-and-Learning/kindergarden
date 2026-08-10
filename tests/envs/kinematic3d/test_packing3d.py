@@ -1,5 +1,7 @@
 """Tests for packing3d.py."""
 
+# pylint: disable=protected-access
+
 from typing import Any, cast
 
 import numpy as np
@@ -17,6 +19,7 @@ from pybullet_helpers.motion_planning import (
 from pybullet_helpers.utils import get_triangle_vertices
 from relational_structs import Object
 from relational_structs.spaces import ObjectCentricBoxSpace
+from scipy.spatial.transform import Rotation
 from shapely.geometry import Polygon
 
 from kinder.envs.kinematic3d.object_types import (
@@ -60,6 +63,147 @@ def test_packing3d_uses_standard_action_magnitude() -> None:
     assert np.all(env.action_space.low[:10] == -0.2)
     assert np.all(env.action_space.high[:10] == 0.2)
     assert env.unwrapped._object_centric_env.config.max_collision_check_step == 0.005
+    env.close()
+
+
+def test_packing3d_rotated_triangle_state_round_trip() -> None:
+    """Triangle state poses round-trip without moving the PyBullet body origin."""
+    env = ObjectCentricPacking3DEnv(
+        num_parts=1,
+        config=Packing3DEnvConfig(part_triangular_prob=0.0),
+        use_gui=False,
+        realistic_bg=False,
+        allow_state_access=True,
+    )
+    obs, _ = env.reset(seed=0)
+    part = obs.get_object_from_name("part0")
+    assert part.type == Kinematic3DTriangleType
+
+    origin_position = (0.18, -0.11, 0.09)
+    orientation = tuple(Rotation.from_euler("z", np.pi / 2).as_quat())
+    for feature, value in zip(
+        ("pose_x", "pose_y", "pose_z"), origin_position, strict=True
+    ):
+        obs.set(part, feature, value)
+    for feature, value in zip(
+        ("pose_qx", "pose_qy", "pose_qz", "pose_qw"),
+        orientation,
+        strict=True,
+    ):
+        obs.set(part, feature, value)
+    obs.set(part, "side_a", 0.12)
+    obs.set(part, "side_b", 0.09)
+    obs.set(part, "depth", 0.02)
+    obs.set(part, "triangle_type", 1.0)
+
+    local_vertices = np.asarray(get_triangle_vertices("right", (0.12, 0.09)))
+    expected_center = np.asarray(origin_position) + Rotation.from_quat(
+        orientation
+    ).apply(np.mean(local_vertices, axis=0))
+    assert np.allclose(obs.get_object_pose("part0").position, expected_center)
+
+    env.set_state(obs)
+    restored = env.get_state()
+    assert obs.allclose(restored)
+    assert restored.get_object_origin_pose("part0").allclose(
+        Pose(origin_position, orientation)
+    )
+    assert restored.get_object_pose("part0").allclose(
+        Pose(tuple(expected_center), orientation)
+    )
+    assert get_pose(
+        env._part_ids["part0"],
+        env.physics_client_id,  # pylint: disable=protected-access
+    ).allclose(Pose(origin_position, orientation))
+    env.close()
+
+
+def test_packing3d_set_state_recreates_geometry() -> None:
+    """Part and rack dimensions in a state determine the recreated bodies."""
+    config = Packing3DEnvConfig(part_triangular_prob=0.5)
+    env = ObjectCentricPacking3DEnv(
+        num_parts=2,
+        config=config,
+        use_gui=False,
+        realistic_bg=False,
+        allow_state_access=True,
+    )
+    obs, _ = env.reset(seed=0)
+    cuboid = obs.get_object_from_name("part0")
+    triangle = obs.get_object_from_name("part1")
+    rack = obs.get_object_from_name("rack")
+    assert cuboid.type == Kinematic3DCuboidType
+    assert triangle.type == Kinematic3DTriangleType
+
+    cuboid_half_extents = (0.035, 0.04, 0.012)
+    for feature, value in zip(
+        ("half_extent_x", "half_extent_y", "half_extent_z"),
+        cuboid_half_extents,
+        strict=True,
+    ):
+        obs.set(cuboid, feature, value)
+    triangle_features = (0.07, 0.09, 0.018, 1.0)
+    for feature, value in zip(
+        ("side_a", "side_b", "depth", "triangle_type"),
+        triangle_features,
+        strict=True,
+    ):
+        obs.set(triangle, feature, value)
+    rack_half_extents = (0.13, 0.18, 0.025)
+    for feature, value in zip(
+        ("half_extent_x", "half_extent_y", "half_extent_z"),
+        rack_half_extents,
+        strict=True,
+    ):
+        obs.set(rack, feature, value)
+
+    env.set_state(obs)
+    restored = env.get_state()
+    assert obs.allclose(restored)
+    assert np.allclose(
+        restored.get_object_half_extents_packing3d("part0")[:3],
+        cuboid_half_extents,
+    )
+    assert np.allclose(
+        restored.get_object_triangle_features("part1"), triangle_features
+    )
+    assert np.allclose(restored.rack_half_extents, rack_half_extents)
+
+    cuboid_id = env._part_ids["part0"]  # pylint: disable=protected-access
+    triangle_id = env._part_ids["part1"]  # pylint: disable=protected-access
+    assert env._part_ids_to_type[cuboid_id] == Kinematic3DCuboidType
+    assert env._part_ids_to_type[triangle_id] == Kinematic3DTriangleType
+    assert cuboid_id not in env._part_ids_to_triangle_features
+    assert np.allclose(
+        env._part_ids_to_triangle_features[triangle_id], triangle_features
+    )
+    aabb_min, aabb_max = p.getAABB(
+        cuboid_id, linkIndex=0, physicsClientId=env.physics_client_id
+    )
+    assert np.allclose(
+        np.asarray(aabb_max) - np.asarray(aabb_min),
+        2 * np.asarray(cuboid_half_extents),
+    )
+
+    reset_obs, _ = env.reset(seed=1)
+    assert np.allclose(reset_obs.rack_half_extents, config.rack_half_extents)
+    env.close()
+
+
+def test_packing3d_reset_raises_when_placement_is_infeasible(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Reset fails explicitly when rejection sampling exhausts its attempts."""
+    monkeypatch.setattr("kinder.envs.kinematic3d.packing3d._MAX_PLACEMENT_ATTEMPTS", 2)
+    env = ObjectCentricPacking3DEnv(
+        num_parts=1,
+        config=Packing3DEnvConfig(rack_half_extents=(1.0, 1.0, 0.02)),
+        use_gui=False,
+        realistic_bg=False,
+        allow_state_access=True,
+    )
+    with pytest.raises(RuntimeError, match="Failed to place part0"):
+        env.reset(seed=0)
     env.close()
 
 
@@ -123,9 +267,6 @@ def test_packing3d_goal_rejects_part_outside_rack_cavity():
     part_x = rack_pose.position[0] - rack_half_extents[0]
     part_y = rack_pose.position[1] - side_b / 2
 
-    # set_state() restores triangle pose fields as raw PyBullet body poses.
-    # Subtracting the centroid here would encode the old get_object_pose()
-    # restoration behavior and place the true triangle footprint outside the rack.
     obs.set(part, "pose_x", part_x)
     obs.set(part, "pose_y", part_y)
     obs.set(part, "pose_z", rack_pose.position[2])

@@ -44,6 +44,7 @@ from kinder.envs.utils import PURPLE
 # Dimensions used by pybullet_helpers' part grasp pegs.
 _PART_PEG_HALF_EXTENTS = (0.01, 0.01, 0.025)
 _OVERLAP_TOLERANCE = 1e-6
+_MAX_PLACEMENT_ATTEMPTS = 100_000
 
 
 @dataclass(frozen=True)
@@ -175,8 +176,8 @@ class Packing3DObjectCentricState(Kinematic3DObjectCentricState):
     Adds convenience methods on top of Kinematic3DObjectCentricState().
     """
 
-    def get_object_pose(self, name: str) -> Pose:
-        """The pose of the object."""
+    def get_object_origin_pose(self, name: str) -> Pose:
+        """Get the pose stored in the state and used as the PyBullet body origin."""
         obj = self.get_object_from_name(name)
         position = (
             self.get(obj, "pose_x"),
@@ -190,20 +191,29 @@ class Packing3DObjectCentricState(Kinematic3DObjectCentricState):
             self.get(obj, "pose_qw"),
         )
 
-        if obj.type == Kinematic3DTriangleType:
-            # For triangle objects, we need to adjust the position to match the center
-            # of the triangular prism, since the pose is defined at the centroid of the
-            # triangle base.
-            side_a, side_b, _, triangle_type = self.get_object_triangle_features(name)
-            vertices = get_triangle_vertices(
-                {0: "equilateral", 1: "right"}[int(triangle_type)],
-                (side_a, side_b),
-            )
-            centroid_x = sum(v[0] for v in vertices) / 3.0 + self.get(obj, "pose_x")
-            centroid_y = sum(v[1] for v in vertices) / 3.0 + self.get(obj, "pose_y")
-            position = (centroid_x, centroid_y, self.get(obj, "pose_z"))
-
         return Pose(position, orientation)
+
+    def get_object_pose(self, name: str) -> Pose:
+        """Get the geometric center pose of an object."""
+        obj = self.get_object_from_name(name)
+        origin_pose = self.get_object_origin_pose(name)
+
+        if obj.type == Kinematic3DTriangleType:
+            side_a, side_b, _, triangle_type = self.get_object_triangle_features(name)
+            vertices = np.asarray(
+                get_triangle_vertices(
+                    {0: "equilateral", 1: "right"}[int(triangle_type)],
+                    (side_a, side_b),
+                )
+            )
+            local_centroid = np.mean(vertices, axis=0)
+            world_centroid_offset = Rotation.from_quat(origin_pose.orientation).apply(
+                local_centroid
+            )
+            position = tuple(np.asarray(origin_pose.position) + world_centroid_offset)
+            return Pose(position, origin_pose.orientation)
+
+        return origin_pose
 
     def get_object_half_extents_packing3d(
         self, name: str
@@ -403,7 +413,6 @@ class ObjectCentricPacking3DEnv(
         )
         set_pose(self.table_id, self.config.table_pose, self.physics_client_id)
 
-        # Rack (created in reset because geometry could be randomized later)
         self._rack_half_extents = self.config.rack_half_extents
         self._rack_id = create_pybullet_hollow_box(
             self.config.rack_rgba,
@@ -411,16 +420,11 @@ class ObjectCentricPacking3DEnv(
             wall_thickness=self.config.rack_wall_thickness,
             physics_client_id=self.physics_client_id,
         )
-        rack_pose = Pose(
-            (
-                self.config.table_pose.position[0],
-                self.config.table_pose.position[1],
-                self.config.table_pose.position[2]
-                + self.config.table_half_extents[2]
-                + self.config.rack_half_extents[2],
-            )
+        set_pose(
+            self._rack_id,
+            self._get_default_rack_pose(),
+            self.physics_client_id,
         )
-        set_pose(self._rack_id, rack_pose, self.physics_client_id)
 
         # Parts
         self._parts: dict[str, Object] = {}
@@ -430,6 +434,67 @@ class ObjectCentricPacking3DEnv(
         self._part_ids_to_triangle_features: dict[
             int, tuple[float, float, float, float]
         ] = {}
+
+    def _get_default_rack_pose(self) -> Pose:
+        return Pose(
+            (
+                self.config.table_pose.position[0],
+                self.config.table_pose.position[1],
+                self.config.table_pose.position[2]
+                + self.config.table_half_extents[2]
+                + self.config.rack_half_extents[2],
+            )
+        )
+
+    def _replace_rack(
+        self, half_extents: tuple[float, float, float], pose: Pose
+    ) -> None:
+        p.removeBody(self._rack_id, physicsClientId=self.physics_client_id)
+        self._rack_half_extents = half_extents
+        self._rack_id = create_pybullet_hollow_box(
+            self.config.rack_rgba,
+            half_extents=half_extents,
+            wall_thickness=self.config.rack_wall_thickness,
+            physics_client_id=self.physics_client_id,
+        )
+        set_pose(self._rack_id, pose, self.physics_client_id)
+
+    def _create_cuboid_part(
+        self, name: str, half_extents: tuple[float, float, float]
+    ) -> int:
+        part_id = create_pybullet_block_with_peg(
+            self.config.part_rgba,
+            half_extents=half_extents,
+            physics_client_id=self.physics_client_id,
+        )
+        self._part_ids[name] = part_id
+        self._part_ids_to_type[part_id] = Kinematic3DCuboidType
+        self._part_id_to_half_extents[part_id] = half_extents
+        return part_id
+
+    def _create_triangle_part(
+        self,
+        name: str,
+        triangle_features: tuple[float, float, float, float],
+    ) -> tuple[int, tuple[float, float, float]]:
+        side_a, side_b, depth, triangle_type = triangle_features
+        part_id = create_pybullet_triangle_with_peg(
+            self.config.part_rgba,
+            triangle_type={0: "equilateral", 1: "right"}[int(triangle_type)],
+            side_lengths=(side_a, side_b),
+            depth=depth,
+            physics_client_id=self.physics_client_id,
+        )
+        half_extents = (
+            max(side_a, side_b) / 2,
+            max(side_a, side_b) / 2,
+            depth / 2,
+        )
+        self._part_ids[name] = part_id
+        self._part_ids_to_type[part_id] = Kinematic3DTriangleType
+        self._part_id_to_half_extents[part_id] = half_extents
+        self._part_ids_to_triangle_features[part_id] = triangle_features
+        return part_id, half_extents
 
     @property
     def state_cls(self) -> TypingType[Kinematic3DObjectCentricState]:
@@ -558,6 +623,11 @@ class ObjectCentricPacking3DEnv(
 
     def _reset_objects(self) -> None:
 
+        self._replace_rack(
+            self.config.rack_half_extents,
+            self._get_default_rack_pose(),
+        )
+
         # Destroy previous parts.
         for old_id in set(self._part_ids.values()):
             if old_id is not None:
@@ -584,50 +654,20 @@ class ObjectCentricPacking3DEnv(
             if part_type == Kinematic3DCuboidType:
                 sampled = self.config.sample_part_half_extents(self.np_random)
                 half_extents = (sampled[0], sampled[1], sampled[2])
-                part_id = create_pybullet_block_with_peg(
-                    self.config.part_rgba,
-                    half_extents=half_extents,
-                    physics_client_id=self.physics_client_id,
-                )
-                self._part_id_to_half_extents[part_id] = half_extents
-                self._part_ids[name] = part_id
-                self._part_ids_to_type[part_id] = Kinematic3DCuboidType
-                self._part_ids_to_triangle_features[part_id] = (
-                    sampled[0],
-                    sampled[1],
-                    sampled[2],
-                    -1,
-                )
+                part_id = self._create_cuboid_part(name, half_extents)
 
-            elif part_type == Kinematic3DTriangleType:
-                side_a, side_b, depth, triangle_type = (
-                    self.config.sample_part_triangle_features(self.np_random)
+            else:
+                assert part_type == Kinematic3DTriangleType
+                triangle_features = self.config.sample_part_triangle_features(
+                    self.np_random
                 )
-                half_extents = (
-                    max(side_a, side_b) / 2,
-                    max(side_a, side_b) / 2,
-                    depth / 2,
-                )
-                part_id = create_pybullet_triangle_with_peg(
-                    self.config.part_rgba,
-                    triangle_type={0: "equilateral", 1: "right"}[int(triangle_type)],
-                    side_lengths=(side_a, side_b),
-                    depth=depth,
-                    physics_client_id=self.physics_client_id,
-                )
-                self._part_id_to_half_extents[part_id] = half_extents
-                self._part_ids[name] = part_id
-                self._part_ids_to_type[part_id] = Kinematic3DTriangleType
-                self._part_ids_to_triangle_features[part_id] = (
-                    side_a,
-                    side_b,
-                    depth,
-                    triangle_type,
+                part_id, half_extents = self._create_triangle_part(
+                    name, triangle_features
                 )
 
             # Place part on table while avoiding collisions with other parts and
             # the rack (we allow parts to start outside the rack)
-            for _ in range(100_000):
+            for _ in range(_MAX_PLACEMENT_ATTEMPTS):
                 # Sample a pose on the table surface.
                 x = self.np_random.uniform(
                     self.config.table_pose.position[0]
@@ -694,57 +734,47 @@ class ObjectCentricPacking3DEnv(
 
                 if not collision_exists:
                     break
+            else:
+                raise RuntimeError(
+                    f"Failed to place {name} without collision after "
+                    f"{_MAX_PLACEMENT_ATTEMPTS} attempts"
+                )
 
     def _set_object_states(self, obs: Kinematic3DObjectCentricState) -> None:
         assert isinstance(obs, Packing3DObjectCentricState)
-        # Update rack (recreate if half extents changed)
-        if self._rack_id is not None:
-            p.removeBody(self._rack_id, physicsClientId=self.physics_client_id)
-        self._rack_half_extents = self.config.rack_half_extents
-        self._rack_id = create_pybullet_hollow_box(
-            PURPLE + (0.8,),
-            half_extents=self._rack_half_extents,
-            wall_thickness=self.config.rack_wall_thickness,
-            physics_client_id=self.physics_client_id,
+
+        self._replace_rack(
+            obs.rack_half_extents,
+            obs.get_object_origin_pose("rack"),
         )
-        if self._rack_id is not None:
-            # Rack pose expected as a cuboid in the state
-            set_pose(self._rack_id, obs.get_object_pose("rack"), self.physics_client_id)
 
-        parts = obs.part_poses
-        assert (
-            len(parts) == self._num_parts
-        ), f"Expected {self._num_parts} parts, got {len(parts)}"
+        for old_id in set(self._part_ids.values()):
+            p.removeBody(old_id, physicsClientId=self.physics_client_id)
+        self._part_ids = {}
+        self._part_ids_to_type = {}
+        self._part_id_to_half_extents = {}
+        self._part_ids_to_triangle_features = {}
 
-        # Update parts
         for i in range(self._num_parts):
-            name = list(parts.keys())[i]
-            pose = self._get_pybullet_pose_from_state(obs, name)
-            part_id = self._object_name_to_pybullet_id(name)
-            set_pose(part_id, pose, self.physics_client_id)
+            name = f"part{i}"
+            part = obs.get_object_from_name(name)
+            if part.type == Kinematic3DCuboidType:
+                half_extents = obs.get_object_half_extents_packing3d(name)[:3]
+                part_id = self._create_cuboid_part(name, half_extents)
+            elif part.type == Kinematic3DTriangleType:
+                triangle_features = obs.get_object_triangle_features(name)
+                part_id, _ = self._create_triangle_part(name, triangle_features)
+            else:
+                raise ValueError(f"Unsupported part type: {part.type}")
 
-    def _get_pybullet_pose_from_state(
-        self, obs: Packing3DObjectCentricState, name: str
-    ) -> Pose:
-        """Get the raw PyBullet pose from state features for state restoration."""
-        obj = obs.get_object_from_name(name)
-        return Pose(
-            (
-                obs.get(obj, "pose_x"),
-                obs.get(obj, "pose_y"),
-                obs.get(obj, "pose_z"),
-            ),
-            (
-                obs.get(obj, "pose_qx"),
-                obs.get(obj, "pose_qy"),
-                obs.get(obj, "pose_qz"),
-                obs.get(obj, "pose_qw"),
-            ),
-        )
+            set_pose(
+                part_id,
+                obs.get_object_origin_pose(name),
+                self.physics_client_id,
+            )
 
     def _object_name_to_pybullet_id(self, object_name: str) -> int:
         if object_name == "rack":
-            assert self._rack_id is not None
             return self._rack_id
         if object_name == "table":
             return self.table_id
@@ -753,9 +783,7 @@ class ObjectCentricPacking3DEnv(
         raise ValueError(f"Unrecognized object name: {object_name}")
 
     def _get_collision_object_ids(self) -> set[int]:
-        ids = {self.table_id}
-        if self._rack_id is not None:
-            ids.add(self._rack_id)
+        ids = {self.table_id, self._rack_id}
         ids |= set(self._part_ids.values())
         return ids
 
@@ -764,10 +792,7 @@ class ObjectCentricPacking3DEnv(
 
     def _get_surface_object_names(self) -> set[str]:
         # The rack and table are surfaces.
-        names = {"table"}
-        if self._rack_id is not None:
-            names.add("rack")
-        return names
+        return {"table", "rack"}
 
     @staticmethod
     def _box_local_geometry(
@@ -861,9 +886,9 @@ class ObjectCentricPacking3DEnv(
         for vertices, face_normals, edge_directions in (main_geometry, peg_geometry):
             world_components.append(
                 (
-                    (rotation @ vertices.T).T + translation,
-                    (rotation @ face_normals.T).T,
-                    (rotation @ edge_directions.T).T,
+                    np.transpose(rotation @ np.transpose(vertices)) + translation,
+                    np.transpose(rotation @ np.transpose(face_normals)),
+                    np.transpose(rotation @ np.transpose(edge_directions)),
                 )
             )
         return world_components
@@ -920,7 +945,7 @@ class ObjectCentricPacking3DEnv(
 
     def _get_half_extents(self, object_name: str) -> tuple[float, float, float]:
         if object_name == "rack":
-            return self.config.rack_half_extents
+            return self._rack_half_extents
         if object_name == "table":
             return self.config.table_half_extents
         assert object_name.startswith("part")

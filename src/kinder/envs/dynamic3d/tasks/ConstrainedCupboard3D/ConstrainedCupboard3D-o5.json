@@ -1,0 +1,512 @@
+{
+    "description": "A 3D task where the robot is supposed to fit multiple long rods into constrained spaces in a cupboard. The cupboard has varying numbers and sizes of rows and columns.",
+    "variant_description": "The variants require fitting different number of objects into cupboards of different sizes with varying arrangement of feasible regions at each reset.",
+    "variant_specific_description": "Place five rods onto open shelves across three small cupboards with varying shelf heights.",
+    "robots": {
+        "tidybot": {
+            "robot": {}
+        }
+    },
+    "scene": "lab2",
+    "fixtures": {
+        "cupboard": {
+            "cupboard_0": {
+                "length": 0.1,
+                "depth": 0.3,
+                "shelf_heights": [
+                    0.1,
+                    0.4
+                ],
+                "shelf_partitions": [
+                    [],
+                    []
+                ],
+                "side_and_back_open": false,
+                "rgba_cupboard_top_shelf": [
+                    0.714,
+                    0.69,
+                    0.624,
+                    1
+                ],
+                "rgba_cupboard_shelf": [
+                    0.714,
+                    0.69,
+                    0.624,
+                    1
+                ],
+                "rgba_cupboard_panel": [
+                    0.714,
+                    0.69,
+                    0.624,
+                    1
+                ],
+                "rgba_cupboard_leg": [
+                    0.714,
+                    0.69,
+                    0.624,
+                    1
+                ],
+                "rgba_cupboard_partition": [
+                    0.714,
+                    0.69,
+                    0.624,
+                    1
+                ],
+                "rgba_drawer_bottom": [
+                    0.714,
+                    0.69,
+                    0.624,
+                    1
+                ],
+                "rgba_drawer_wall": [
+                    0.714,
+                    0.69,
+                    0.624,
+                    1
+                ],
+                "rgba_drawer_face": [
+                    0.918,
+                    0.894,
+                    0.835,
+                    1
+                ],
+                "rgba_drawer_handle": [
+                    0,
+                    0,
+                    0,
+                    1
+                ]
+            },
+            "cupboard_1": {
+                "length": 0.1,
+                "depth": 0.3,
+                "shelf_heights": [
+                    0.4,
+                    0.1
+                ],
+                "shelf_partitions": [
+                    [],
+                    []
+                ],
+                "side_and_back_open": false,
+                "rgba_cupboard_top_shelf": [
+                    0.714,
+                    0.69,
+                    0.624,
+                    1
+                ],
+                "rgba_cupboard_shelf": [
+                    0.714,
+                    0.69,
+                    0.624,
+                    1
+                ],
+                "rgba_cupboard_panel": [
+                    0.714,
+                    0.69,
+                    0.624,
+                    1
+                ],
+                "rgba_cupboard_leg": [
+                    0.714,
+                    0.69,
+                    0.624,
+                    1
+                ],
+                "rgba_cupboard_partition": [
+                    0.714,
+                    0.69,
+                    0.624,
+                    1
+                ],
+                "rgba_drawer_bottom": [
+                    0.714,
+                    0.69,
+                    0.624,
+                    1
+                ],
+                "rgba_drawer_wall": [
+                    0.714,
+                    0.69,
+                    0.624,
+                    1
+                ],
+                "rgba_drawer_face": [
+                    0.918,
+                    0.894,
+                    0.835,
+                    1
+                ],
+                "rgba_drawer_handle": [
+                    0,
+                    0,
+                    0,
+                    1
+                ]
+            },
+            "cupboard_2": {
+                "length": 0.1,
+                "depth": 0.3,
+                "shelf_heights": [
+                    0.25,
+                    0.25
+                ],
+                "shelf_partitions": [
+                    [],
+                    []
+                ],
+                "side_and_back_open": false,
+                "rgba_cupboard_top_shelf": [
+                    0.714,
+                    0.69,
+                    0.624,
+                    1
+                ],
+                "rgba_cupboard_shelf": [
+                    0.714,
+                    0.69,
+                    0.624,
+                    1
+                ],
+                "rgba_cupboard_panel": [
+                    0.714,
+                    0.69,
+                    0.624,
+                    1
+                ],
+                "rgba_cupboard_leg": [
+                    0.714,
+                    0.69,
+                    0.624,
+                    1
+                ],
+                "rgba_cupboard_partition": [
+                    0.714,
+                    0.69,
+                    0.624,
+                    1
+                ],
+                "rgba_drawer_bottom": [
+                    0.714,
+                    0.69,
+                    0.624,
+                    1
+                ],
+                "rgba_drawer_wall": [
+                    0.714,
+                    0.69,
+                    0.624,
+                    1
+                ],
+                "rgba_drawer_face": [
+                    0.918,
+                    0.894,
+                    0.835,
+                    1
+                ],
+                "rgba_drawer_handle": [
+                    0,
+                    0,
+                    0,
+                    1
+                ]
+            }
+        }
+    },
+    "regions": {
+        "ground_object_init_region": {
+            "target": "ground",
+            "ranges": [
+                [
+                    0.5,
+                    -0.5,
+                    1.5,
+                    0.5
+                ]
+            ],
+            "yaw_ranges": [
+                [
+                    -90,
+                    90
+                ]
+            ]
+        },
+        "cupboard_init_region": {
+            "target": "ground",
+            "ranges": [
+                [
+                    2,
+                    0,
+                    0,
+                    2,
+                    0,
+                    0
+                ],
+                [
+                    2,
+                    -0.1,
+                    0,
+                    2,
+                    -0.1,
+                    0
+                ],
+                [
+                    2,
+                    0.1,
+                    0,
+                    2,
+                    0.1,
+                    0
+                ]
+            ],
+            "yaw_ranges": [
+                [
+                    90,
+                    90
+                ],
+                [
+                    90,
+                    90
+                ],
+                [
+                    90,
+                    90
+                ]
+            ]
+        },
+        "robot_task_init_region": {
+            "target": "ground",
+            "ranges": [
+                [
+                    -0.1,
+                    -0.1,
+                    0.1,
+                    0.1
+                ]
+            ],
+            "yaw_ranges": [
+                [
+                    -5,
+                    5
+                ]
+            ]
+        },
+        "cupboard_0_shelf_1_goal": {
+            "target": "cupboard_0",
+            "shelf": 1,
+            "rgba": [
+                1,
+                0,
+                0,
+                0
+            ]
+        },
+        "cupboard_1_shelf_0_goal": {
+            "target": "cupboard_1",
+            "shelf": 0,
+            "rgba": [
+                1,
+                0,
+                0,
+                0
+            ]
+        },
+        "cupboard_2_shelf_0_goal": {
+            "target": "cupboard_2",
+            "shelf": 0,
+            "rgba": [
+                1,
+                0,
+                0,
+                0
+            ]
+        },
+        "cupboard_0_shelf_0_goal": {
+            "target": "cupboard_0",
+            "shelf": 0,
+            "rgba": [
+                1,
+                0,
+                0,
+                0
+            ]
+        },
+        "cupboard_1_shelf_1_goal": {
+            "target": "cupboard_1",
+            "shelf": 1,
+            "rgba": [
+                1,
+                0,
+                0,
+                0
+            ]
+        }
+    },
+    "objects": {
+        "cuboid": {
+            "cuboid_0": {
+                "size": [
+                    0.015,
+                    0.15,
+                    0.015
+                ],
+                "rgba": [
+                    0.5,
+                    0.32,
+                    0.2,
+                    1
+                ],
+                "mass": 0.1
+            },
+            "cuboid_1": {
+                "size": [
+                    0.015,
+                    0.15,
+                    0.015
+                ],
+                "rgba": [
+                    0.5,
+                    0.32,
+                    0.2,
+                    1
+                ],
+                "mass": 0.1
+            },
+            "cuboid_2": {
+                "size": [
+                    0.015,
+                    0.15,
+                    0.015
+                ],
+                "rgba": [
+                    0.5,
+                    0.32,
+                    0.2,
+                    1
+                ],
+                "mass": 0.1
+            },
+            "cuboid_3": {
+                "size": [
+                    0.015,
+                    0.15,
+                    0.015
+                ],
+                "rgba": [
+                    0.5,
+                    0.32,
+                    0.2,
+                    1
+                ],
+                "mass": 0.1
+            },
+            "cuboid_4": {
+                "size": [
+                    0.015,
+                    0.15,
+                    0.015
+                ],
+                "rgba": [
+                    0.5,
+                    0.32,
+                    0.2,
+                    1
+                ],
+                "mass": 0.1
+            }
+        }
+    },
+    "cameras": {
+        "task_view": {
+            "position": [
+                -1.5,
+                0,
+                2
+            ],
+            "lookat": [
+                1,
+                0,
+                0
+            ],
+            "fovy": 42,
+            "resolution": [
+                640,
+                480
+            ]
+        }
+    },
+    "initial_state": [
+        [
+            "on",
+            "cupboard_0",
+            "cupboard_init_region"
+        ],
+        [
+            "on",
+            "cupboard_1",
+            "cupboard_init_region"
+        ],
+        [
+            "on",
+            "cupboard_2",
+            "cupboard_init_region"
+        ],
+        [
+            "in",
+            "cuboid_0",
+            "ground_object_init_region"
+        ],
+        [
+            "in",
+            "cuboid_1",
+            "ground_object_init_region"
+        ],
+        [
+            "in",
+            "cuboid_2",
+            "ground_object_init_region"
+        ],
+        [
+            "in",
+            "cuboid_3",
+            "ground_object_init_region"
+        ],
+        [
+            "in",
+            "cuboid_4",
+            "ground_object_init_region"
+        ],
+        [
+            "on",
+            "robot",
+            "robot_task_init_region"
+        ]
+    ],
+    "goal_state": [
+        [
+            "on",
+            "cuboid_0",
+            "cupboard_0_shelf_1_goal"
+        ],
+        [
+            "on",
+            "cuboid_1",
+            "cupboard_1_shelf_0_goal"
+        ],
+        [
+            "on",
+            "cuboid_2",
+            "cupboard_2_shelf_0_goal"
+        ],
+        [
+            "on",
+            "cuboid_3",
+            "cupboard_0_shelf_0_goal"
+        ],
+        [
+            "on",
+            "cuboid_4",
+            "cupboard_1_shelf_1_goal"
+        ]
+    ]
+}

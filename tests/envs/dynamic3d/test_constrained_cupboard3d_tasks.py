@@ -6,8 +6,10 @@ import pytest
 import kinder
 
 
-@pytest.mark.parametrize("count", [3, 4, 5])
-def test_intermediate_constrained_cupboard_task(count: int) -> None:
+@pytest.mark.parametrize(("count", "expected_cupboards"), [(3, 6), (4, 6), (5, 11)])
+def test_intermediate_constrained_cupboard_task(
+    count: int, expected_cupboards: int
+) -> None:
     """Each intermediate task registers, resets, and contains the declared rods."""
     kinder.register_all_environments()
     env = kinder.make(
@@ -24,6 +26,11 @@ def test_intermediate_constrained_cupboard_task(count: int) -> None:
         state = inner.get_state()
         names = state.get_object_names()
         assert sum(name.startswith("cuboid_") for name in names) == count
+        assert len(inner.task_config["fixtures"]["cupboard"]) == expected_cupboards
+        assert (
+            len(inner.task_config["regions"]["cupboard_init_region"]["ranges"])
+            == expected_cupboards
+        )
 
         goal_state = state.copy()
         fixtures = getattr(inner, "_fixtures_dict")

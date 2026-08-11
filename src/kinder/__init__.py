@@ -46,20 +46,20 @@ def _check_deps(*modules: str) -> bool:
     return True
 
 
-# Map from category name to the modules required for that category.
-_CATEGORY_DEPS: dict[str, tuple[str, ...]] = {
-    "Kinematic2D": ("tomsgeoms2d",),
-    "Dynamic2D": ("pymunk", "tomsgeoms2d"),
-    "Kinematic3D": ("pybullet", "pybullet_helpers"),
-    "Kinematic3Dv2": ("pybullet", "prpl_kinematics"),
-    "Dynamic3D": ("mujoco",),
+# Map from physics backend name to the modules required for that backend.
+_BACKEND_DEPS: dict[str, tuple[str, ...]] = {
+    "tomsgeoms2d": ("tomsgeoms2d",),
+    "pymunk": ("pymunk", "tomsgeoms2d"),
+    "pybullet": ("pybullet", "pybullet_helpers"),
+    "prpl_kinematics": ("pybullet", "prpl_kinematics"),
+    "mujoco": ("mujoco",),
 }
 
 
 def register_all_environments() -> None:
     """Add all benchmark environments to the gymnasium registry.
 
-    Categories whose backend dependencies are not installed are silently skipped.  The
+    Environments whose backend dependencies are not installed are silently skipped. The
     default ``pip install kindergarden`` includes every backend; to install a single
     one, see the requirements files described in the README.
     """
@@ -74,19 +74,19 @@ def register_all_environments() -> None:
             os.environ["MUJOCO_GL"] = "osmesa"
             os.environ["PYOPENGL_PLATFORM"] = "osmesa"
 
-    if _check_deps(*_CATEGORY_DEPS["Kinematic2D"]):
+    if _check_deps(*_BACKEND_DEPS["tomsgeoms2d"]):
         _register_kinematic2d()
 
-    if _check_deps(*_CATEGORY_DEPS["Dynamic2D"]):
+    if _check_deps(*_BACKEND_DEPS["pymunk"]):
         _register_dynamic2d()
 
-    if _check_deps(*_CATEGORY_DEPS["Kinematic3D"]):
+    if _check_deps(*_BACKEND_DEPS["pybullet"]):
         _register_kinematic3d()
 
-    if _check_deps(*_CATEGORY_DEPS["Kinematic3Dv2"]):
+    if _check_deps(*_BACKEND_DEPS["prpl_kinematics"]):
         _register_kinematic3d_v2()
 
-    if _check_deps(*_CATEGORY_DEPS["Dynamic3D"]):
+    if _check_deps(*_BACKEND_DEPS["mujoco"]):
         _register_dynamic3d()
 
 
@@ -106,6 +106,7 @@ def _register_kinematic2d() -> None:
         class_name="Obstruction2D",
         entry_point="kinder.envs.kinematic2d.obstruction2d:Obstruction2DEnv",
         category="Kinematic2D",
+        backend="tomsgeoms2d",
         variant_ids=variant_ids,
     )
 
@@ -124,6 +125,7 @@ def _register_kinematic2d() -> None:
         class_name="ClutteredRetrieval2D",
         entry_point="kinder.envs.kinematic2d.clutteredretrieval2d:ClutteredRetrieval2DEnv",  # pylint: disable=line-too-long
         category="Kinematic2D",
+        backend="tomsgeoms2d",
         variant_ids=variant_ids,
     )
 
@@ -142,6 +144,7 @@ def _register_kinematic2d() -> None:
         class_name="ClutteredStorage2D",
         entry_point="kinder.envs.kinematic2d.clutteredstorage2d:ClutteredStorage2DEnv",
         category="Kinematic2D",
+        backend="tomsgeoms2d",
         variant_ids=variant_ids,
     )
 
@@ -160,6 +163,7 @@ def _register_kinematic2d() -> None:
         class_name="Motion2D",
         entry_point="kinder.envs.kinematic2d.motion2d:Motion2DEnv",
         category="Kinematic2D",
+        backend="tomsgeoms2d",
         variant_ids=variant_ids,
     )
 
@@ -178,6 +182,7 @@ def _register_kinematic2d() -> None:
         class_name="StickButton2D",
         entry_point="kinder.envs.kinematic2d.stickbutton2d:StickButton2DEnv",
         category="Kinematic2D",
+        backend="tomsgeoms2d",
         variant_ids=variant_ids,
     )
 
@@ -191,6 +196,7 @@ def _register_kinematic2d() -> None:
         class_name="PushPullHook2D",
         entry_point="kinder.envs.kinematic2d.pushpullhook2d:PushPullHook2DEnv",
         category="Kinematic2D",
+        backend="tomsgeoms2d",
         variant_ids=[variant_id],
     )
 
@@ -211,6 +217,7 @@ def _register_dynamic2d() -> None:
         class_name="DynObstruction2D",
         entry_point="kinder.envs.dynamic2d.dyn_obstruction2d:DynObstruction2DEnv",
         category="Dynamic2D",
+        backend="pymunk",
         variant_ids=variant_ids,
     )
 
@@ -229,6 +236,7 @@ def _register_dynamic2d() -> None:
         class_name="DynPushPullHook2D",
         entry_point="kinder.envs.dynamic2d.dyn_pushpullhook2d:DynPushPullHook2DEnv",
         category="Dynamic2D",
+        backend="pymunk",
         variant_ids=variant_ids,
     )
 
@@ -243,6 +251,7 @@ def _register_dynamic2d() -> None:
         class_name="DynPushT2D",
         entry_point="kinder.envs.dynamic2d.dyn_pusht2d:DynPushT2DEnv",
         category="Dynamic2D",
+        backend="pymunk",
         variant_ids=[variant_id],
     )
 
@@ -263,6 +272,7 @@ def _register_dynamic2d() -> None:
         class_name="DynScoopPour2D",
         entry_point="kinder.envs.dynamic2d.dyn_scooppour2d:DynScoopPour2DEnv",
         category="Dynamic2D",
+        backend="pymunk",
         variant_ids=variant_ids,
     )
 
@@ -278,6 +288,7 @@ def _register_kinematic3d() -> None:
         class_name="BaseMotion3D",
         entry_point="kinder.envs.kinematic3d.base_motion3d:BaseMotion3DEnv",
         category="Kinematic3D",
+        backend="pybullet",
         variant_ids=[variant_id],
     )
 
@@ -296,6 +307,7 @@ def _register_kinematic3d() -> None:
         class_name="Table3D",
         entry_point="kinder.envs.kinematic3d.table3d:Table3DEnv",
         category="Kinematic3D",
+        backend="pybullet",
         variant_ids=variant_ids,
     )
 
@@ -315,6 +327,7 @@ def _register_kinematic3d() -> None:
         class_name="Transport3D",
         entry_point="kinder.envs.kinematic3d.transport3d:Transport3DEnv",
         category="Kinematic3D",
+        backend="pybullet",
         variant_ids=variant_ids,
     )
 
@@ -333,6 +346,7 @@ def _register_kinematic3d() -> None:
         class_name="KinematicShelf3D",
         entry_point="kinder.envs.kinematic3d.shelf3d:Shelf3DEnv",
         category="Kinematic3D",
+        backend="pybullet",
         variant_ids=variant_ids,
     )
 
@@ -351,6 +365,7 @@ def _register_kinematic3d() -> None:
         class_name="PrplLab3D",
         entry_point="kinder.envs.kinematic3d.prpl3d:PrplLab3DEnv",
         category="Kinematic3D",
+        backend="pybullet",
         variant_ids=variant_ids,
     )
 
@@ -369,6 +384,7 @@ def _register_kinematic3d() -> None:
         class_name="Obstruction3D",
         entry_point="kinder.envs.kinematic3d.obstruction3d:Obstruction3DEnv",
         category="Kinematic3D",
+        backend="pybullet",
         variant_ids=variant_ids,
     )
 
@@ -387,6 +403,7 @@ def _register_kinematic3d() -> None:
         class_name="Packing3D",
         entry_point="kinder.envs.kinematic3d.packing3d:Packing3DEnv",
         category="Kinematic3D",
+        backend="pybullet",
         variant_ids=variant_ids,
     )
 
@@ -402,6 +419,7 @@ def _register_kinematic3d_v2() -> None:
         class_name="VegaMotion3D",
         entry_point="kinder.envs.kinematic3d_v2.vega_motion3d:VegaMotion3DEnv",
         category="Kinematic3Dv2",
+        backend="prpl_kinematics",
         variant_ids=[variant_id],
     )
 
@@ -464,6 +482,7 @@ def _register_dynamic3d() -> None:
                 class_name=class_name,
                 entry_point=f"kinder.envs.dynamic3d.envs:{robot}Env",
                 category="Dynamic3D",
+                backend="mujoco",
                 variant_ids=variant_ids,
             )
 
@@ -482,6 +501,7 @@ def _register_env_class(
     class_name: str,
     entry_point: str,
     category: str,
+    backend: str,
     variant_ids: list[str],
 ) -> None:
     """Register an environment class with its metadata.
@@ -490,23 +510,27 @@ def _register_env_class(
         class_name: Base name of the environment class (e.g., "ClutteredStorage2D")
         entry_point: Python import path to the environment class
         category: Category of the environment (e.g., "Kinematic2D", "Dynamic2D")
+        backend: Physics backend running the environment, a key of _BACKEND_DEPS
         variant_ids: List of registered variant IDs for this class
     """
+    assert backend in _BACKEND_DEPS, f"Unknown backend {backend}"
     ENV_CLASSES[class_name] = {
         "entry_point": entry_point,
         "category": category,
+        "backend": backend,
         "variants": variant_ids,
     }
 
 
 def _ensure_assets_for_env(env_id: str) -> None:
-    """Auto-download MimicLabs assets once, only for Dynamic3D environments."""
-    dynamic3d_env_ids = {
+    """Auto-download MimicLabs assets once, only for MuJoCo environments."""
+    mujoco_env_ids = {
         vid
-        for cls in get_env_categories().get("Dynamic3D", [])
-        for vid in ENV_CLASSES[cls]["variants"]
+        for metadata in ENV_CLASSES.values()
+        if metadata["backend"] == "mujoco"
+        for vid in metadata["variants"]
     }
-    if env_id not in dynamic3d_env_ids:
+    if env_id not in mujoco_env_ids:
         return
 
     if is_truthy_env_var(DISABLE_AUTO_DYNAMIC3D_SCENES_DOWNLOAD):
@@ -538,7 +562,7 @@ def _ensure_assets_for_env(env_id: str) -> None:
 
     try:
         print(
-            "Auto-downloading MimicLabs assets for Dynamic3D environments "
+            "Auto-downloading MimicLabs assets for MuJoCo environments "
             "(this may take a few minutes)..."
         )
         download_mimiclabs_assets(non_interactive=True)
@@ -572,6 +596,7 @@ def get_env_classes() -> dict[str, dict[str, Any]]:
         Dictionary mapping class names to their metadata including:
         - entry_point: Python import path to the class
         - category: Environment category (e.g., "Kinematic2D", "Dynamic2D")
+        - backend: Physics backend (e.g., "pybullet", "mujoco")
         - variants: List of registered variant IDs
     """
     return ENV_CLASSES.copy()

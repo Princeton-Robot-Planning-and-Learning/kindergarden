@@ -165,6 +165,7 @@ class ObjectCentricClutteredRetrieval2DEnv(
         self._num_obstructions = num_obstructions
 
     def _sample_initial_state(self) -> ObjectCentricState:
+        """Resample until the robot is in the largest collision-free component."""
         for _ in range(self.config.max_init_sampling_attempts):
             state = self._sample_initial_state_once()
             if self._initial_state_is_valid(state):

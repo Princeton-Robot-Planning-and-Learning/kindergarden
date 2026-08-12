@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import inspect
 import json
+import re
 import subprocess
 from pathlib import Path
 
@@ -33,6 +34,23 @@ DYNAMIC3D_ENVS = sorted([d.name for d in DYNAMIC3D_TASKS_DIR.iterdir() if d.is_d
 FINE_TIMESTEP_ENVS: dict[str, tuple[int, int]] = {
     "LimbRepositioning3D": (1500, 30),
 }
+
+NATURALLY_SORTED_VARIANT_ENVS = {"ConstrainedCupboard3D"}
+
+
+def natural_sort_key(value: str) -> tuple[tuple[int, int | str], ...]:
+    """Return a key that sorts embedded numbers by their numeric value."""
+    return tuple(
+        (1, int(part)) if part.isdigit() else (0, part.casefold())
+        for part in re.split(r"(\d+)", value)
+    )
+
+
+def get_documented_variants(class_name: str, variants: list[str]) -> list[str]:
+    """Return variants in the order used by the generated documentation."""
+    if class_name in NATURALLY_SORTED_VARIANT_ENVS:
+        return sorted(variants, key=natural_sort_key)
+    return variants.copy()
 
 
 def get_random_action_gif_params(class_name: str) -> tuple[int, int]:
@@ -567,10 +585,11 @@ def _main() -> None:
 
     for class_name, class_info in env_classes.items():
         total_classes += 1
-        variants = class_info["variants"]
+        registered_variants = class_info["variants"]
 
         # Use a middle variant as representative (or first if only one variant)
-        representative_variant = variants[len(variants) // 2]
+        representative_variant = registered_variants[len(registered_variants) // 2]
+        variants = get_documented_variants(class_name, registered_variants)
         kwargs: dict[str, str | bool] = {"render_mode": "rgb_array"}
         if class_name in DYNAMIC3D_ENVS:
             kwargs["scene_bg"] = True

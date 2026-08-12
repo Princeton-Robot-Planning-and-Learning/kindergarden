@@ -5,6 +5,16 @@ import pytest
 from gymnasium.utils.env_checker import check_env
 
 import kinder
+from kinder import _BACKEND_DEPS
+
+
+def test_env_classes_declare_a_known_backend():
+    """Tests that every registered environment class declares a known backend."""
+    kinder.register_all_environments()
+    env_classes = kinder.get_env_classes()
+    assert len(env_classes) > 0
+    for metadata in env_classes.values():
+        assert metadata["backend"] in _BACKEND_DEPS
 
 
 @pytest.mark.skip(reason="Memory issue to investigate - test causes OOM in CI")

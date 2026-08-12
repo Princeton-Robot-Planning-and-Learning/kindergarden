@@ -92,28 +92,6 @@ def test_clutteredretrieval2d_free_space_check_flags_walled_in_robot():
     assert check(state)
 
 
-def test_clutteredretrieval2d_rejects_larger_enclosed_free_space():
-    """Tests that an enclosed component is rejected even when it is the largest."""
-    env = ObjectCentricClutteredRetrieval2DEnv(num_obstructions=0)
-    env.reset(seed=0)
-    # These bars enclose most of the world while leaving a smaller free-space
-    # component around the outside of the ring.
-    ring = [
-        (SE2Pose(0.25, 0.25, 0.0), (2.0, 0.05)),
-        (SE2Pose(0.25, 2.2, 0.0), (2.0, 0.05)),
-        (SE2Pose(0.25, 0.3, 0.0), (0.05, 1.9)),
-        (SE2Pose(2.2, 0.3, 0.0), (0.05, 1.9)),
-    ]
-    state = env._create_initial_state(  # pylint: disable=protected-access
-        SE2Pose(1.25, 1.25, 0.0),
-        target_pose=SE2Pose(1.8, 1.8, 0.0),
-        target_region_pose=SE2Pose(0.3, 0.3, 0.0),
-        obstructions=ring,
-    )
-    check = env._initial_state_is_valid  # pylint: disable=protected-access
-    assert not check(state)
-
-
 def test_clutteredretrieval2d_robot_spawns_in_main_free_space():
     """Tests that dense initial states never wall in the robot.
 

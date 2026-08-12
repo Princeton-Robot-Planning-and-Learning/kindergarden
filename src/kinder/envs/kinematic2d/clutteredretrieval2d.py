@@ -191,8 +191,11 @@ class ObjectCentricClutteredRetrieval2DEnv(
                 if obj != region
             ]
         )
-        free = max(get_parts(world.difference(blocked)), key=lambda part: part.area)
-        return bool(free.covers(Point(state.get(robot, "x"), state.get(robot, "y"))))
+        robot_position = Point(state.get(robot, "x"), state.get(robot, "y"))
+        return any(
+            part.intersects(world.boundary) and part.covers(robot_position)
+            for part in get_parts(world.difference(blocked))
+        )
 
     def _sample_initial_state_once(self) -> ObjectCentricState:
         static_objects = set(self.initial_constant_state)

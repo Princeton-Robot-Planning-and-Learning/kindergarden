@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import numpy as np
 from relational_structs import Object, ObjectCentricState, Type
 from relational_structs.utils import create_state_from_dict
+from shapely import Point, Polygon, box, get_parts, unary_union
 from tomsgeoms2d.utils import geom2ds_intersect
 
 from kinder.core import ConstantObjectKinDEREnv, FinalConfigMeta
@@ -164,6 +165,37 @@ class ObjectCentricClutteredRetrieval2DEnv(
         self._num_obstructions = num_obstructions
 
     def _sample_initial_state(self) -> ObjectCentricState:
+        """Resample until the robot is in the largest collision-free component."""
+        for _ in range(self.config.max_init_sampling_attempts):
+            state = self._sample_initial_state_once()
+            if self._initial_state_is_valid(state):
+                return state
+        raise RuntimeError("Failed to sample initial state.")
+
+    def _initial_state_is_valid(self, state: ObjectCentricState) -> bool:
+        """Validity check on a sampled initial state."""
+        robot = state.get_objects(CRVRobotType)[0]
+        radius = state.get(robot, "base_radius")
+        region = state.get_objects(TargetRegionType)[0]
+        world = box(
+            self.config.world_min_x + radius,
+            self.config.world_min_y + radius,
+            self.config.world_max_x - radius,
+            self.config.world_max_y - radius,
+        )
+        blocked = unary_union(
+            [
+                Polygon(rectangle_object_to_geom(state, obj, {}).vertices).buffer(
+                    radius
+                )
+                for obj in state.get_objects(RectangleType)
+                if obj != region
+            ]
+        )
+        free = max(get_parts(world.difference(blocked)), key=lambda part: part.area)
+        return bool(free.covers(Point(state.get(robot, "x"), state.get(robot, "y"))))
+
+    def _sample_initial_state_once(self) -> ObjectCentricState:
         static_objects = set(self.initial_constant_state)
         robot_pose = sample_se2_pose(self.config.robot_init_pose_bounds, self.np_random)
         state = self._create_initial_state(robot_pose)

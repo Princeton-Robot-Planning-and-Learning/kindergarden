@@ -134,9 +134,11 @@ def test_tossing3d_goal_region_is_covered_by_the_bin():
     # are 0.3 x 0.3, since the region's raw half-extent of 0.10 plus 0.05 of ground
     # inflation is the bin's length / 2. So the two coincide only when the bin's
     # centre lands on the region's centre, and there is no margin to spare.
-    # bin_init_region spans 1 mm in x and in y and the bin settles slightly, so in
-    # practice each edge overhangs or falls short by up to about 1 mm. The tolerance
-    # absorbs that placement jitter; it is not slack over an invariant that holds
+    # bin_init_region is a zero-width range, so the bin is placed at the same point
+    # on every seed. That point sits 0.5 mm past the region's centre in x, because it
+    # is the midpoint of the 2.0 .. 2.001 range it replaced, so each x edge falls
+    # short or overhangs by a fixed 0.5 mm; the bin also settles slightly. The
+    # tolerance absorbs that offset; it is not slack over an invariant that holds
     # exactly. It is still tight enough to catch any real drift -- a few mm is
     # already the regime where a cube on the bare floor scores a success.
     tol = 0.002

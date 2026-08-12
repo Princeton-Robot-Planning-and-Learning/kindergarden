@@ -19,9 +19,12 @@ The robot can control:
 ## Available Variants
 The variants require fitting different number of objects into cupboards of different sizes with varying arrangement of feasible regions at each reset.
 
-- [`kinder/ConstrainedCupboard3D-o6-v0`](variants/ConstrainedCupboard3D/ConstrainedCupboard3D-o6.md) (o6)
 - [`kinder/ConstrainedCupboard3D-o1-v0`](variants/ConstrainedCupboard3D/ConstrainedCupboard3D-o1.md) (o1)
 - [`kinder/ConstrainedCupboard3D-o2-v0`](variants/ConstrainedCupboard3D/ConstrainedCupboard3D-o2.md) (o2)
+- [`kinder/ConstrainedCupboard3D-o3-v0`](variants/ConstrainedCupboard3D/ConstrainedCupboard3D-o3.md) (o3)
+- [`kinder/ConstrainedCupboard3D-o4-v0`](variants/ConstrainedCupboard3D/ConstrainedCupboard3D-o4.md) (o4)
+- [`kinder/ConstrainedCupboard3D-o5-v0`](variants/ConstrainedCupboard3D/ConstrainedCupboard3D-o5.md) (o5)
+- [`kinder/ConstrainedCupboard3D-o6-v0`](variants/ConstrainedCupboard3D/ConstrainedCupboard3D-o6.md) (o6)
 
 ## Initial State Distribution
 ![initial state GIF](assets/initial_state_gifs/ConstrainedCupboard3D.gif)
@@ -44,8 +47,7 @@ The episode terminates when all objects are placed at their respective targets.
 
 
 ## References
-TidyBot++: An Open-Source Holonomic Mobile Manipulator
-for Robot Learning
+TidyBot++: An Open-Source Holonomic Mobile Manipulator for Robot Learning
 - Jimmy Wu, William Chong, Robert Holmberg, Aaditya Prasad, Yihuai Gao,
   Oussama Khatib, Shuran Song, Szymon Rusinkiewicz, Jeannette Bohg
 - Conference on Robot Learning (CoRL), 2024

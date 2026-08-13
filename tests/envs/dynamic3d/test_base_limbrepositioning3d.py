@@ -28,6 +28,7 @@ from kinder.envs.dynamic3d.limb_utils import (
     LimbRepositioning3DObjectCentricState,
     LimbRepositioning3DRobotActionSpace,
 )
+from kinder.envs.kinematic3d.utils import extend_joints_to_include_fingers
 
 # An isolated right arm, which needs no furniture and is reachable from this base pose.
 LIMB_BASE_POSE = Pose.from_rpy((0.730, -0.396, 0.270), (0.0, 0.0, np.pi))
@@ -79,20 +80,20 @@ class _MinimalLimb3DEnv(
 
     def _reset_bodies(self) -> None:
         self.robot.arm.set_joints(
-            self._extend_joints_with_fingers(list(self._initial_robot_joints))
+            extend_joints_to_include_fingers(list(self._initial_robot_joints))
         )
         self.limb.set_joints(list(self.config.scene.limb_init_joint_positions))
         self._regrasp_limb()
 
     def _set_state(self, state) -> None:
         self.robot.arm.set_joints(
-            self._extend_joints_with_fingers(list(state.robot_joint_positions))
+            extend_joints_to_include_fingers(list(state.robot_joint_positions))
         )
         self.limb.set_joints(list(state.limb_joint_positions))
         self._reweld_limb()
 
     def step(self, action):
-        self._apply_torques(list(action), [0.0] * NUM_LIMB_JOINTS)
+        self._apply_torques(list(action))
         return self._get_obs(), -1.0, self.goal_reached(), False, {}
 
 
@@ -220,13 +221,6 @@ def test_goal_joint_positions_come_from_the_config(env):
     assert np.allclose(obs.limb_goal_joint_positions, LIMB_GOAL)
 
 
-def test_isolated_scene_has_no_penetration(env):
-    """An empty world gives the limb nothing to intrude into."""
-    env.reset()
-    assert env.limb_penetration() == pytest.approx(0.0)
-    assert np.isinf(env.get_collision_clearance())
-
-
 def test_render_returns_an_rgb_image(env):
     """Rendering honours the configured image size."""
     env.reset()
@@ -237,6 +231,43 @@ def test_render_returns_an_rgb_image(env):
         3,
     )
     assert img.dtype == np.uint8
+
+
+def test_a_coarse_dt_applies_torque_for_the_whole_interval():
+    """One coarse step matches several fine ones, since PyBullet clears torques."""
+    fine = _MinimalLimb3DEnv(config=_make_config())
+    coarse = _MinimalLimb3DEnv(config=_make_config(dt=4.0 / 240.0))
+    try:
+        action = np.full(NUM_ROBOT_JOINTS, 1.0, dtype=np.float32)
+        fine.reset()
+        coarse.reset()
+        for _ in range(20):
+            for _ in range(4):
+                fine_obs, _, _, _, _ = fine.step(action)
+            coarse_obs, _, _, _, _ = coarse.step(action)
+        assert np.allclose(
+            coarse_obs.robot_joint_positions, fine_obs.robot_joint_positions, atol=1e-3
+        )
+    finally:
+        fine.close()
+        coarse.close()
+
+
+def test_dt_must_be_a_whole_number_of_timesteps():
+    """A dt that is not a multiple of the timestep fails loudly rather than silently."""
+    with pytest.raises(AssertionError, match="PYBULLET_TIMESTEP"):
+        _make_config(dt=1.0 / 100.0)
+
+
+def test_render_fps_follows_dt():
+    """Videos play at real speed only if the frame rate matches the control rate."""
+    assert _make_config().render_fps == 240
+    assert _make_config(dt=1.0 / 60.0).render_fps == 60
+
+
+def test_default_config_builds_a_scene():
+    """The config is usable without being handed a scene."""
+    assert Limb3DEnvConfig().scene.scene_type == "isolated"
 
 
 def test_close_disconnects_the_physics_client():

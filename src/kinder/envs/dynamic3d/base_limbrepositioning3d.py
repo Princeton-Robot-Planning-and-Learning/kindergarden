@@ -1,7 +1,7 @@
 """Base environment class for all limb repositioning environments.
 
-These are Kinematic3D environments, but use PyBullet forward dynamics with torque
-control, rather than the joint position resets used by the rest of the category.
+These are Dynamic3D environments, but run on PyBullet not the MuJoCo backend
+used by the rest of the category.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from pybullet_helpers.inverse_kinematics import (
     inverse_kinematics,
     pybullet_inverse_kinematics,
 )
-from pybullet_helpers.joint import JointPositions
+from pybullet_helpers.joint import JointPositions, JointVelocities
 from pybullet_helpers.robots import create_pybullet_mobile_robot
 from relational_structs import Array, ObjectCentricStateSpace, Type
 
@@ -36,6 +36,7 @@ from kinder.envs.dynamic3d.limb_scenes import (
     create_scene,
 )
 from kinder.envs.dynamic3d.limb_utils import (
+    NUM_LIMB_JOINTS,
     NUM_ROBOT_JOINTS,
     PYBULLET_TIMESTEP,
     JointTorques,
@@ -43,14 +44,23 @@ from kinder.envs.dynamic3d.limb_utils import (
     LimbRepositioning3DRobotActionSpace,
 )
 from kinder.envs.dynamic3d.limbs import HumanLimbPyBulletRobot
+from kinder.envs.kinematic3d.utils import extend_joints_to_include_fingers
 from kinder.envs.utils import RobotActionSpace
+
+# Default scene config for the limb repositioning environment.
+_DEFAULT_SCENE = LimbRepositioningSceneConfig(
+    scene_type="isolated",
+    limb_name="human-right-arm",
+    limb_init_joint_positions=(0.0,) * NUM_LIMB_JOINTS,
+    limb_goal_joint_positions=(0.0,) * NUM_LIMB_JOINTS,
+)
 
 
 @dataclass(frozen=True)
 class Limb3DEnvConfig(KinDEREnvConfig):
     """Config for a torque-controlled PyBullet environment."""
 
-    scene: LimbRepositioningSceneConfig = None  # type: ignore[assignment]
+    scene: LimbRepositioningSceneConfig = _DEFAULT_SCENE
     robot_name: str = "tidybot-kinova"
     robot_base_home_pose: SE2Pose = SE2Pose.identity()
     robot_base_z: float = 0.0
@@ -76,13 +86,24 @@ class Limb3DEnvConfig(KinDEREnvConfig):
     num_settle_steps: int = 1000
 
     # Rendering.
-    render_fps: int = 60
     render_image_width: int = 512
     render_image_height: int = 512
     camera_target: tuple[float, float, float] = (0.0, 0.0, 0.0)
-    camera_distance: float = 3.0
-    camera_yaw: float = 160.0
-    camera_pitch: float = 200.0
+    camera_distance: float = 2.0
+    camera_yaw: float = 140.0
+    camera_pitch: float = -20.0
+
+    def __post_init__(self) -> None:
+        substeps = self.dt / PYBULLET_TIMESTEP
+        assert (
+            abs(substeps - round(substeps)) < 1e-9
+        ), f"dt={self.dt} is not a whole multiple of PYBULLET_TIMESTEP"
+        object.__setattr__(self, "render_fps", round(1.0 / self.dt))
+
+    @property
+    def num_substeps(self) -> int:
+        """The number of simulation steps taken per environment step."""
+        return round(self.dt / PYBULLET_TIMESTEP)
 
     def get_camera_kwargs(self) -> dict[str, Any]:
         """Get kwargs to pass to the PyBullet camera."""
@@ -108,11 +129,7 @@ class ObjectCentricLimb3DRobotEnv(
     applying joint torques.
     """
 
-    def __init__(
-        self, *args, use_gui: bool = False, realistic_bg: bool = False, **kwargs
-    ) -> None:
-        # Accepted and ignored so the kinematic3d tooling can build this environment.
-        del realistic_bg
+    def __init__(self, *args, use_gui: bool = False, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.use_gui = use_gui
 
@@ -139,11 +156,8 @@ class ObjectCentricLimb3DRobotEnv(
             base_home_pose=self.config.robot_base_home_pose,
         )
         self.robot.arm.set_joints(
-            self._extend_joints_with_fingers(list(self.config.robot_initial_joints))
+            extend_joints_to_include_fingers(list(self.config.robot_initial_joints))
         )
-
-        # Limbs already overlap the torso at rest, so record that as the baseline.
-        self._limb_rest_clearance: dict[int, float] = self._measure_limb_clearance()
 
         # Move the arm so that it grasps the limb, then weld the two together.
         self._move_robot_to_grasp_limb()
@@ -152,8 +166,9 @@ class ObjectCentricLimb3DRobotEnv(
         # Torque control requires turning off PyBullet's default joint motors.
         self._prepare_torque_control()
 
-        self._initial_robot_joints = self._get_robot_joint_positions()
+        # Record the joints after settling.
         self._settle()
+        self._initial_robot_joints = self._get_robot_joint_positions()
 
     @property
     def limb(self) -> HumanLimbPyBulletRobot:
@@ -175,14 +190,8 @@ class ObjectCentricLimb3DRobotEnv(
     def _get_robot_joint_positions(self) -> JointPositions:
         return list(self.robot.arm.get_joint_positions()[:NUM_ROBOT_JOINTS])
 
-    def _get_robot_joint_velocities(self) -> JointPositions:
+    def _get_robot_joint_velocities(self) -> JointVelocities:
         return list(self.robot.arm.get_joint_velocities()[:NUM_ROBOT_JOINTS])
-
-    @staticmethod
-    def _extend_joints_with_fingers(joints: JointPositions) -> JointPositions:
-        """Pad arm joint positions with the six Robotiq finger joints."""
-        assert len(joints) == NUM_ROBOT_JOINTS
-        return list(joints) + [0.0] * 6
 
     def _move_robot_to_grasp_limb(self) -> None:
         """Place the arm so that its end effector reaches the limb's grasp frame.
@@ -199,26 +208,6 @@ class ObjectCentricLimb3DRobotEnv(
                 self.robot.arm, robot_ee_pose, validate=False, best_effort=True
             )
             self.robot.arm.set_joints(joint_positions)
-
-    def _measure_limb_clearance(self) -> dict[int, float]:
-        """Distance from the limb to each obstacle in its current configuration."""
-        return {
-            body_id: self._closest_distance(self.limb.robot_id, body_id)
-            for body_id in self.scene.get_limb_obstacle_ids()
-        }
-
-    def _closest_distance(self, body_id: int, other_id: int) -> float:
-        points = p.getClosestPoints(
-            body_id, other_id, 0.5, physicsClientId=self.physics_client_id
-        )
-        return min((point[8] for point in points), default=float("inf"))
-
-    def limb_penetration(self) -> float:
-        """How far the limb intrudes past the overlap its model already has at rest."""
-        worst = 0.0
-        for body_id, distance in self._measure_limb_clearance().items():
-            worst = min(worst, distance - self._limb_rest_clearance.get(body_id, 0.0))
-        return worst
 
     def _reweld_limb(self) -> None:
         """Rebuild the weld from the current robot and limb poses."""
@@ -255,8 +244,8 @@ class ObjectCentricLimb3DRobotEnv(
     def _prepare_torque_control(self) -> None:
         """Disable the default motors and joint friction so torques act directly.
 
-        Collisions are disabled for the robot and the limb, so their interaction is
-        mediated purely by the grasp constraint. See get_collision_clearance().
+        Collision response is disabled for both bodies, so their interaction is mediated
+        purely by the grasp constraint.
         """
         for body in (self.robot.arm, self.limb):
             p.setJointMotorControlArray(
@@ -266,12 +255,12 @@ class ObjectCentricLimb3DRobotEnv(
                 forces=np.zeros(len(body.arm_joints)),
                 physicsClientId=self.physics_client_id,
             )
-            for joint in range(
-                p.getNumJoints(body.robot_id, physicsClientId=self.physics_client_id)
-            ):
-                p.enableJointForceTorqueSensor(
-                    body.robot_id, joint, 1, physicsClientId=self.physics_client_id
-                )
+            num_joints = p.getNumJoints(
+                body.robot_id, physicsClientId=self.physics_client_id
+            )
+            # Link indices start at -1, the base link, which would otherwise keep its
+            # default collision group and damping.
+            for joint in range(-1, num_joints):
                 p.changeDynamics(
                     body.robot_id,
                     joint,
@@ -301,45 +290,28 @@ class ObjectCentricLimb3DRobotEnv(
             p.stepSimulation(physicsClientId=self.physics_client_id)
 
     def _apply_torques(
-        self, robot_torque: JointTorques, limb_torque: JointTorques
+        self, robot_torque: JointTorques, extra_limb_torque: JointTorques | None = None
     ) -> None:
         """Apply torques to both bodies and advance the simulation by one dt."""
-        p.setJointMotorControlArray(
-            self.robot.arm.robot_id,
-            self._robot_arm_joints,
-            p.TORQUE_CONTROL,
-            forces=robot_torque,
-            physicsClientId=self.physics_client_id,
-        )
-        p.setJointMotorControlArray(
-            self.limb.robot_id,
-            self.limb.arm_joints,
-            p.TORQUE_CONTROL,
-            forces=limb_torque,
-            physicsClientId=self.physics_client_id,
-        )
-        num_substeps = max(1, int((self.config.dt + 1e-5) / PYBULLET_TIMESTEP))
-        for _ in range(num_substeps):
+        for _ in range(self.config.num_substeps):
+            limb_torque = self.limb.get_muscle_tone_torque()
+            if extra_limb_torque is not None:
+                limb_torque = list(np.add(limb_torque, extra_limb_torque))
+            p.setJointMotorControlArray(
+                self.robot.arm.robot_id,
+                self._robot_arm_joints,
+                p.TORQUE_CONTROL,
+                forces=robot_torque,
+                physicsClientId=self.physics_client_id,
+            )
+            p.setJointMotorControlArray(
+                self.limb.robot_id,
+                self.limb.arm_joints,
+                p.TORQUE_CONTROL,
+                forces=limb_torque,
+                physicsClientId=self.physics_client_id,
+            )
             p.stepSimulation(physicsClientId=self.physics_client_id)
-
-    def get_collision_clearance(self) -> float:
-        """The smallest distance between the robot or limb and any static scene body.
-
-        Negative values mean penetration.
-        """
-        clearance = np.inf
-        for body_id in self.scene.get_scene_collision_ids():
-            for other_id in (self.limb.robot_id, self.robot.arm.robot_id):
-                points = p.getClosestPoints(
-                    other_id,
-                    body_id,
-                    float(clearance),
-                    physicsClientId=self.physics_client_id,
-                )
-                for point in points:
-                    # The 9th element of a contact point is the contact distance.
-                    clearance = min(clearance, point[8])
-        return float(clearance)
 
     @property
     def type_features(self) -> dict[Type, list[str]]:

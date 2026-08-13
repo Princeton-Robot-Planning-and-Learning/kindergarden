@@ -11,6 +11,7 @@ from pybullet_helpers.geometry import Pose, SE2Pose
 from relational_structs.spaces import ObjectCentricStateSpace
 
 from kinder.envs.dynamic3d.base_limbrepositioning3d import (
+    _CLEARANCE_QUERY_RADIUS,
     Limb3DEnvConfig,
     ObjectCentricLimb3DRobotEnv,
 )
@@ -55,11 +56,12 @@ class _MinimalLimb3DEnv(ObjectCentricLimb3DRobotEnv[Limb3DEnvConfig]):
 def _make_config(**kwargs) -> Limb3DEnvConfig:
     """A config for an isolated right arm, settling briefly to keep tests quick."""
     scene = LimbRepositioningSceneConfig(
-        scene_type="isolated",
+        scene_type=kwargs.pop("scene_type", "isolated"),
         limb_name="human-right-arm",
         limb_init_joint_positions=LIMB_INIT,
         limb_goal_joint_positions=LIMB_GOAL,
         limb_base_pose=LIMB_BASE_POSE,
+        use_limb_pose_to_initialize=kwargs.pop("use_limb_pose_to_initialize", False),
     )
     return Limb3DEnvConfig(
         scene=scene,
@@ -176,6 +178,79 @@ def test_goal_joint_positions_come_from_the_config(env):
     assert np.allclose(obs.limb_goal_joint_positions, LIMB_GOAL)
 
 
+@pytest.fixture(scope="module", name="bed_env")
+def _bed_env():
+    """A bed scene, which has both limb obstacles and static bodies to measure."""
+    scene = LimbRepositioningSceneConfig(
+        scene_type="bed",
+        limb_name="human-right-arm",
+        limb_init_joint_positions=LIMB_INIT,
+        limb_goal_joint_positions=LIMB_GOAL,
+        torso_base_pose=Pose.from_rpy((-0.10, 0.0, 0.65), (-np.pi / 2, 0.0, 0.0)),
+        bed_pose=Pose.from_rpy((0.0, 0.0, 0.35), (0.0, 0.0, 0.0)),
+    )
+    environment = _MinimalLimb3DEnv(
+        config=Limb3DEnvConfig(
+            scene=scene,
+            robot_base_home_pose=SE2Pose(-0.8557, 0.0837, -0.9312),
+            robot_base_z=0.0,
+            num_settle_steps=100,
+        )
+    )
+    yield environment
+    environment.close()
+
+
+def test_clearances_are_finite_at_rest(bed_env):
+    """Both loops run here, and an obstacle out of range records the radius."""
+    assert bed_env.scene.get_limb_obstacle_ids()
+    assert bed_env.scene.get_scene_collision_ids()
+    bed_env.reset()
+    rest = bed_env._limb_rest_clearance  # pylint: disable=protected-access
+    assert all(np.isfinite(d) for d in rest.values())
+    assert max(rest.values()) <= _CLEARANCE_QUERY_RADIUS
+    # The arm already overlaps the torso at rest, which is why it is the baseline.
+    assert min(rest.values()) < 0.0
+    assert bed_env.limb_penetration() == pytest.approx(0.0)
+    assert bed_env.get_collision_clearance() <= _CLEARANCE_QUERY_RADIUS
+
+
+def test_driving_the_limb_into_the_torso_reports_penetration(bed_env):
+    """Penetration is measured even though collision response is disabled."""
+    bed_env.reset()
+    assert bed_env.limb_penetration() == pytest.approx(0.0)
+    # Swing the shoulder inward, which buries the arm in the torso.
+    bed_env.limb.set_joints([0.0, -1.4, 0.0, 0.0, 0.0, 0.0])
+    penetration = bed_env.limb_penetration()
+    assert -_CLEARANCE_QUERY_RADIUS < penetration < -0.1
+
+
+def test_closest_distance_saturates_for_an_out_of_range_body(bed_env):
+    """The -inf fix: an unreachable body reports the radius, so it can be subtracted."""
+    client = bed_env.physics_client_id
+    far_id = p.createMultiBody(
+        baseCollisionShapeIndex=p.createCollisionShape(
+            p.GEOM_BOX, halfExtents=[0.1] * 3, physicsClientId=client
+        ),
+        basePosition=[10.0, 10.0, 10.0],
+        physicsClientId=client,
+    )
+    try:
+        distance = bed_env._closest_distance(  # pylint: disable=protected-access
+            bed_env.limb.robot_id, far_id
+        )
+        assert distance == pytest.approx(_CLEARANCE_QUERY_RADIUS)
+    finally:
+        p.removeBody(far_id, physicsClientId=client)
+
+
+def test_isolated_scene_saturates_rather_than_returning_infinity(env):
+    """An empty world gives the limb nothing to intrude into."""
+    env.reset()
+    assert env.limb_penetration() == pytest.approx(0.0)
+    assert env.get_collision_clearance() == pytest.approx(_CLEARANCE_QUERY_RADIUS)
+
+
 def test_render_returns_an_rgb_image(env):
     """Rendering honours the configured image size."""
     env.reset()
@@ -230,20 +305,12 @@ def test_a_coarse_dt_applies_torque_for_the_whole_interval():
         coarse.close()
 
 
-def test_dt_must_be_a_whole_number_of_timesteps():
-    """A dt that is not a multiple of the timestep fails loudly rather than silently."""
-    with pytest.raises(AssertionError, match="PYBULLET_TIMESTEP"):
-        _make_config(dt=1.0 / 100.0)
-
-
-def test_render_fps_follows_dt():
-    """Videos play at real speed only if the frame rate matches the control rate."""
+def test_config_validates_dt_and_derives_the_frame_rate():
+    """A bad dt fails loudly, and videos play at real speed rather than four times."""
     assert _make_config().render_fps == 240
     assert _make_config(dt=1.0 / 60.0).render_fps == 60
-
-
-def test_default_config_builds_a_scene():
-    """The config is usable without being handed a scene."""
+    with pytest.raises(AssertionError, match="PYBULLET_TIMESTEP"):
+        _make_config(dt=1.0 / 100.0)
     assert Limb3DEnvConfig().scene.scene_type == "isolated"
 
 

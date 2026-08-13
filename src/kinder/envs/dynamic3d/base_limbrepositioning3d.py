@@ -50,6 +50,9 @@ from kinder.envs.dynamic3d.limbs import HumanLimbPyBulletRobot
 from kinder.envs.kinematic3d.utils import extend_joints_to_include_fingers
 from kinder.envs.utils import RobotActionSpace
 
+# Clearances are only queried within this radius, and saturate at it.
+_CLEARANCE_QUERY_RADIUS = 0.5
+
 # Default scene config for the limb repositioning environment.
 _DEFAULT_SCENE = LimbRepositioningSceneConfig(
     scene_type="isolated",
@@ -129,6 +132,12 @@ class ObjectCentricLimb3DRobotEnv(
 
     A robot arm is rigidly attached to a passive human limb and repositions it by
     applying joint torques.
+
+    Collision response is disabled for the robot and for the limb, and gravity is off by
+    default, so nothing in the scene pushes back: the limb passes through the bed rather
+    than resting on it. Overlap is still measured, by distance queries that ignore the
+    collision filters, and reported as a cost by limb_penetration() and
+    get_collision_clearance().
     """
 
     def __init__(self, *args, use_gui: bool = False, **kwargs) -> None:
@@ -160,6 +169,9 @@ class ObjectCentricLimb3DRobotEnv(
         self.robot.arm.set_joints(
             extend_joints_to_include_fingers(list(self.config.robot_initial_joints))
         )
+
+        # Limbs already overlap the torso at rest, so record that as the baseline.
+        self._limb_rest_clearance: dict[int, float] = self._measure_limb_clearance()
 
         # Move the arm so that it grasps the limb, then weld the two together.
         self._move_robot_to_grasp_limb()
@@ -210,6 +222,49 @@ class ObjectCentricLimb3DRobotEnv(
                 self.robot.arm, robot_ee_pose, validate=False, best_effort=True
             )
             self.robot.arm.set_joints(joint_positions)
+
+    def _measure_limb_clearance(self) -> dict[int, float]:
+        """Distance from the limb to each obstacle in its current configuration."""
+        return {
+            body_id: self._closest_distance(self.limb.robot_id, body_id)
+            for body_id in self.scene.get_limb_obstacle_ids()
+        }
+
+    def _closest_distance(self, body_id: int, other_id: int) -> float:
+        """The closest distance between two bodies, saturating at the query radius."""
+        points = p.getClosestPoints(
+            body_id,
+            other_id,
+            _CLEARANCE_QUERY_RADIUS,
+            physicsClientId=self.physics_client_id,
+        )
+        return min((point[8] for point in points), default=_CLEARANCE_QUERY_RADIUS)
+
+    def limb_penetration(self) -> float:
+        """How far the limb intrudes past the overlap its model already has at rest."""
+        worst = 0.0
+        for body_id, distance in self._measure_limb_clearance().items():
+            worst = min(worst, distance - self._limb_rest_clearance.get(body_id, 0.0))
+        return worst
+
+    def get_collision_clearance(self) -> float:
+        """The smallest distance between the robot or limb and any static scene body.
+
+        Negative values mean penetration, and the result saturates at the query radius.
+        """
+        clearance = _CLEARANCE_QUERY_RADIUS
+        for body_id in self.scene.get_scene_collision_ids():
+            for other_id in (self.limb.robot_id, self.robot.arm.robot_id):
+                points = p.getClosestPoints(
+                    other_id,
+                    body_id,
+                    clearance,
+                    physicsClientId=self.physics_client_id,
+                )
+                for point in points:
+                    # The 9th element of a contact point is the contact distance.
+                    clearance = min(clearance, point[8])
+        return clearance
 
     def _reweld_limb(self) -> None:
         """Rebuild the weld from the current robot and limb poses."""

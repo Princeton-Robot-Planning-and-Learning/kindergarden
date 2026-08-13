@@ -1,0 +1,23 @@
+<?xml version="1.0" ?>
+<robot name="wheelchair">
+    <link name="base_link">
+        <inertial>
+            <mass value="5" />
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <inertia ixx="0.070968" ixy="-0.009135" ixz="-0.000056" iyy="0.048896" iyz="0.000007" izz="0.086415" />
+        </inertial>
+        <visual>
+            <geometry>
+                <mesh filename="wheelchair.obj" scale="1 0.9 1"/>
+            </geometry>
+            <material name="aluminium">
+                <color rgba="0.827450980392156 0.827450980392156 0.827450980392156 1.0"/>
+            </material>
+        </visual>
+        <collision>
+            <geometry>
+                <mesh filename="wheelchair_simplified.obj" scale="1 0.9 1"/>
+            </geometry>
+        </collision>
+    </link>
+</robot>

@@ -38,12 +38,10 @@ ROBOT_FACTORIES = {
 
 @dataclass(frozen=True)
 class Kinematic3Dv2EnvConfig(KinDEREnvConfig):
-    """Config for Kinematic3Dv2Env()."""
+    """Config shared by all Kinematic3Dv2 environments."""
 
-    # Robot. The manipulator names the entry in Robot.manipulators that this environment
-    # actuates; every other joint stays at its home value.
+    # Robot.
     robot_name: str = "vega"
-    manipulator: str = "right"
 
     # Actions are per-joint position deltas, in radians.
     max_action_mag: float = 0.1
@@ -69,6 +67,15 @@ class Kinematic3Dv2EnvConfig(KinDEREnvConfig):
             height=self.render_image_height,
             fov=self.camera_fov,
         )
+
+
+@dataclass(frozen=True)
+class Kinematic3Dv2SingleArmEnvConfig(Kinematic3Dv2EnvConfig):
+    """Config for Kinematic3Dv2 environments that actuate a single arm."""
+
+    # The manipulator names the entry in Robot.manipulators that this environment
+    # actuates; every other joint stays at its home value.
+    manipulator: str = "right"
 
 
 class Kinematic3Dv2ObjectCentricState(ObjectCentricState):
@@ -122,7 +129,7 @@ self-collision is rejected and the arm stays where it was.
 
 
 _ObsType = TypeVar("_ObsType", bound=Kinematic3Dv2ObjectCentricState)
-_ConfigType = TypeVar("_ConfigType", bound=Kinematic3Dv2EnvConfig)
+_ConfigType = TypeVar("_ConfigType", bound=Kinematic3Dv2SingleArmEnvConfig)
 
 
 class ObjectCentricKinematic3Dv2RobotEnv(

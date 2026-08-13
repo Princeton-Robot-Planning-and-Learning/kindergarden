@@ -16,6 +16,13 @@ Kinematic3Dv2EnvTypeFeatures[Kinematic3Dv2ArmRobotType] = [
     f"joint_{i}" for i in range(1, ARM_NUM_JOINTS + 1)
 ]
 
+# An arm that can also hold an object: its joint positions plus a binary "grasping"
+# feature that is 1.0 while the arm is holding something.
+Kinematic3Dv2GraspArmRobotType = Type("Kinematic3Dv2GraspArmRobot")
+Kinematic3Dv2EnvTypeFeatures[Kinematic3Dv2GraspArmRobotType] = [
+    f"joint_{i}" for i in range(1, ARM_NUM_JOINTS + 1)
+] + ["grasping"]
+
 # A point is just a position. For example, it could be a target point to reach.
 Kinematic3Dv2PointType = Type("Kinematic3Dv2Point")
 Kinematic3Dv2EnvTypeFeatures[Kinematic3Dv2PointType] = [

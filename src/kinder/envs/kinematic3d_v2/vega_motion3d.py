@@ -15,8 +15,8 @@ from spatialmath import SE3
 
 from kinder.core import ConstantObjectKinDEREnv, FinalConfigMeta
 from kinder.envs.kinematic3d_v2.base_env import (
-    Kinematic3Dv2EnvConfig,
     Kinematic3Dv2ObjectCentricState,
+    Kinematic3Dv2SingleArmEnvConfig,
     ObjectCentricKinematic3Dv2RobotEnv,
 )
 from kinder.envs.kinematic3d_v2.object_types import (
@@ -30,7 +30,7 @@ TARGET_NODE = "target"
 
 
 @dataclass(frozen=True)
-class VegaMotion3DEnvConfig(Kinematic3Dv2EnvConfig, metaclass=FinalConfigMeta):
+class VegaMotion3DEnvConfig(Kinematic3Dv2SingleArmEnvConfig, metaclass=FinalConfigMeta):
     """Config for VegaMotion3DEnv()."""
 
     # Robot.

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import abc
 from dataclasses import dataclass
-from typing import Any, Generic, TypeVar, cast
+from typing import Any, Generic, TypeVar
 
 import gymnasium
 import numpy as np
@@ -118,13 +118,12 @@ class Limb3DEnvConfig(KinDEREnvConfig):
         }
 
 
-_ObsType = TypeVar("_ObsType", bound=LimbRepositioning3DObjectCentricState)
 _ConfigType = TypeVar("_ConfigType", bound=Limb3DEnvConfig)
 
 
 class ObjectCentricLimb3DRobotEnv(
-    ObjectCentricKinDEREnv[_ObsType, Array, _ConfigType],
-    Generic[_ObsType, _ConfigType],
+    ObjectCentricKinDEREnv[LimbRepositioning3DObjectCentricState, Array, _ConfigType],
+    Generic[_ConfigType],
 ):
     """Base class for torque-controlled PyBullet environments.
 
@@ -358,7 +357,7 @@ class ObjectCentricLimb3DRobotEnv(
             return feats
         raise ValueError(f"Unknown object: {object_name}")
 
-    def _get_obs(self) -> _ObsType:
+    def _get_obs(self) -> LimbRepositioning3DObjectCentricState:
         state = create_state_from_dict(
             {
                 Object(name, object_type): self._get_object_features(name)
@@ -368,9 +367,9 @@ class ObjectCentricLimb3DRobotEnv(
             state_cls=LimbRepositioning3DObjectCentricState,
         )
         assert isinstance(state, LimbRepositioning3DObjectCentricState)
-        return cast(_ObsType, state)
+        return state
 
-    def _set_state(self, state: _ObsType) -> None:
+    def _set_state(self, state: LimbRepositioning3DObjectCentricState) -> None:
         """Restore positions and velocities, then rebuild the weld.
 
         Velocities are part of the state because the dynamics depend on them, so
@@ -387,7 +386,7 @@ class ObjectCentricLimb3DRobotEnv(
         )
         self._reweld_limb()
 
-    def _get_state(self) -> _ObsType:
+    def _get_state(self) -> LimbRepositioning3DObjectCentricState:
         return self._get_obs()
 
     def _get_reward(self) -> float:
@@ -398,7 +397,9 @@ class ObjectCentricLimb3DRobotEnv(
         """Torque applied to the limb on top of its muscle tone, e.g. a spasm."""
         return None
 
-    def step(self, action: Array) -> tuple[_ObsType, float, bool, bool, dict]:
+    def step(
+        self, action: Array
+    ) -> tuple[LimbRepositioning3DObjectCentricState, float, bool, bool, dict]:
         torque = np.clip(
             action, self.torque_action_space.low, self.torque_action_space.high
         )
@@ -420,7 +421,7 @@ class ObjectCentricLimb3DRobotEnv(
 
     def reset(
         self, *, seed: int | None = None, options: dict | None = None
-    ) -> tuple[_ObsType, dict]:
+    ) -> tuple[LimbRepositioning3DObjectCentricState, dict]:
         gymnasium.Env.reset(self, seed=seed)
         if options is not None and "init_state" in options:
             self._set_state(options["init_state"])

@@ -31,9 +31,7 @@ ROBOT_BASE_POSE = SE2Pose(0.3566, 0.4849, -0.6971)
 ROBOT_BASE_Z = -0.329
 
 
-class _MinimalLimb3DEnv(
-    ObjectCentricLimb3DRobotEnv[LimbRepositioning3DObjectCentricState, Limb3DEnvConfig]
-):
+class _MinimalLimb3DEnv(ObjectCentricLimb3DRobotEnv[Limb3DEnvConfig]):
     """The smallest concrete environment the base class admits."""
 
     def _create_constant_initial_state(self):

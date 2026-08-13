@@ -194,7 +194,7 @@ def test_vega_pickplace3d_goal(object_centric_env):
 
 def test_vega_pickplace3d_state_access(object_centric_env):
     """Getting and setting states should round-trip, including a held cube."""
-    obs, _ = object_centric_env.reset(seed=123)
+    object_centric_env.reset(seed=123)
     ee_position = object_centric_env.end_effector_pose("left").t
     init_state = _state_with_cube_at(object_centric_env, ee_position, holder="left")
     object_centric_env.reset(options={"init_state": init_state})

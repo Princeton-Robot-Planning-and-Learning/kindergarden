@@ -154,7 +154,8 @@ class BimanualArmJointDeltaGraspActionSpace(RobotActionSpace):
         for i, side in enumerate(ARM_SIDES):
             rows.append(f"| {2 * ARM_NUM_JOINTS + i} | {side} grasp command |")
         table = "\n".join(rows)
-        return f"""An action space for two arms with {ARM_NUM_JOINTS} actuated joints each.
+        return f"""An action space for two arms with {ARM_NUM_JOINTS} actuated joints
+each.
 
 The first {2 * ARM_NUM_JOINTS} entries are bounded relative joint positions, in radians.
 The last two entries are grasp commands: above zero asks the arm to hold the cube,
@@ -372,7 +373,7 @@ class ObjectCentricVegaPickPlace3DEnv(
                 if wants_grasp[side] and (dist := in_range(side)) is not None
             }
             if candidates:
-                self._attach_cube_to_arm(min(candidates, key=candidates.get))
+                self._attach_cube_to_arm(min(candidates, key=lambda s: candidates[s]))
             return
         other = ARM_SIDES[1 - ARM_SIDES.index(self._holder)]
         if wants_grasp[other] and in_range(other) is not None:

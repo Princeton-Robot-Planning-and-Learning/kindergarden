@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 import cv2 as cv
+import mujoco
 import numpy as np
 from gymnasium.spaces import Space
 from numpy.typing import NDArray
@@ -65,6 +66,14 @@ class TidyBot3DConfig(KinDEREnvConfig, metaclass=FinalConfigMeta):
     act_delta: bool = True
 
 
+# Enough steps for the finger linkage to come to rest under a held command.
+GRIPPER_SETTLE_STEPS = 200
+
+# Commands are continuous, the settle is not free, and the linkage pose varies smoothly
+# with the command, so cache on a grid rather than on the exact float.
+GRIPPER_COMMAND_QUANTUM = 0.01
+
+
 class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
     """TidyBot 3D environment with mobile manipulation tasks."""
 
@@ -91,6 +100,7 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
         self.show_images = show_images
         self.seed = seed
         self.config = config
+        self._gripper_linkage_cache: dict[float, NDArray[np.float64]] = {}
 
         # Parse task configuration
         if task_config_path is None:
@@ -1276,12 +1286,77 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
         if set_arm_ctrl_targets:
             self._robot_env.ctrl["arm"][:] = robot_arm_pos
 
+
         gripper_pos = state.get(robot_obj, "pos_gripper")
         self._robot_env.ctrl["gripper"][:] = gripper_pos * 255.0
+        self._restore_gripper_linkage(gripper_pos)
 
         robot_arm_vel = [state.get(robot_obj, f"vel_arm_joint{i}") for i in range(1, 8)]
         self._robot_env.qvel["arm"][:] = robot_arm_vel
         self._robot_env.qvel["gripper"][:] = state.get(robot_obj, "vel_gripper")
+
+    def _gripper_linkage_qpos_addresses(self) -> list[int]:
+        """qpos addresses of every joint in the gripper, actuated or not.
+
+        A Robotiq 2F-85 has eight finger joints but only the two drivers are actuated,
+        so only those are named in qpos["gripper"]; the coupler, follower and
+        spring-link joints that trail them belong to no view at all. Found by walking
+        the body tree down from the drivers' parent rather than by joint name, so this
+        holds for any gripper hung off the end of the arm.
+        """
+        assert self._robot_env is not None
+        assert self._robot_env.qpos is not None
+        model = self._robot_env.sim.model.mj_model
+        driven = set(self._robot_env.qpos["gripper"].indices)
+        wrists = {
+            model.body_parentid[model.jnt_bodyid[joint]]
+            for joint in range(model.njnt)
+            if model.jnt_qposadr[joint] in driven
+        }
+        addresses = []
+        for joint in range(model.njnt):
+            body = model.jnt_bodyid[joint]
+            while body != 0 and body not in wrists:
+                body = model.body_parentid[body]
+            if body in wrists:
+                addresses.append(int(model.jnt_qposadr[joint]))
+        return sorted(addresses)
+
+    def _settled_gripper_linkage(self, gripper_pos: float) -> NDArray[np.float64]:
+        """The linkage pose this gripper command settles into, closing on nothing.
+
+        Cached, and quantized so that a continuously-sampled command cannot make every
+        call pay for a fresh settle.
+        """
+        assert self._robot_env is not None
+        quantized = (
+            round(gripper_pos / GRIPPER_COMMAND_QUANTUM) * GRIPPER_COMMAND_QUANTUM
+        )
+        if quantized not in self._gripper_linkage_cache:
+            model = self._robot_env.sim.model.mj_model
+            scratch = mujoco.MjData(model)  # pylint: disable=no-member
+            scratch.ctrl[self._robot_env.ctrl["gripper"].indices] = quantized * 255.0
+            for _ in range(GRIPPER_SETTLE_STEPS):
+                mujoco.mj_step(model, scratch)  # pylint: disable=no-member
+            addresses = self._gripper_linkage_qpos_addresses()
+            self._gripper_linkage_cache[quantized] = scratch.qpos[addresses].copy()
+        return self._gripper_linkage_cache[quantized]
+
+    def _restore_gripper_linkage(self, gripper_pos: float) -> None:
+        """Put the gripper's finger joints where this command settles them.
+
+        Without this, set_state restores the gripper *command* and leaves the fingers
+        wherever the previous episode left them, so the same state yields a different
+        simulator depending on history. The exact prior finger pose is not recoverable
+        -- the state records only the command -- but a canonical pose per command makes
+        set_state deterministic, which is what a planner relies on.
+        """
+        assert self._robot_env is not None
+        addresses = self._gripper_linkage_qpos_addresses()
+        if not addresses:
+            return
+        qpos = self._robot_env.sim.data.mj_data.qpos
+        qpos[addresses] = self._settled_gripper_linkage(gripper_pos)
 
 
 class ObjectCentricTidyBot3DEnv(ObjectCentricRobotEnv):

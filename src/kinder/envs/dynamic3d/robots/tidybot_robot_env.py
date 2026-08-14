@@ -371,7 +371,9 @@ class TidyBotRobotEnv(RobotEnv):
         - Gripper: Uses tendon control with force range [0, 255]
 
         Args:
-            action: Action array with shape (11,) or (18,):
+            action: Action array with shape (11,) or (18,). Or a 2-D array of
+                such rows covering the control period, which MujocoEnv.step
+                reads as a control schedule.
 
                 Position-only mode (11,) - backward compatible:
                     - [0:3]: Base position targets (x, y, theta) or deltas
@@ -387,6 +389,12 @@ class TidyBotRobotEnv(RobotEnv):
         Returns:
             Tuple of (observation, reward, terminated, truncated, info).
         """
+        if np.ndim(action) == 2:
+            return super().step(np.stack([self._action_to_ctrl(r) for r in action]))
+        return super().step(self._action_to_ctrl(action))
+
+    def _action_to_ctrl(self, action: Array) -> Array:
+        """Translate one action row into this robot's ctrl vector; a step() helper."""
         action = action.copy()
 
         # Parse action based on length for backward compatibility
@@ -430,7 +438,7 @@ class TidyBotRobotEnv(RobotEnv):
         # - Gripper: force command
         ctrl_action = np.concatenate([base_targets, arm_torques, [gripper_action]])
 
-        return super().step(ctrl_action)
+        return ctrl_action
 
     def reward(self, obs: MjObs) -> float:
         """Compute the reward from an observation.

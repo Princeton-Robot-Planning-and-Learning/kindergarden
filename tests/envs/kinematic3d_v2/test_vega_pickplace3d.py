@@ -176,10 +176,12 @@ def test_vega_pickplace3d_handover(object_centric_env):
 
 
 def test_vega_pickplace3d_goal(object_centric_env):
-    """Dropping the cube over the target patch should reach the goal."""
+    """Setting the cube down over the target patch should reach the goal."""
     obs, _ = object_centric_env.reset(seed=0)
     target = obs.target_position
-    above_target = (target[0], target[1], 0.75)
+    rest_z = object_centric_env.cube_resting_z
+    max_release = object_centric_env.config.max_release_height
+    above_target = (target[0], target[1], rest_z + max_release / 2)
     init_state = _state_with_cube_at(object_centric_env, above_target, holder="left")
     obs, _ = object_centric_env.reset(options={"init_state": init_state})
     assert not object_centric_env.goal_reached()
@@ -189,7 +191,27 @@ def test_vega_pickplace3d_goal(object_centric_env):
     obs, _, terminated, _, _ = object_centric_env.step(action)
     assert terminated
     assert obs.holder is None
-    assert np.isclose(obs.cube_position[2], object_centric_env.cube_resting_z)
+    assert np.isclose(obs.cube_position[2], rest_z)
+
+
+def test_vega_pickplace3d_high_release_is_ignored(object_centric_env):
+    """A release from too far above the table should leave the cube held."""
+    obs, _ = object_centric_env.reset(seed=0)
+    target = obs.target_position
+    rest_z = object_centric_env.cube_resting_z
+    max_release = object_centric_env.config.max_release_height
+    high_above_target = (target[0], target[1], rest_z + 2 * max_release)
+    init_state = _state_with_cube_at(
+        object_centric_env, high_above_target, holder="left"
+    )
+    object_centric_env.reset(options={"init_state": init_state})
+
+    action = np.zeros(ACTION_DIM)
+    action[2 * ARM_NUM_JOINTS] = -1.0
+    obs, _, terminated, _, _ = object_centric_env.step(action)
+    assert not terminated
+    assert obs.holder == "left"
+    assert np.isclose(obs.cube_position[2], high_above_target[2])
 
 
 def test_vega_pickplace3d_state_access(object_centric_env):

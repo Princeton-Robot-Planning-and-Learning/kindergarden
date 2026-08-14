@@ -9,7 +9,7 @@ A 3D environment where a cube on a table must be moved onto a target surface.
 
 The robot is a bimanual Dexmate Vega 1U. Both 7-degree-of-freedom arms are actuated; the lift, the torso flip, the head, and both grippers are held at their home values. A cube rests on a table in front of the robot and a flat target patch marks a goal region elsewhere on the table. The episode ends when the cube rests on the table with its center inside the patch and neither arm is holding it.
 
-Grasping is kinematic: an arm holds the cube whenever its grasp command is positive and its end effector is within 0.10m of the cube center. A held cube moves rigidly with the holding arm. The other arm can take the cube from the holder by requesting a grasp within range, so the cube can be passed between the arms. Releasing the cube drops it straight down onto the table (or the floor, if it is released away from the table).
+Grasping is kinematic: an arm holds the cube whenever its grasp command is positive and its end effector is within 0.10m of the cube center. A held cube moves rigidly with the holding arm. The other arm can take the cube from the holder by requesting a grasp within range, so the cube can be passed between the arms. Releasing the cube sets it straight down onto the table (or the floor, if it is released away from the table), but only while the cube is at most 0.10m above its resting height; a release from higher up is ignored and the arm keeps hold, so a placement must be a deliberate set-down rather than a drop.
 
 The cube and the target patch positions are sampled uniformly over the table, so depending on the episode the cube and the target may each be reachable by one arm or both. Some episodes are solvable with a single arm; others require carrying the cube to the middle and passing it between the arms.
 
@@ -29,7 +29,8 @@ This environment has only one variant.
 *(Differs per variant, see individual variant pages)*
 
 ## Action Space
-An action space for two arms with 7 actuated joints each.
+An action space for two arms with 7 actuated joints
+each.
 
 The first 14 entries are bounded relative joint positions, in radians.
 The last two entries are grasp commands: above zero asks the arm to hold the cube,

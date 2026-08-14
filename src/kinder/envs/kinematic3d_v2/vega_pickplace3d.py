@@ -72,6 +72,14 @@ class VegaPickPlace3DEnvConfig(Kinematic3Dv2EnvConfig, metaclass=FinalConfigMeta
     # effector is within this distance of the cube center.
     grasp_radius: float = 0.10
 
+    # A release only takes effect while the cube is at most this far above its
+    # resting height on the support below it; from higher up the arm keeps hold.
+    # This keeps a placement a deliberate set-down rather than a drop from
+    # anywhere. Baseline place skills self-limit releases to 0.10m above resting
+    # (PLACE_MAX_RELEASE_HEIGHT in kinder-baselines), so do not lower this
+    # without lowering that constant to match.
+    max_release_height: float = 0.10
+
     # Target patch, drawn flat on the table top.
     target_half_extents: tuple[float, float] = (0.10, 0.10)
     target_thickness: float = 0.005
@@ -337,11 +345,11 @@ class ObjectCentricVegaPickPlace3DEnv(
         self.tree.attach(CUBE_NODE, self._manipulators[side].ee_frame, relative)
         self._holder = side
 
-    def _drop_cube(self) -> None:
-        """Release the cube and let it fall straight down onto its support.
+    def _cube_rest_z(self) -> float:
+        """The height the cube center would settle at, over its current support.
 
-        The cube lands on the table top when it is released over the table, and on the
-        floor otherwise.
+        The support is the table top when the cube is over the table, and the floor
+        otherwise.
         """
         x, y, z = self._node_position(CUBE_NODE)
         config = self.config
@@ -350,15 +358,21 @@ class ObjectCentricVegaPickPlace3DEnv(
             and config.table_y_bounds[0] <= y <= config.table_y_bounds[1]
             and z >= config.table_height
         )
-        rest_z = self.cube_resting_z if over_table else config.cube_half_size
-        self._place_cube_in_world((float(x), float(y), rest_z))
+        return self.cube_resting_z if over_table else config.cube_half_size
+
+    def _drop_cube(self) -> None:
+        """Release the cube and let it settle straight down onto its support."""
+        x, y, _ = self._node_position(CUBE_NODE)
+        self._place_cube_in_world((float(x), float(y), self._cube_rest_z()))
 
     def _update_grasp(self, wants_grasp: dict[str, bool]) -> None:
         """Apply the grasp commands after the arms have moved.
 
         A free cube is taken by the closest requesting arm within grasp range. A held
         cube passes to the other arm when that arm requests it within grasp range (a
-        handover), and drops when the holder lets go.
+        handover), and drops when the holder lets go close enough to the support: a
+        release from higher than max_release_height is ignored and the arm keeps hold,
+        so a placement must be a deliberate set-down.
         """
         cube = self._node_position(CUBE_NODE)
 
@@ -379,7 +393,8 @@ class ObjectCentricVegaPickPlace3DEnv(
         if wants_grasp[other] and in_range(other) is not None:
             self._attach_cube_to_arm(other)
         elif not wants_grasp[self._holder]:
-            self._drop_cube()
+            if cube[2] - self._cube_rest_z() <= self.config.max_release_height:
+                self._drop_cube()
 
     def goal_reached(self) -> bool:
         """The cube rests on the table with its center inside the target patch."""
@@ -572,7 +587,7 @@ class VegaPickPlace3DEnv(ConstantObjectKinDEREnv):
 
 The robot is a bimanual Dexmate Vega 1U. Both 7-degree-of-freedom arms are actuated; the lift, the torso flip, the head, and both grippers are held at their home values. A cube rests on a table in front of the robot and a flat target patch marks a goal region elsewhere on the table. The episode ends when the cube rests on the table with its center inside the patch and neither arm is holding it.
 
-Grasping is kinematic: an arm holds the cube whenever its grasp command is positive and its end effector is within {config.grasp_radius:.2f}m of the cube center. A held cube moves rigidly with the holding arm. The other arm can take the cube from the holder by requesting a grasp within range, so the cube can be passed between the arms. Releasing the cube drops it straight down onto the table (or the floor, if it is released away from the table).
+Grasping is kinematic: an arm holds the cube whenever its grasp command is positive and its end effector is within {config.grasp_radius:.2f}m of the cube center. A held cube moves rigidly with the holding arm. The other arm can take the cube from the holder by requesting a grasp within range, so the cube can be passed between the arms. Releasing the cube sets it straight down onto the table (or the floor, if it is released away from the table), but only while the cube is at most {config.max_release_height:.2f}m above its resting height; a release from higher up is ignored and the arm keeps hold, so a placement must be a deliberate set-down rather than a drop.
 
 The cube and the target patch positions are sampled uniformly over the table, so depending on the episode the cube and the target may each be reachable by one arm or both. Some episodes are solvable with a single arm; others require carrying the cube to the middle and passing it between the arms.
 """

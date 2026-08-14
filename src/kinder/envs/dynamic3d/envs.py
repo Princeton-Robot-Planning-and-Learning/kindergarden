@@ -66,12 +66,11 @@ class TidyBot3DConfig(KinDEREnvConfig, metaclass=FinalConfigMeta):
     act_delta: bool = True
 
 
-# Enough steps for the finger linkage to come to rest under a held command.
-GRIPPER_SETTLE_STEPS = 200
-
-# Commands are continuous, the settle is not free, and the linkage pose varies smoothly
-# with the command, so cache on a grid rather than on the exact float.
-GRIPPER_COMMAND_QUANTUM = 0.01
+# Enough steps for the finger linkage to come to rest under a held command: measured
+# stationary to under 1e-5 rad by 1600 steps for both a fully open and a fully closed
+# command, on the TidyBot and the FR3. A closing command is the slow one -- it is still
+# 0.32 rad short of its resting pose after 200.
+GRIPPER_SETTLE_STEPS = 2000
 
 
 class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
@@ -1286,7 +1285,6 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
         if set_arm_ctrl_targets:
             self._robot_env.ctrl["arm"][:] = robot_arm_pos
 
-
         gripper_pos = state.get(robot_obj, "pos_gripper")
         self._robot_env.ctrl["gripper"][:] = gripper_pos * 255.0
         self._restore_gripper_linkage(gripper_pos)
@@ -1301,8 +1299,9 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
         A Robotiq 2F-85 has eight finger joints but only the two drivers are actuated,
         so only those are named in qpos["gripper"]; the coupler, follower and
         spring-link joints that trail them belong to no view at all. Found by walking
-        the body tree down from the drivers' parent rather than by joint name, so this
-        holds for any gripper hung off the end of the arm.
+        the body tree down from the drivers' parent rather than by joint name, so no
+        2F-85 joint name is baked in -- though both robots reaching this code (TidyBot
+        and FR3) do carry a 2F-85, so a different gripper is untested.
         """
         assert self._robot_env is not None
         assert self._robot_env.qpos is not None
@@ -1325,22 +1324,20 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
     def _settled_gripper_linkage(self, gripper_pos: float) -> NDArray[np.float64]:
         """The linkage pose this gripper command settles into, closing on nothing.
 
-        Cached, and quantized so that a continuously-sampled command cannot make every
-        call pay for a fresh settle.
+        Cached on the exact command, so that the restored linkage always matches the
+        command restored alongside it. Every controller in the tree commands only a
+        fully open or a fully closed gripper, so the cache holds two entries.
         """
         assert self._robot_env is not None
-        quantized = (
-            round(gripper_pos / GRIPPER_COMMAND_QUANTUM) * GRIPPER_COMMAND_QUANTUM
-        )
-        if quantized not in self._gripper_linkage_cache:
+        if gripper_pos not in self._gripper_linkage_cache:
             model = self._robot_env.sim.model.mj_model
             scratch = mujoco.MjData(model)  # pylint: disable=no-member
-            scratch.ctrl[self._robot_env.ctrl["gripper"].indices] = quantized * 255.0
+            scratch.ctrl[self._robot_env.ctrl["gripper"].indices] = gripper_pos * 255.0
             for _ in range(GRIPPER_SETTLE_STEPS):
                 mujoco.mj_step(model, scratch)  # pylint: disable=no-member
             addresses = self._gripper_linkage_qpos_addresses()
-            self._gripper_linkage_cache[quantized] = scratch.qpos[addresses].copy()
-        return self._gripper_linkage_cache[quantized]
+            self._gripper_linkage_cache[gripper_pos] = scratch.qpos[addresses].copy()
+        return self._gripper_linkage_cache[gripper_pos]
 
     def _restore_gripper_linkage(self, gripper_pos: float) -> None:
         """Put the gripper's finger joints where this command settles them.

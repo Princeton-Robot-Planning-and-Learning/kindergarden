@@ -39,13 +39,21 @@ def _finger_joint_positions(env: ObjectCentricTidyBot3DEnv) -> np.ndarray:
     )
 
 
-def _close_gripper_on_nothing(env: ObjectCentricTidyBot3DEnv) -> None:
+def _command_gripper_on_nothing(env: ObjectCentricTidyBot3DEnv, gripper: float) -> None:
     # Base and arm are commanded as deltas (act_delta), the gripper absolutely, so
-    # zeros here hold the pose while the fingers shut.
-    action = np.zeros(11)
-    action[10] = 1.0
+    # zeros here hold the pose while the fingers move.
+    action = np.zeros(11, dtype=np.float32)
+    action[10] = gripper
     for _ in range(_CLOSE_STEPS):
         env.step(action)
+
+
+def _close_gripper_on_nothing(env: ObjectCentricTidyBot3DEnv) -> None:
+    _command_gripper_on_nothing(env, 1.0)
+
+
+def _open_gripper_on_nothing(env: ObjectCentricTidyBot3DEnv) -> None:
+    _command_gripper_on_nothing(env, 0.0)
 
 
 def test_set_state_restores_the_gripper_finger_joints():
@@ -63,6 +71,27 @@ def test_set_state_restores_the_gripper_finger_joints():
 
     assert np.allclose(restored, expected, atol=1e-2), (
         f"gripper fingers not restored: max |diff| = "
+        f"{np.abs(restored - expected).max():.4f} rad"
+    )
+
+
+def test_set_state_restores_a_closed_gripper():
+    """A closed command must restore closed fingers, not part-way ones."""
+    reference = _make_env()
+    _close_gripper_on_nothing(reference)
+    expected = _finger_joint_positions(reference)
+    reference.close()
+
+    env = _make_env()
+    _close_gripper_on_nothing(env)
+    closed_state = env.get_state()
+    _open_gripper_on_nothing(env)
+    env.set_state(closed_state)
+    restored = _finger_joint_positions(env)
+    env.close()
+
+    assert np.allclose(restored, expected, atol=1e-2), (
+        f"closed gripper not restored: max |diff| = "
         f"{np.abs(restored - expected).max():.4f} rad"
     )
 

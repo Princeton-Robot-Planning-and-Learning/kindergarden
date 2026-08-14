@@ -41,7 +41,8 @@ the backends already pulled in by the base install.
 
 #### The prpl_kinematics backend
 
-The `kinematic3d_v2` environments — currently `VegaMotion3D`, which uses the Dexmate Vega
+The `kinematic3d_v2` environments — currently `VegaMotion3D` and `VegaPickPlace3D`, which
+use the Dexmate Vega
 — are built on [prpl_kinematics](https://github.com/Princeton-Robot-Planning-and-Learning/prpl-mono/tree/main/prpl-kinematics)
 rather than pybullet_helpers. Because those two packages overlap heavily and are both
 large, a base install pulls in neither pair; add prpl_kinematics on top:
@@ -163,6 +164,7 @@ obs, info = env.reset(seed=42)
 | Table3D | Kinematic3D | `kinder/Table3D-o2-v0` |
 | Transport3D | Kinematic3D | `kinder/Transport3D-o2-v0` |
 | VegaMotion3D | Kinematic3Dv2 | `kinder/VegaMotion3D-v0` |
+| VegaPickPlace3D | Kinematic3Dv2 | `kinder/VegaPickPlace3D-v0` |
 | DynObstruction2D | Dynamic2D | `kinder/DynObstruction2D-o2-v0` |
 | DynPushPullHook2D | Dynamic2D | `kinder/DynPushPullHook2D-o1-v0` |
 | DynPushT2D | Dynamic2D | `kinder/DynPushT2D-t1-v0` |

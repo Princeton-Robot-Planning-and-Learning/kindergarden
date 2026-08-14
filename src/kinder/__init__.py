@@ -423,6 +423,20 @@ def _register_kinematic3d_v2() -> None:
         variant_ids=[variant_id],
     )
 
+    # VegaPickPlace3D environment.
+    variant_id = "kinder/VegaPickPlace3D-v0"
+    _register(
+        id=variant_id,
+        entry_point="kinder.envs.kinematic3d_v2.vega_pickplace3d:VegaPickPlace3DEnv",
+    )
+    _register_env_class(
+        class_name="VegaPickPlace3D",
+        entry_point="kinder.envs.kinematic3d_v2.vega_pickplace3d:VegaPickPlace3DEnv",
+        category="Kinematic3Dv2",
+        backend="prpl_kinematics",
+        variant_ids=[variant_id],
+    )
+
 
 def _register_dynamic3d() -> None:
     # Tasks with different scenes and object counts

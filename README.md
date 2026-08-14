@@ -158,7 +158,6 @@ obs, info = env.reset(seed=42)
 | StickButton2D | Kinematic2D | `kinder/StickButton2D-b3-v0` |
 | BaseMotion3D | Kinematic3D | `kinder/BaseMotion3D-v0` |
 | KinematicShelf3D | Kinematic3D | `kinder/KinematicShelf3D-o3-v0` |
-| LimbRepositioning3D | Kinematic3D | `kinder/LimbRepositioning3D-wheelchair-left-arm-v0` |
 | Obstruction3D | Kinematic3D | `kinder/Obstruction3D-o2-v0` |
 | Packing3D | Kinematic3D | `kinder/Packing3D-p2-v0` |
 | PrplLab3D | Kinematic3D | `kinder/PrplLab3D-o2-v0` |
@@ -173,6 +172,7 @@ obs, info = env.reset(seed=42)
 | BalanceBeam3D | Dynamic3D | `kinder/BalanceBeam3D-o3-v0` |
 | ConstrainedCupboard3D | Dynamic3D | `kinder/ConstrainedCupboard3D-o1-v0` |
 | Dynamo3D | Dynamic3D | `kinder/Dynamo3D-o3-v0` |
+| LimbRepositioning3D | Dynamic3D | `kinder/LimbRepositioning3D-wheelchair-left-arm-v0` |
 | Rearrange3D | Dynamic3D | `kinder/Rearrange3D-o2-put_the_boxed_drink_on_the_left_and_the_can_on_the_right_side_of_the_bowl-v0` |
 | ScoopPour3D | Dynamic3D | `kinder/ScoopPour3D-o100-v0` |
 | Shelf3D | Dynamic3D | `kinder/Shelf3D-o2-v0` |

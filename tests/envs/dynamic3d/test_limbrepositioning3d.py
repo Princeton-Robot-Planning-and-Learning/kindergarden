@@ -6,14 +6,14 @@ from gymnasium.wrappers import RecordVideo
 from relational_structs.spaces import ObjectCentricBoxSpace
 
 import kinder
-from kinder.envs.kinematic3d.limb_utils import NUM_LIMB_JOINTS, NUM_ROBOT_JOINTS
-from kinder.envs.kinematic3d.limbrepositioning3d import (
+from kinder.envs.dynamic3d.limb_utils import NUM_LIMB_JOINTS, NUM_ROBOT_JOINTS
+from kinder.envs.dynamic3d.limbrepositioning3d import (
     ALL_VARIANTS,
     LimbRepositioning3DEnv,
     ObjectCentricLimbRepositioning3DEnv,
     create_variant_config,
 )
-from kinder.envs.kinematic3d.limbs import get_sampling_bounds
+from kinder.envs.dynamic3d.limbs import get_sampling_bounds
 from tests.conftest import MAKE_VIDEOS
 
 # One variant per scene type, for the tests that step the simulation.
@@ -152,14 +152,18 @@ def test_scene_types_build_and_step(variant):
         environment.close()
 
 
-def test_initial_state_varies_with_seed():
+@pytest.mark.parametrize("variant", REPRESENTATIVE_VARIANTS)
+def test_initial_state_varies_with_seed(variant):
     """Resets with different seeds give different initial limb configurations."""
-    environment = ObjectCentricLimbRepositioning3DEnv(variant="wheelchair-left-arm")
+    environment = ObjectCentricLimbRepositioning3DEnv(variant=variant)
     try:
+        nominal = np.array(environment.config.scene.limb_init_joint_positions)
         configurations = []
         for seed in range(4):
             obs, _ = environment.reset(seed=seed)
-            configurations.append(np.array(obs.limb_joint_positions))
+            joints = np.array(obs.limb_joint_positions)
+            assert not np.array_equal(joints, nominal), f"{variant} fell back at {seed}"
+            configurations.append(joints)
         for i in range(1, len(configurations)):
             assert not np.allclose(configurations[0], configurations[i], atol=1e-3)
     finally:
@@ -225,7 +229,8 @@ def test_registered_variants():
     env_ids = kinder.get_all_env_ids()
     for variant in ALL_VARIANTS:
         assert f"kinder/LimbRepositioning3D-{variant}-v0" in env_ids
-    assert "LimbRepositioning3D" in kinder.get_env_categories()["Kinematic3D"]
+    assert "LimbRepositioning3D" in kinder.get_env_categories()["Dynamic3D"]
+    assert kinder.get_env_classes()["LimbRepositioning3D"]["backend"] == "pybullet"
 
     environment = kinder.make(
         "kinder/LimbRepositioning3D-wheelchair-right-leg-v0", render_mode="rgb_array"
@@ -235,3 +240,25 @@ def test_registered_variants():
         assert isinstance(obs, np.ndarray)
     finally:
         environment.close()
+
+
+def test_registered_without_mujoco(monkeypatch):
+    """This is a Dynamic3D environment, but PyBullet alone is enough to register it.
+
+    Registering it alongside the MuJoCo environments of its category would hide it
+    completely from an install that has no MuJoCo.
+    """
+    real_check_deps = kinder._check_deps  # pylint: disable=protected-access
+    monkeypatch.setattr(
+        kinder,
+        "_check_deps",
+        lambda *mods: False if "mujoco" in mods else real_check_deps(*mods),
+    )
+    registered = dict(kinder.ENV_CLASSES)
+    kinder.ENV_CLASSES.clear()
+    try:
+        kinder.register_all_environments()
+        assert "LimbRepositioning3D" in kinder.ENV_CLASSES
+    finally:
+        kinder.ENV_CLASSES.clear()
+        kinder.ENV_CLASSES.update(registered)

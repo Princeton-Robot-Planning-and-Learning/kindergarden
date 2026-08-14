@@ -14,35 +14,46 @@ import numpy as np
 from numpy.typing import NDArray
 from pybullet_helpers.geometry import Pose, SE2Pose, get_pose
 from pybullet_helpers.joint import JointPositions
-from relational_structs import Array, Object, ObjectCentricState
+from relational_structs import ObjectCentricState, Type
 from relational_structs.utils import create_state_from_dict
 
 from kinder.core import ConstantObjectKinDEREnv, FinalConfigMeta
-from kinder.envs.kinematic3d.base_limbrepositioning3d import (
+from kinder.envs.dynamic3d.base_limbrepositioning3d import (
     Limb3DEnvConfig,
     ObjectCentricLimb3DRobotEnv,
 )
-from kinder.envs.kinematic3d.limb_object_types import (
+from kinder.envs.dynamic3d.limb_object_types import (
     Limb3DEnvTypeFeatures,
     Limb3DFixtureType,
-    Limb3DLimbType,
-    Limb3DRobotType,
 )
-from kinder.envs.kinematic3d.limb_scenes import (
+from kinder.envs.dynamic3d.limb_scenes import (
     ALL_SCENE_TYPES,
     LimbRepositioningSceneConfig,
 )
-from kinder.envs.kinematic3d.limb_utils import (
+from kinder.envs.dynamic3d.limb_utils import (
     NUM_LIMB_JOINTS,
-    NUM_ROBOT_JOINTS,
+    JointTorques,
     LimbRepositioning3DObjectCentricState,
     get_torque_action_from_gui_input,
     joint_position_distance,
 )
-from kinder.envs.kinematic3d.limbs import ALL_LIMB_NAMES, get_sampling_bounds
+from kinder.envs.dynamic3d.limbs import ALL_LIMB_NAMES, get_sampling_bounds
+from kinder.envs.kinematic3d.utils import extend_joints_to_include_fingers
 
 # Draws before a reset gives up and falls back to the nominal configuration.
 _MAX_INIT_SAMPLE_ATTEMPTS = 20
+
+# Factor the initial-state perturbation shrinks by after each rejected draw.
+_INIT_NOISE_DECAY = 0.75
+
+
+def _spawn_rngs(seed: int) -> tuple[np.random.Generator, np.random.Generator]:
+    """Independent generators for the spasms and for the initial state.
+
+    Seeding both directly from `seed` would correlate the two sequences.
+    """
+    spasm_rng, init_rng = np.random.default_rng(seed).spawn(2)
+    return spasm_rng, init_rng
 
 
 @dataclass(frozen=True)
@@ -54,7 +65,9 @@ class LimbRepositioning3DEnvConfig(Limb3DEnvConfig, metaclass=FinalConfigMeta):
 
     # Probability that the limb spasms on a step, adding random torque to the action.
     spasm_probability: float = 0.0
-    spasm_scale: float = 10000.0
+
+    # Per-joint standard deviation of the spasm torque, in N*m.
+    spasm_torque_stddev: float = 100.0
 
     # Radians either side of the nominal configuration that a reset samples within.
     init_joint_noise: float = 0.26
@@ -64,9 +77,7 @@ class LimbRepositioning3DEnvConfig(Limb3DEnvConfig, metaclass=FinalConfigMeta):
 
 
 class ObjectCentricLimbRepositioning3DEnv(
-    ObjectCentricLimb3DRobotEnv[
-        LimbRepositioning3DObjectCentricState, LimbRepositioning3DEnvConfig
-    ]
+    ObjectCentricLimb3DRobotEnv[LimbRepositioning3DEnvConfig]
 ):
     """Object-centric version of LimbRepositioning3DEnv()."""
 
@@ -80,68 +91,32 @@ class ObjectCentricLimbRepositioning3DEnv(
             config = create_variant_config(variant)
         self.variant = variant
         super().__init__(config=config, **kwargs)
-        self._spasm_rng = np.random.default_rng(0)
-        self._init_rng = np.random.default_rng(0)
+        self._spasm_rng, self._init_rng = _spawn_rngs(0)
 
     @property
     def _has_fixture(self) -> bool:
         return self.scene.furniture_id is not None
 
     @property
-    def _object_names(self) -> list[tuple[str, Any]]:
-        objects: list[tuple[str, Any]] = [
-            ("robot", Limb3DRobotType),
-            ("limb", Limb3DLimbType),
-        ]
+    def _object_names(self) -> list[tuple[str, Type]]:
+        objects = super()._object_names
         if self._has_fixture:
             objects.append(("fixture", Limb3DFixtureType))
         return objects
 
-    def _get_obs(self) -> LimbRepositioning3DObjectCentricState:
-        state_dict: dict[Object, dict[str, float]] = {}
-        for object_name, object_type in self._object_names:
-            obj = Object(object_name, object_type)
-            state_dict[obj] = self._get_object_features(object_name)
-        state = create_state_from_dict(
-            state_dict,
-            Limb3DEnvTypeFeatures,
-            state_cls=LimbRepositioning3DObjectCentricState,
-        )
-        assert isinstance(state, LimbRepositioning3DObjectCentricState)
-        return state
-
     def _get_object_features(self, object_name: str) -> dict[str, float]:
-        feats: dict[str, float] = {}
-        if object_name == "robot":
-            base_pose = self.robot.get_base()
-            feats["pos_base_x"] = base_pose.x
-            feats["pos_base_y"] = base_pose.y
-            feats["pos_base_rot"] = base_pose.rot
-            for i, v in enumerate(self._get_robot_joint_positions()):
-                feats[f"joint_{i + 1}"] = v
-            for i, v in enumerate(self._get_robot_joint_velocities()):
-                feats[f"joint_vel_{i + 1}"] = v
-        elif object_name == "limb":
-            for i, v in enumerate(self.limb.get_joint_positions()):
-                feats[f"joint_{i + 1}"] = v
-            for i, v in enumerate(self.limb.get_joint_velocities()):
-                feats[f"joint_vel_{i + 1}"] = v
-            goal = self.config.scene.limb_goal_joint_positions
-            for i, v in enumerate(goal):
-                feats[f"goal_joint_{i + 1}"] = v
-        elif object_name == "fixture":
-            furniture_id = self.scene.furniture_id
-            assert furniture_id is not None
-            pose = get_pose(furniture_id, self.physics_client_id)
-            values = list(pose.position) + list(pose.orientation)
-            names = Limb3DEnvTypeFeatures[Limb3DFixtureType]
-            feats = dict(zip(names, values, strict=True))
-        else:
-            raise ValueError(f"Unknown object: {object_name}")
-        return feats
+        if object_name != "fixture":
+            return super()._get_object_features(object_name)
+        furniture_id = self.scene.furniture_id
+        assert furniture_id is not None
+        pose = get_pose(furniture_id, self.physics_client_id)
+        values = list(pose.position) + list(pose.orientation)
+        names = Limb3DEnvTypeFeatures[Limb3DFixtureType]
+        return dict(zip(names, values, strict=True))
 
     def _create_constant_initial_state(self) -> LimbRepositioning3DObjectCentricState:
-        # Every object in this environment already appears in the observation.
+        # Every object in this environment already appears in the observation, including
+        # the fixture: it never moves, but its pose varies from variant to variant.
         state = create_state_from_dict(
             {},
             Limb3DEnvTypeFeatures,
@@ -153,11 +128,11 @@ class ObjectCentricLimbRepositioning3DEnv(
     def _sample_limb_init_joint_positions(self) -> JointPositions:
         """Perturb the nominal configuration without driving the limb into the scene."""
         nominal = np.array(self.config.scene.limb_init_joint_positions)
-        noise = self.config.init_joint_noise
         lower, upper = get_sampling_bounds(self.config.scene.limb_name, nominal)
-        low = np.maximum(nominal - noise, lower)
-        high = np.minimum(nominal + noise, upper)
-        for _ in range(_MAX_INIT_SAMPLE_ATTEMPTS):
+        for attempt in range(_MAX_INIT_SAMPLE_ATTEMPTS):
+            noise = self.config.init_joint_noise * _INIT_NOISE_DECAY**attempt
+            low = np.maximum(nominal - noise, lower)
+            high = np.minimum(nominal + noise, upper)
             candidate = list(self._init_rng.uniform(low, high))
             self.limb.set_joints(candidate)
             if self.limb_penetration() > -self.config.init_max_penetration:
@@ -167,7 +142,7 @@ class ObjectCentricLimbRepositioning3DEnv(
 
     def _reset_bodies(self) -> None:
         self.robot.arm.set_joints(
-            self._extend_joints_with_fingers(list(self._initial_robot_joints)),
+            extend_joints_to_include_fingers(list(self._initial_robot_joints)),
             joint_velocities=[0.0] * len(self.robot.arm.arm_joints),
         )
         self.limb.set_joints(
@@ -176,43 +151,15 @@ class ObjectCentricLimbRepositioning3DEnv(
         )
         self._regrasp_limb()
 
-    def _set_state(self, state: LimbRepositioning3DObjectCentricState) -> None:
-        self.robot.arm.set_joints(
-            self._extend_joints_with_fingers(state.robot_joint_positions),
-            joint_velocities=self._extend_joints_with_fingers(
-                state.robot_joint_velocities
-            ),
+    def _get_extra_limb_torque(self) -> JointTorques | None:
+        """Random torque on the joints of the passive limb, when a spasm fires."""
+        if self._spasm_rng.uniform() >= self.config.spasm_probability:
+            return None
+        return list(
+            self._spasm_rng.normal(
+                0.0, self.config.spasm_torque_stddev, size=NUM_LIMB_JOINTS
+            )
         )
-        self.limb.set_joints(
-            state.limb_joint_positions,
-            joint_velocities=state.limb_joint_velocities,
-        )
-        self._reweld_limb()
-
-    def _execute_spasm(self) -> None:
-        """Apply an impulse of random torque to the passive limb."""
-        cov = self.config.spasm_scale * np.eye(NUM_LIMB_JOINTS)
-        spasm_torque = self._spasm_rng.multivariate_normal(
-            np.zeros(NUM_LIMB_JOINTS), cov
-        )
-        self._apply_torques([0.0] * NUM_ROBOT_JOINTS, list(spasm_torque))
-
-    def step(
-        self, action: Array
-    ) -> tuple[LimbRepositioning3DObjectCentricState, float, bool, bool, dict]:
-        action_space = self.torque_action_space
-        torque = np.clip(action, action_space.low, action_space.high)
-        limb_torque = self.limb.get_muscle_tone_torque()
-        self._apply_torques(list(torque), limb_torque)
-
-        if self._spasm_rng.uniform() < self.config.spasm_probability:
-            self._execute_spasm()
-
-        obs = self._get_obs()
-        reward = -1.0
-        terminated = self.goal_reached()
-        info = {"limb_distance_to_goal": obs.limb_distance_to_goal}
-        return obs, reward, terminated, False, info
 
     def goal_reached(self) -> bool:
         distance = joint_position_distance(
@@ -226,8 +173,7 @@ class ObjectCentricLimbRepositioning3DEnv(
         self, *, seed: int | None = None, options: dict | None = None
     ) -> tuple[LimbRepositioning3DObjectCentricState, dict]:
         if seed is not None:
-            self._spasm_rng = np.random.default_rng(seed)
-            self._init_rng = np.random.default_rng(seed)
+            self._spasm_rng, self._init_rng = _spawn_rngs(seed)
         return super().reset(seed=seed, options=options)
 
     def get_action_from_gui_input(
@@ -266,7 +212,7 @@ class LimbRepositioning3DEnv(ConstantObjectKinDEREnv):
             "The robot's end effector is welded to the limb's grasp frame and drives the limb to a goal joint configuration with joint torques. The limb has no actuation of its own. The goal is drawn as a translucent green copy of the limb.\n"
             "\n"
             "- Robot: a TidyBot Kinova Gen3 arm with 7 joints, on a base that stays put\n"
-            "- Simulation: PyBullet forward dynamics, unlike Kinematic3D and Dynamic3D\n"
+            "- Simulation: PyBullet forward dynamics\n"
             "- Gravity: off by default; set `gravity` in the config to enable it\n"
             "\n"
             "On reset, each limb joint is perturbed within that limb's joint range around the variant's nominal starting configuration, and the draw is rejected if it pushes the limb into the scene, so the initial state varies with the seed while staying collision free. The robot re-solves its grasp for the sampled configuration.\n"

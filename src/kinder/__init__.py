@@ -82,6 +82,8 @@ def register_all_environments() -> None:
 
     if _check_deps(*_BACKEND_DEPS["pybullet"]):
         _register_kinematic3d()
+        # Registration follows the backend, not the category.
+        _register_dynamic3d_pybullet()
 
     if _check_deps(*_BACKEND_DEPS["prpl_kinematics"]):
         _register_kinematic3d_v2()
@@ -407,28 +409,6 @@ def _register_kinematic3d() -> None:
         variant_ids=variant_ids,
     )
 
-    # LimbRepositioning3D environment, one variant per (scene, limb) pair.
-    from kinder.envs.kinematic3d.limbrepositioning3d import (  # pylint: disable=import-outside-toplevel
-        ALL_VARIANTS,
-    )
-
-    entry_point = "kinder.envs.kinematic3d.limbrepositioning3d:LimbRepositioning3DEnv"
-    variant_ids = []
-    for variant in ALL_VARIANTS:
-        variant_id = f"kinder/LimbRepositioning3D-{variant}-v0"
-        _register(
-            id=variant_id,
-            entry_point=entry_point,
-            kwargs={"variant": variant},
-        )
-        variant_ids.append(variant_id)
-    _register_env_class(
-        class_name="LimbRepositioning3D",
-        entry_point=entry_point,
-        category="Kinematic3D",
-        variant_ids=variant_ids,
-    )
-
 
 def _register_kinematic3d_v2() -> None:
     # VegaMotion3D environment.
@@ -457,6 +437,32 @@ def _register_kinematic3d_v2() -> None:
         category="Kinematic3Dv2",
         backend="prpl_kinematics",
         variant_ids=[variant_id],
+    )
+
+
+def _register_dynamic3d_pybullet() -> None:
+    """Register the Dynamic3D environments that run on PyBullet."""
+    # LimbRepositioning3D environment, one variant per (scene, limb) pair.
+    scene_types = ["isolated", "human", "wheelchair", "bed"]
+    limb_names = ["left-arm", "right-arm", "left-leg", "right-leg"]
+    entry_point = "kinder.envs.dynamic3d.limbrepositioning3d:LimbRepositioning3DEnv"
+    variant_ids = []
+    for scene_type in scene_types:
+        for limb_name in limb_names:
+            variant = f"{scene_type}-{limb_name}"
+            variant_id = f"kinder/LimbRepositioning3D-{variant}-v0"
+            _register(
+                id=variant_id,
+                entry_point=entry_point,
+                kwargs={"variant": variant},
+            )
+            variant_ids.append(variant_id)
+    _register_env_class(
+        class_name="LimbRepositioning3D",
+        entry_point=entry_point,
+        category="Dynamic3D",
+        backend="pybullet",
+        variant_ids=variant_ids,
     )
 
 

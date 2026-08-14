@@ -8,18 +8,11 @@ import numpy as np
 import pybullet as p
 import pytest
 from pybullet_helpers.geometry import Pose, SE2Pose
-from relational_structs import Object
 from relational_structs.spaces import ObjectCentricStateSpace
-from relational_structs.utils import create_state_from_dict
 
 from kinder.envs.dynamic3d.base_limbrepositioning3d import (
     Limb3DEnvConfig,
     ObjectCentricLimb3DRobotEnv,
-)
-from kinder.envs.dynamic3d.limb_object_types import (
-    Limb3DEnvTypeFeatures,
-    Limb3DLimbType,
-    Limb3DRobotType,
 )
 from kinder.envs.dynamic3d.limb_scenes import LimbRepositioningSceneConfig
 from kinder.envs.dynamic3d.limb_utils import (
@@ -38,39 +31,8 @@ ROBOT_BASE_POSE = SE2Pose(0.3566, 0.4849, -0.6971)
 ROBOT_BASE_Z = -0.329
 
 
-class _MinimalLimb3DEnv(
-    ObjectCentricLimb3DRobotEnv[LimbRepositioning3DObjectCentricState, Limb3DEnvConfig]
-):
+class _MinimalLimb3DEnv(ObjectCentricLimb3DRobotEnv[Limb3DEnvConfig]):
     """The smallest concrete environment the base class admits."""
-
-    def _get_obs(self) -> LimbRepositioning3DObjectCentricState:
-        base_pose = self.robot.get_base()
-        robot_feats = {
-            "pos_base_x": base_pose.x,
-            "pos_base_y": base_pose.y,
-            "pos_base_rot": base_pose.rot,
-        }
-        for i, value in enumerate(self._get_robot_joint_positions()):
-            robot_feats[f"joint_{i + 1}"] = value
-        for i, value in enumerate(self._get_robot_joint_velocities()):
-            robot_feats[f"joint_vel_{i + 1}"] = value
-        limb_feats = {}
-        for i, value in enumerate(self.limb.get_joint_positions()):
-            limb_feats[f"joint_{i + 1}"] = value
-        for i, value in enumerate(self.limb.get_joint_velocities()):
-            limb_feats[f"joint_vel_{i + 1}"] = value
-        for i, value in enumerate(self.config.scene.limb_goal_joint_positions):
-            limb_feats[f"goal_joint_{i + 1}"] = value
-        state = create_state_from_dict(
-            {
-                Object("robot", Limb3DRobotType): robot_feats,
-                Object("limb", Limb3DLimbType): limb_feats,
-            },
-            Limb3DEnvTypeFeatures,
-            state_cls=LimbRepositioning3DObjectCentricState,
-        )
-        assert isinstance(state, LimbRepositioning3DObjectCentricState)
-        return state
 
     def _create_constant_initial_state(self):
         return self._get_obs()
@@ -80,21 +42,14 @@ class _MinimalLimb3DEnv(
 
     def _reset_bodies(self) -> None:
         self.robot.arm.set_joints(
-            extend_joints_to_include_fingers(list(self._initial_robot_joints))
+            extend_joints_to_include_fingers(list(self._initial_robot_joints)),
+            joint_velocities=[0.0] * len(self.robot.arm.arm_joints),
         )
-        self.limb.set_joints(list(self.config.scene.limb_init_joint_positions))
+        self.limb.set_joints(
+            list(self.config.scene.limb_init_joint_positions),
+            joint_velocities=[0.0] * NUM_LIMB_JOINTS,
+        )
         self._regrasp_limb()
-
-    def _set_state(self, state) -> None:
-        self.robot.arm.set_joints(
-            extend_joints_to_include_fingers(list(state.robot_joint_positions))
-        )
-        self.limb.set_joints(list(state.limb_joint_positions))
-        self._reweld_limb()
-
-    def step(self, action):
-        self._apply_torques(list(action))
-        return self._get_obs(), -1.0, self.goal_reached(), False, {}
 
 
 def _make_config(**kwargs) -> Limb3DEnvConfig:
@@ -231,6 +186,28 @@ def test_render_returns_an_rgb_image(env):
         3,
     )
     assert img.dtype == np.uint8
+
+
+def test_get_transition_matches_stepping():
+    """A state plus an action must determine the next state, momentum included."""
+    env = _MinimalLimb3DEnv(config=_make_config(), allow_state_access=True)
+    try:
+        env.reset()
+        action = np.full(NUM_ROBOT_JOINTS, 0.5, dtype=np.float32)
+        # Build up real joint velocities, so that dropping them would show.
+        for _ in range(100):
+            env.step(action)
+        state = env.get_state()
+        stepped, _, _, _, _ = env.step(action)
+        predicted = env.get_next_state(state, action)
+        assert np.allclose(
+            predicted.limb_joint_positions, stepped.limb_joint_positions, atol=1e-3
+        )
+        assert np.allclose(
+            predicted.robot_joint_positions, stepped.robot_joint_positions, atol=1e-3
+        )
+    finally:
+        env.close()
 
 
 def test_a_coarse_dt_applies_torque_for_the_whole_interval():

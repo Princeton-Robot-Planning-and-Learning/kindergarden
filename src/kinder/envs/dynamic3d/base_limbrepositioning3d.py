@@ -24,11 +24,14 @@ from pybullet_helpers.inverse_kinematics import (
 )
 from pybullet_helpers.joint import JointPositions, JointVelocities
 from pybullet_helpers.robots import create_pybullet_mobile_robot
-from relational_structs import Array, ObjectCentricStateSpace, Type
+from relational_structs import Array, Object, ObjectCentricStateSpace, Type
+from relational_structs.utils import create_state_from_dict
 
 from kinder.core import KinDEREnvConfig, ObjectCentricKinDEREnv
 from kinder.envs.dynamic3d.limb_object_types import (
     Limb3DEnvTypeFeatures,
+    Limb3DLimbType,
+    Limb3DRobotType,
 )
 from kinder.envs.dynamic3d.limb_scenes import (
     LimbRepositioningScene,
@@ -115,13 +118,12 @@ class Limb3DEnvConfig(KinDEREnvConfig):
         }
 
 
-_ObsType = TypeVar("_ObsType", bound=LimbRepositioning3DObjectCentricState)
 _ConfigType = TypeVar("_ConfigType", bound=Limb3DEnvConfig)
 
 
 class ObjectCentricLimb3DRobotEnv(
-    ObjectCentricKinDEREnv[_ObsType, Array, _ConfigType],
-    Generic[_ObsType, _ConfigType],
+    ObjectCentricKinDEREnv[LimbRepositioning3DObjectCentricState, Array, _ConfigType],
+    Generic[_ConfigType],
 ):
     """Base class for torque-controlled PyBullet environments.
 
@@ -318,10 +320,6 @@ class ObjectCentricLimb3DRobotEnv(
         return Limb3DEnvTypeFeatures
 
     @abc.abstractmethod
-    def _get_obs(self) -> _ObsType:
-        """Get the current observation."""
-
-    @abc.abstractmethod
     def goal_reached(self) -> bool:
         """Check if the goal is currently reached."""
 
@@ -329,12 +327,86 @@ class ObjectCentricLimb3DRobotEnv(
     def _reset_bodies(self) -> None:
         """Reset the robot and the limb to their initial positions and velocities."""
 
-    @abc.abstractmethod
-    def _set_state(self, state: _ObsType) -> None:
-        """Set the state of the environment to the given one."""
+    @property
+    def _object_names(self) -> list[tuple[str, Type]]:
+        """The objects that appear in the observation."""
+        return [("robot", Limb3DRobotType), ("limb", Limb3DLimbType)]
 
-    def _get_state(self) -> _ObsType:
+    def _get_object_features(self, object_name: str) -> dict[str, float]:
+        """The observed features of a single object."""
+        if object_name == "robot":
+            base_pose = self.robot.get_base()
+            feats = {
+                "pos_base_x": base_pose.x,
+                "pos_base_y": base_pose.y,
+                "pos_base_rot": base_pose.rot,
+            }
+            for i, value in enumerate(self._get_robot_joint_positions()):
+                feats[f"joint_{i + 1}"] = value
+            for i, value in enumerate(self._get_robot_joint_velocities()):
+                feats[f"joint_vel_{i + 1}"] = value
+            return feats
+        if object_name == "limb":
+            feats = {}
+            for i, value in enumerate(self.limb.get_joint_positions()):
+                feats[f"joint_{i + 1}"] = value
+            for i, value in enumerate(self.limb.get_joint_velocities()):
+                feats[f"joint_vel_{i + 1}"] = value
+            for i, value in enumerate(self.config.scene.limb_goal_joint_positions):
+                feats[f"goal_joint_{i + 1}"] = value
+            return feats
+        raise ValueError(f"Unknown object: {object_name}")
+
+    def _get_obs(self) -> LimbRepositioning3DObjectCentricState:
+        state = create_state_from_dict(
+            {
+                Object(name, object_type): self._get_object_features(name)
+                for name, object_type in self._object_names
+            },
+            Limb3DEnvTypeFeatures,
+            state_cls=LimbRepositioning3DObjectCentricState,
+        )
+        assert isinstance(state, LimbRepositioning3DObjectCentricState)
+        return state
+
+    def _set_state(self, state: LimbRepositioning3DObjectCentricState) -> None:
+        """Restore positions and velocities, then rebuild the weld.
+
+        Velocities are part of the state because the dynamics depend on them, so
+        get_transition() would otherwise erase the system's momentum.
+        """
+        self.robot.arm.set_joints(
+            extend_joints_to_include_fingers(state.robot_joint_positions),
+            joint_velocities=extend_joints_to_include_fingers(
+                state.robot_joint_velocities
+            ),
+        )
+        self.limb.set_joints(
+            state.limb_joint_positions, joint_velocities=state.limb_joint_velocities
+        )
+        self._reweld_limb()
+
+    def _get_state(self) -> LimbRepositioning3DObjectCentricState:
         return self._get_obs()
+
+    def _get_reward(self) -> float:
+        """One unit of cost per step, unless a subclass shapes the reward."""
+        return -1.0
+
+    def _get_extra_limb_torque(self) -> JointTorques | None:
+        """Torque applied to the limb on top of its muscle tone, e.g. a spasm."""
+        return None
+
+    def step(
+        self, action: Array
+    ) -> tuple[LimbRepositioning3DObjectCentricState, float, bool, bool, dict]:
+        torque = np.clip(
+            action, self.torque_action_space.low, self.torque_action_space.high
+        )
+        self._apply_torques(list(torque), self._get_extra_limb_torque())
+        obs = self._get_obs()
+        info = {"limb_distance_to_goal": obs.limb_distance_to_goal}
+        return obs, self._get_reward(), self.goal_reached(), False, info
 
     def _create_observation_space(self, config: _ConfigType) -> ObjectCentricStateSpace:
         del config
@@ -349,7 +421,7 @@ class ObjectCentricLimb3DRobotEnv(
 
     def reset(
         self, *, seed: int | None = None, options: dict | None = None
-    ) -> tuple[_ObsType, dict]:
+    ) -> tuple[LimbRepositioning3DObjectCentricState, dict]:
         gymnasium.Env.reset(self, seed=seed)
         if options is not None and "init_state" in options:
             self._set_state(options["init_state"])

@@ -83,7 +83,7 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
         show_images: bool = False,
         scene_bg: bool | str | None = None,
         scene_render_camera: str | None = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> None:
         # Initialize ObjectCentricKinDEREnv first
         super().__init__(config, **kwargs)

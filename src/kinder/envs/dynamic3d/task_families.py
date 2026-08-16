@@ -25,14 +25,25 @@ in a different object rather than adding more of one, so for those a plain
 """
 
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from kinder.envs.dynamic3d.envs import TidyBot3DEnv
 
 _TASKS_DIR = Path(__file__).parent / "tasks"
 
+if TYPE_CHECKING:
+    # The mixin is only ever combined with a robot env class, and it forwards to
+    # that class's __init__. Declaring the base for type checkers alone gives
+    # callers the full env API (close, reset, ...) on a family class without
+    # putting ConstantObjectKinDEREnv into the runtime MRO twice.
+    from kinder.core import ConstantObjectKinDEREnv
 
-class TaskFamilyEnvMixin:
+    _MixinBase = ConstantObjectKinDEREnv
+else:
+    _MixinBase = object
+
+
+class TaskFamilyEnvMixin(_MixinBase):
     """Select one task JSON of a dynamic3D family by its object count.
 
     Mixed in ahead of the robot env class that the family's task JSONs declare, so

@@ -1227,6 +1227,30 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
         simulation.
         """
 
+    # SCRATCH DIAGNOSTIC: the full Robotiq 2F-85 joint block, in model order. Only the
+    # two driver joints are exposed through _robot_env.qpos["gripper"]; the other six
+    # are passive linkage joints that set_state has never restored.
+    _GRIPPER_JOINT_SUFFIXES = (
+        "right_driver_joint",
+        "right_coupler_joint",
+        "right_spring_link_joint",
+        "right_follower_joint",
+        "left_driver_joint",
+        "left_coupler_joint",
+        "left_spring_link_joint",
+        "left_follower_joint",
+    )
+
+    def _gripper_joint_addrs(self) -> tuple[list[int], list[int]]:
+        """qpos and qvel addresses of all eight gripper joints."""
+        robot_env = self._robot_env
+        model = robot_env.sim.model
+        names = [f"{robot_env.name}_{s}" for s in self._GRIPPER_JOINT_SUFFIXES]
+        return (
+            [model.get_joint_qpos_addr(n) for n in names],
+            [model.get_joint_qvel_addr(n) for n in names],
+        )
+
     def _get_arm_and_gripper_pos_data(self) -> dict[str, float]:
         """Get position features shared by robots with a 7-joint arm and a [0, 255]
         gripper actuator: pos_arm_joint1..7 and pos_gripper."""
@@ -1237,6 +1261,11 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
             f"pos_arm_joint{i}": self._robot_env.qpos["arm"][i - 1] for i in range(1, 8)
         }
         data["pos_gripper"] = self._robot_env.ctrl["gripper"][0] / 255.0
+        # SCRATCH DIAGNOSTIC: all eight driver/coupler/spring/follower joints.
+        qpos_addrs, _ = self._gripper_joint_addrs()
+        mj_qpos = self._robot_env.sim.data.mj_data.qpos
+        for i, addr in enumerate(qpos_addrs, start=1):
+            data[f"pos_gripper_joint{i}"] = float(mj_qpos[addr])
         return data
 
     def _get_arm_and_gripper_vel_data(self) -> dict[str, float]:
@@ -1248,6 +1277,11 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
             f"vel_arm_joint{i}": self._robot_env.qvel["arm"][i - 1] for i in range(1, 8)
         }
         data["vel_gripper"] = self._robot_env.qvel["gripper"][0]
+        # SCRATCH DIAGNOSTIC: all eight gripper joint velocities.
+        _, qvel_addrs = self._gripper_joint_addrs()
+        mj_qvel = self._robot_env.sim.data.mj_data.qvel
+        for i, addr in enumerate(qvel_addrs, start=1):
+            data[f"vel_gripper_joint{i}"] = float(mj_qvel[addr])
         return data
 
     def _set_arm_and_gripper_state(
@@ -1282,6 +1316,17 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
         robot_arm_vel = [state.get(robot_obj, f"vel_arm_joint{i}") for i in range(1, 8)]
         self._robot_env.qvel["arm"][:] = robot_arm_vel
         self._robot_env.qvel["gripper"][:] = state.get(robot_obj, "vel_gripper")
+
+        # SCRATCH DIAGNOSTIC: restore the full eight-joint gripper linkage, not just the
+        # two driver joints. Without this a state captured mid-grasp restores the cube's
+        # pose into whatever finger configuration the previous rollout happened to end in.
+        qpos_addrs, qvel_addrs = self._gripper_joint_addrs()
+        mj_qpos = self._robot_env.sim.data.mj_data.qpos
+        mj_qvel = self._robot_env.sim.data.mj_data.qvel
+        for i, addr in enumerate(qpos_addrs, start=1):
+            mj_qpos[addr] = state.get(robot_obj, f"pos_gripper_joint{i}")
+        for i, addr in enumerate(qvel_addrs, start=1):
+            mj_qvel[addr] = state.get(robot_obj, f"vel_gripper_joint{i}")
 
 
 class ObjectCentricTidyBot3DEnv(ObjectCentricRobotEnv):

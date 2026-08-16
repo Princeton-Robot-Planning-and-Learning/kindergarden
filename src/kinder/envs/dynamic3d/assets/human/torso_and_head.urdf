@@ -1,0 +1,23 @@
+<?xml version="1.0" ?>
+<robot name="torso_and_head">
+    <link name="base_link">
+        <inertial>
+            <mass value="1" />
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <inertia ixx="0.070968" ixy="-0.009135" ixz="-0.000056" iyy="0.048896" iyz="0.000007" izz="0.086415" />
+        </inertial>
+        <visual>
+            <geometry>
+                <mesh filename="meshes/torso_and_head.stl" scale="1.0 1.0 1.0"/>
+            </geometry>
+              <material name="skin">
+                <color rgba="0.9 0.72 0.53 1.000"/>
+              </material>
+        </visual>
+        <collision>
+            <geometry>
+                <mesh filename="meshes/torso_and_head.stl" scale="1.0 1.0 1.0"/>
+            </geometry>
+        </collision>
+    </link>
+</robot>

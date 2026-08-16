@@ -1,0 +1,189 @@
+<?xml version="1.0" ?>
+<robot name="right_leg">
+
+  <material name="skin">
+    <color rgba="0.9 0.72 0.53 1.000"/>
+  </material>
+
+  <link name="base_link">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0" rpy="0 0 0"/>
+      <mass value="0.0"/>
+      <inertia ixx="0.0" iyy="0.0" izz="0.0" ixy="0.0" iyz="0.0" ixz="0.0"/>
+    </inertial>
+  </link>
+
+  <joint name="base_fixed" type="fixed">
+    <origin rpy="0 0 0.0" xyz="0 0 0.0"/>
+    <parent link="base_link"/>
+    <child link="base_link_0"/>
+  </joint>
+
+  <link name="base_link_0">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0" rpy="0 0 0"/>
+      <mass value="0.0"/>
+      <inertia ixx="0.0" iyy="0.0" izz="0.0" ixy="0.0" iyz="0.0" ixz="0.0"/>
+    </inertial>
+  </link>
+
+  <link name="base_link_1">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0" rpy="0 0 0"/>
+      <mass value="0.0"/>
+      <inertia ixx="0.0" iyy="0.0" izz="0.0" ixy="0.0" iyz="0.0" ixz="0.0"/>
+    </inertial>
+  </link>
+
+  <link name="base_link_2">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0" rpy="0 0 0"/>
+      <mass value="0.0"/>
+      <inertia ixx="0.0" iyy="0.0" izz="0.0" ixy="0.0" iyz="0.0" ixz="0.0"/>
+    </inertial>
+  </link>
+
+    <link name="foot_x">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0" rpy="0 0 0"/>
+      <mass value="0.0"/>
+      <inertia ixx="0.0" iyy="0.0" izz="0.0" ixy="0.0" iyz="0.0" ixz="0.0"/>
+    </inertial>
+  </link>
+
+  <link name="upper_leg">
+    <inertial>
+      <origin xyz="0.00277 -0.00352 -0.098" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="0.00691" iyy="0.00674" izz="0.00097" ixy="-6.65745e-06" iyz="-7.0718e-05" ixz="0.00015"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/right_upper_leg.stl" scale="1.0 1.0 1.0"/>
+      </geometry>
+      <material name="skin"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/right_upper_leg.stl" scale="1.0 1.0 1.0"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="lower_leg">
+    <inertial>
+      <origin xyz="0.01457 9.28389e-05 -0.19143" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="0.01712" iyy="0.01699" izz="0.00072" ixy="-5.34657e-05" iyz="-0.00071" ixz="0.00031"/>
+    </inertial>
+    <visual>
+      <origin xyz="0.0 0.0 0.0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/right_lower_leg_without_foot.stl" scale="1.0 1.0 1.0"/>
+      </geometry>
+      <material name="skin"/>
+    </visual>
+    <collision>
+      <origin xyz="0.0 0.0 0.0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/right_lower_leg_without_foot.stl" scale="1.0 1.0 1.0"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="foot">
+    <inertial>
+      <origin xyz="0.16051 -0.012319 0.075256" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="0.01712" iyy="0.01699" izz="0.00072" ixy="-5.34657e-05" iyz="-0.00071" ixz="0.00031"/>
+    </inertial>
+    <visual>
+      <origin xyz="0.0 0.0 0.0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/right_foot.stl" scale="1.0 1.0 1.0"/>
+      </geometry>
+      <material name="skin"/>
+    </visual>
+    <collision>
+      <origin xyz="0.0 0.0 0.0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/right_foot.stl" scale="1.0 1.0 1.0"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="base_x" type="continuous">
+    <origin xyz="0.0 0.0 0.0" rpy="0 0 0"/>
+    <parent link="base_link_0"/>
+    <child link="base_link_1"/>
+    <axis xyz="1.0 0.0 0.0"/>
+    <!-- <limit effort="100" lower="-1.57" upper="1.57" velocity="5.0"/> -->
+  </joint>
+
+  <joint name="base_y" type="continuous">
+    <origin xyz="0.0 0.0 0.0" rpy="0 0 0"/>
+    <parent link="base_link_1"/>
+    <child link="base_link_2"/>
+    <axis xyz="0.0 1.0 0.0"/>
+    <!-- <limit effort="100" lower="-1.57" upper="0" velocity="5.0"/> -->
+  </joint>
+
+  <joint name="base_z" type="continuous">
+    <origin xyz="0.0 0.0 0.0" rpy="0 0 0"/>
+    <parent link="base_link_2"/>
+    <child link="upper_leg"/>
+    <axis xyz="0.0 0.0 1.0"/>
+    <!-- <limit effort="100" lower="0.0" upper="1.57" velocity="5.0"/> -->
+  </joint>
+
+  <joint name="upper_to_lower" type="continuous">
+    <origin xyz="0.0 0.0 -0.430301" rpy="0 0 0"/>
+    <parent link="upper_leg"/>
+    <child link="lower_leg"/>
+    <axis xyz="1.0 0.0 0.0"/>
+    <!-- <limit effort="100" lower="-2.0944" upper="0.0" velocity="5.0"/> -->
+  </joint>
+
+
+  <joint name="lower_to_foot_x" type="continuous">
+    <origin xyz="0.0 0.0 -0.35039" rpy="0 0 0"/>
+    <parent link="lower_leg"/>
+    <child link="foot_x"/>
+    <axis xyz="1.0 0.0 0.0"/>
+    <!-- <limit effort="100" lower="-2.0944" upper="0.0" velocity="5.0"/> -->
+  </joint>
+
+
+  <joint name="lower_to_foot" type="continuous">
+    <origin xyz="0.0 0.0 0.0" rpy="0 0 0"/>
+    <parent link="foot_x"/>
+    <child link="foot"/>
+    <axis xyz="0.0 1.0 0.0"/>
+    <!-- <limit effort="100" lower="-2.0944" upper="0.0" velocity="5.0"/> -->
+  </joint>
+
+
+
+  <joint name="grasp_fixed_joint" type="fixed">
+    <parent link="foot"/>
+    <child link="ee_link"/>
+    <origin rpy="0.0 0.0 0.0" xyz="0.0 -0.1 -0.02"/>
+  </joint>
+
+  <link name="ee_link">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0" rpy="0 0 0"/>
+      <mass value="0.0"/>
+      <inertia ixx="0.0" iyy="0.0" izz="0.0" ixy="0.0" iyz="0.0" ixz="0.0"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <box size="0.01 0.01 0.01"/>
+      </geometry>
+      <origin rpy="0 0 0" xyz="0.0 0 0"/>
+    </visual>
+  </link>
+
+</robot>

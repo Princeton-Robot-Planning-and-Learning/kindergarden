@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Type as TypingType
 
 import numpy as np
+from numpy.typing import NDArray
 from prpl_kinematics.geometry.shapes import SphereShape
 from prpl_kinematics.tree.kinematic_tree import Node
 from relational_structs import Object, ObjectCentricState
@@ -14,8 +15,8 @@ from spatialmath import SE3
 
 from kinder.core import ConstantObjectKinDEREnv, FinalConfigMeta
 from kinder.envs.kinematic3d_v2.base_env import (
-    Kinematic3Dv2EnvConfig,
     Kinematic3Dv2ObjectCentricState,
+    Kinematic3Dv2SingleArmEnvConfig,
     ObjectCentricKinematic3Dv2RobotEnv,
 )
 from kinder.envs.kinematic3d_v2.object_types import (
@@ -29,7 +30,7 @@ TARGET_NODE = "target"
 
 
 @dataclass(frozen=True)
-class VegaMotion3DEnvConfig(Kinematic3Dv2EnvConfig, metaclass=FinalConfigMeta):
+class VegaMotion3DEnvConfig(Kinematic3Dv2SingleArmEnvConfig, metaclass=FinalConfigMeta):
     """Config for VegaMotion3DEnv()."""
 
     # Robot.
@@ -42,6 +43,11 @@ class VegaMotion3DEnvConfig(Kinematic3Dv2EnvConfig, metaclass=FinalConfigMeta):
     target_color: tuple[float, float, float, float] = (1.0, 0.2, 0.2, 0.5)
     target_lower_bound: tuple[float, float, float] = (0.30, -0.70, 0.60)
     target_upper_bound: tuple[float, float, float] = (0.70, -0.10, 1.10)
+    # Targets sit at the end-effector position of an arm configuration sampled within
+    # this per-joint window (radians) around home, so every target admits a reaching
+    # configuration at most this far from home on each joint. At 1.0 the sampled
+    # positions still cover the full extent of the bounds above.
+    target_witness_joint_delta: float = 1.0
 
 
 class VegaMotion3DObjectCentricState(Kinematic3Dv2ObjectCentricState):
@@ -68,13 +74,11 @@ class ObjectCentricVegaMotion3DEnv(
         self, config: VegaMotion3DEnvConfig = VegaMotion3DEnvConfig(), **kwargs
     ) -> None:
         super().__init__(config=config, **kwargs)
-        # The orientation that targets are checked for reachability at. Holding the home
-        # orientation fixed keeps the check cheap; the goal itself is position-only.
-        self._target_rotation = np.array(self.end_effector_pose.R)
-
-    def target_reach_pose(self, position: tuple[float, float, float]) -> SE3:
-        """The end-effector pose an arm reaching ``position`` is asked to achieve."""
-        return SE3.Rt(self._target_rotation, position)
+        # The arm configuration whose end effector the current target was placed at,
+        # recorded when the target is sampled. It certifies that the target is
+        # reachable from home within the witness joint window; it is not a goal (the
+        # goal is position-only).
+        self._target_witness_joints: NDArray[np.float64] | None = None
 
     def _create_scene_geometry(self) -> None:
         # The target is a visual-only sphere: it marks the goal region rather than
@@ -104,19 +108,44 @@ class ObjectCentricVegaMotion3DEnv(
         return {}
 
     def _reset_objects(self) -> None:
-        # Reset the target. Sample and check reachability. The retry budget is small
-        # because each attempt runs an IK solve, which costs tens of milliseconds; the
-        # bounds are chosen so that the great majority of samples are reachable.
-        for _ in range(1_000):
-            position = self.np_random.uniform(
-                self.config.target_lower_bound, self.config.target_upper_bound
-            )
-            target_pose = self.target_reach_pose(tuple(position))
-            if self._manipulator.ik.solve(target_pose, self.configuration) is None:
+        # Reset the target by sampling arm configurations near home and placing the
+        # target at the end-effector position of one that lands inside the target
+        # bounds, so every target is reachable by construction and no inverse
+        # kinematics is needed. Generating targets the other way around -- sampling a
+        # position and asking IK whether it is reachable -- requires picking an
+        # end-effector orientation for the IK query, and a poor choice over-constrains
+        # the reach (see issue #150). Sampling near home rather than over the whole
+        # joint space keeps the demanded motion moderate; the already-reached check
+        # below keeps it nonzero. A few percent of sampled configurations land in the
+        # bounds, and each attempt is one forward-kinematics call, so the retry budget
+        # is ample.
+        delta = self.config.target_witness_joint_delta
+        sample_lower = np.clip(
+            self._home_arm_joint_positions - delta,
+            self._joint_lower_limits,
+            self._joint_upper_limits,
+        )
+        sample_upper = np.clip(
+            self._home_arm_joint_positions + delta,
+            self._joint_lower_limits,
+            self._joint_upper_limits,
+        )
+        for _ in range(10_000):
+            joints = self.np_random.uniform(sample_lower, sample_upper)
+            config = {**self.configuration, **self._arm_space.to_configuration(joints)}
+            position = self.tree.forward_kinematics(
+                self._manipulator.ee_frame, config
+            ).t
+            if np.any(position < self.config.target_lower_bound) or np.any(
+                position > self.config.target_upper_bound
+            ):
+                continue
+            if self._collision_checker.in_collision(config):
                 continue
             self._set_target_position(tuple(position))
             # If the goal is already reached, keep sampling.
             if not self.goal_reached():
+                self._target_witness_joints = joints
                 break
         else:
             raise RuntimeError("Failed to find reachable target position")
@@ -170,7 +199,7 @@ class VegaMotion3DEnv(ConstantObjectKinDEREnv):
         lower, upper = config.target_lower_bound, config.target_upper_bound
         return f"""A 3D environment where the goal is to reach a target sphere.
 
-The robot is the {config.manipulator} arm of a bimanual Dexmate Vega 1U, which has 7 degrees of freedom. Vega's remaining joints -- the other arm, the lift, the torso flip, the head, and both grippers -- are held at their home values, so this is a pure arm motion problem. The target is a sphere with radius {config.target_radius:.3f}m positioned randomly within the workspace bounds, rejecting positions the arm cannot reach.
+The robot is the {config.manipulator} arm of a bimanual Dexmate Vega 1U, which has 7 degrees of freedom. Vega's remaining joints -- the other arm, the lift, the torso flip, the head, and both grippers -- are held at their home values, so this is a pure arm motion problem. The target is a sphere with radius {config.target_radius:.3f}m placed at the end-effector position of a collision-free arm configuration sampled within {config.target_witness_joint_delta:.1f} rad per joint of the home configuration, restricted to the workspace bounds. Every target is therefore reachable by construction, with a moderate motion from home.
 
 The workspace bounds are:
 - X: [{lower[0]:.1f}, {upper[0]:.1f}]

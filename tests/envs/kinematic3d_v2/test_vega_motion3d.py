@@ -83,35 +83,44 @@ def test_vega_motion3d_observation_space(
 def test_vega_motion3d_target_is_reachable(
     object_centric_env,
 ):  # pylint: disable=redefined-outer-name
-    """Every sampled target should admit an IK solution and not start solved."""
+    """Every sampled target should carry a witness configuration reaching it.
+
+    Targets are placed at the end-effector position of a sampled arm configuration, so
+    reachability holds by construction rather than by an IK query against a fixed end-
+    effector orientation, which over-constrained the reach (issue #150). The witness is
+    sampled near home, so no target demands a wild swing of the arm.
+    """
     # pylint: disable=protected-access
     for seed in range(3):
         obs, _ = object_centric_env.reset(seed=seed)
         assert not object_centric_env.goal_reached()
-        target_pose = object_centric_env.target_reach_pose(obs.target_position)
-        solution = object_centric_env._manipulator.ik.solve(
-            target_pose, object_centric_env.configuration
-        )
-        assert solution is not None
+        witness = object_centric_env._target_witness_joints
+        assert witness is not None
+        home_joints = object_centric_env._home_arm_joint_positions
+        window = object_centric_env.config.target_witness_joint_delta
+        assert np.max(np.abs(witness - home_joints)) <= window
+        config = {
+            **object_centric_env.configuration,
+            **object_centric_env._arm_space.to_configuration(witness),
+        }
+        position = object_centric_env.tree.forward_kinematics(
+            object_centric_env._manipulator.ee_frame, config
+        ).t
+        assert np.allclose(position, obs.target_position, atol=1e-9)
+        assert not object_centric_env._collision_checker.in_collision(config)
 
 
-def test_vega_motion3d_goal_reached_by_ik(
+def test_vega_motion3d_goal_reached_by_witness(
     object_centric_env,
 ):  # pylint: disable=protected-access,redefined-outer-name
-    """Driving the arm to the IK solution for the target should reach the goal."""
+    """Driving the arm to the target's witness configuration should reach the goal."""
     # pylint: disable=protected-access
-    obs, _ = object_centric_env.reset(seed=0)
+    object_centric_env.reset(seed=0)
     assert not object_centric_env.goal_reached()
 
-    target_pose = object_centric_env.target_reach_pose(obs.target_position)
-    solution = object_centric_env._manipulator.ik.solve(
-        target_pose, object_centric_env.configuration
-    )
-    assert solution is not None
-
-    # Step toward the IK solution with actions the environment would accept, rather than
+    # Step toward the witness with actions the environment would accept, rather than
     # teleporting, so that action clipping and collision reverting are exercised too.
-    goal_joints = object_centric_env._arm_space.to_vector(solution)
+    goal_joints = object_centric_env._target_witness_joints
     max_mag = object_centric_env.config.max_action_mag
     terminated = False
     for _ in range(500):

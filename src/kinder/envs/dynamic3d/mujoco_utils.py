@@ -26,6 +26,11 @@ from relational_structs import Array
 # to simulate for each step.
 SIMULATION_TIMESTEP = 0.0005  # (in seconds)
 
+# How long one row of a 2-D action is held for; see MujocoEnv.step. 1 kHz rather than
+# the 2 kHz physics rate because that is the real Kinova arm's low-level servo period
+# (jimmyyhwu/tidybot, robot/kinova.py: MoveJController.CYCLIC_STEP_SIZE)
+CONTROL_SCHEDULE_TIMESTEP = 0.001  # (in seconds)
+
 # Set macros needed for MuJoCo rendering
 _SYSTEM = platform.system()
 if _SYSTEM == "Windows":
@@ -138,16 +143,33 @@ class MujocoEnv(gymnasium.Env[MjObs, Array]):
         self.sim.data.mj_data.ctrl[:] = action
 
     def step(self, action: Array) -> tuple[MjObs, float, bool, bool, dict[str, Any]]:
+        """Advance one control period, from a single action or a control schedule.
+
+        A 1-D action is held for the whole period. A 2-D action is a schedule covering
+        the period exactly: it has one row per CONTROL_SCHEDULE_TIMESTEP.
+        """
         assert self.sim is not None, "Simulation must be initialized before stepping."
 
         assert self.timestep is not None, "Timestep must be initialized."
         self.timestep += 1
 
-        # Step the simulation with the same action until the control frequency
-        # is reached
         control_timestep = 1.0 / self.control_frequency
-        for _ in range(int(control_timestep / SIMULATION_TIMESTEP)):
-            self._update_ctrl(action)
+        num_sim_steps = int(control_timestep / SIMULATION_TIMESTEP)
+        ticks_per_row = int(round(CONTROL_SCHEDULE_TIMESTEP / SIMULATION_TIMESTEP))
+        schedule_rows = num_sim_steps // ticks_per_row
+        if action.ndim == 1:
+            # A read-only view, so the common path allocates nothing.
+            schedule = np.broadcast_to(action, (schedule_rows, *action.shape))
+        else:
+            schedule = action
+        assert len(schedule) == schedule_rows, (
+            f"a control schedule must have exactly {schedule_rows} rows at "
+            f"{self.control_frequency} Hz control and "
+            f"{CONTROL_SCHEDULE_TIMESTEP} s granularity, got {len(schedule)}"
+        )
+
+        for tick in range(num_sim_steps):
+            self._update_ctrl(schedule[tick // ticks_per_row])
             self.sim.forward()
             self.sim.step()
 

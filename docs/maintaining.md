@@ -8,7 +8,7 @@
 
 ## Dependencies from prpl-mono
 
-Kinder depends on four packages from the [prpl-mono](https://github.com/Princeton-Robot-Planning-and-Learning/prpl-mono) monorepo, all published to PyPI:
+Kinder depends on five packages from the [prpl-mono](https://github.com/Princeton-Robot-Planning-and-Learning/prpl-mono) monorepo, all published to PyPI:
 
 | PyPI name | Import name | prpl-mono directory | Used by |
 |-----------|-------------|---------------------|---------|
@@ -16,17 +16,39 @@ Kinder depends on four packages from the [prpl-mono](https://github.com/Princeto
 | `relational_structs` | `relational_structs` | `relational-structs/` | core |
 | `tomsgeoms2d` | `tomsgeoms2d` | `toms-geoms-2d/` | dynamic2d, kinematic2d |
 | `pybullet_helpers` | `pybullet_helpers` | `pybullet-helpers/` | kinematic3d |
+| `prpl_kinematics` | `prpl_kinematics` | `prpl-kinematics/` | kinematic3d_v2 |
+
+`prpl_kinematics` is an optional dependency, installed via the `prpl-kinematics` extra
+(`pip install "kindergarden[prpl-kinematics]"`) or `requirements/kinematic3d_v2.txt`. It
+overlaps heavily with `pybullet_helpers` and both are large, so a base install pulls in
+neither pair member beyond what the other environments need. The `develop` extra installs
+it so the kinematic3d_v2 environments are linted, type checked, and tested.
 
 ## Releasing a New Version
 
 ### 1. Release prpl-mono dependencies first (if changed)
 
-If you changed any of the four prpl-mono packages above, publish them before publishing kinder. The publish order matters because of inter-dependencies:
+If you changed any of the five prpl-mono packages above, publish them before publishing kinder. The publish order matters because of inter-dependencies:
 
 1. `prpl_utils` (no prpl-mono deps)
 2. `tomsgeoms2d` (no prpl-mono deps)
 3. `relational_structs` (depends on `prpl_utils`)
 4. `pybullet_helpers` (depends on `prpl_utils`)
+5. `prpl_kinematics` (depends on `prpl_utils`)
+
+To check whether a package has unpublished changes, compare its `version` in
+`pyproject.toml` against PyPI, and look for commits touching its directory since that
+version was set:
+
+```bash
+cd prpl-mono
+bump=$(git log -1 --format=%H -- <package-dir>/pyproject.toml)
+git log --oneline $bump..HEAD -- <package-dir>/
+```
+
+A matching version number does not by itself mean the published artifact is current: the
+version may have been bumped without a publish, or commits may have landed after it. When
+it matters, diff the published wheel against your working tree.
 
 For each package that changed:
 
@@ -64,7 +86,14 @@ gh release create v0.0.X --title "v0.0.X" --generate-notes
 
 ### Version numbering
 
-Use `0.0.x` for early development. Bump the patch version for each release.
+Bump the patch version (`0.2.1` → `0.2.2`) for fixes and additive changes. Bump the minor
+version (`0.2.x` → `0.3.0`) when an environment is removed or renamed, when a registration
+or state-space API changes, or when a new environment family arrives with its own extra.
+The major version stays at `0` for now.
+
+Keep the PyPI publish and the GitHub release together. If a publish happens without a tag,
+`--generate-notes` on the next release spans from the last tag and picks up the skipped
+commits, but the intermediate version has no reachable release notes.
 
 ## CI
 
@@ -82,5 +111,5 @@ uv pip install -e ".[develop]"
 If you're also developing the prpl-mono dependencies locally, install them in editable mode and they will take precedence over the PyPI versions:
 
 ```bash
-uv pip install -e ../prpl-mono/prpl-utils -e ../prpl-mono/relational-structs -e ../prpl-mono/toms-geoms-2d -e ../prpl-mono/pybullet-helpers
+uv pip install -e ../prpl-mono/prpl-utils -e ../prpl-mono/relational-structs -e ../prpl-mono/toms-geoms-2d -e ../prpl-mono/pybullet-helpers -e ../prpl-mono/prpl-kinematics
 ```

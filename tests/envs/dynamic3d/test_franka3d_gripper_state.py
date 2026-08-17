@@ -31,11 +31,12 @@ _GRIPPER_JOINT_SUFFIXES = (
 
 
 def test_franka3d_set_state_restores_every_gripper_joint():
-    """The FR3 reads the gripper through the same two helpers as the TidyBot.
+    """The FR3 reaches its gripper through the same shared path as the TidyBot.
 
-    Both robots carry the Robotiq 2F-85 and go through ObjectCentricRobotEnv's
-    `_get_arm_and_gripper_pos_data` / `_set_arm_and_gripper_state`, so the features and
-    the restore have to work for both or the shared helper is wrong for one of them.
+    Both robots carry a Robotiq 2F-85 and go through `ObjectCentricRobotEnv`'s
+    `_get_arm_and_gripper_pos_data` / `_set_arm_and_gripper_state`, so a change correct
+    for one and wrong for the other cannot pass. This also pins that the "gripper" views
+    cover the whole linkage rather than only its two actuated drivers.
     """
     env = ObjectCentricFranka3DEnv(
         num_objects=1,
@@ -49,6 +50,10 @@ def test_franka3d_set_state_restores_every_gripper_joint():
     assert robot_env is not None
     model = robot_env.sim.model
     joint_names = [f"{robot_env.name}_{s}" for s in _GRIPPER_JOINT_SUFFIXES]
+
+    assert list(robot_env.qpos["gripper"].indices) == [
+        model.get_joint_qpos_addr(n) for n in joint_names
+    ]
 
     def gripper_qpos() -> np.ndarray:
         qpos = robot_env.sim.data.mj_data.qpos
@@ -68,8 +73,7 @@ def test_franka3d_set_state_restores_every_gripper_joint():
 
     drive_gripper(0.0)
     # Every joint has to move by far more than the restore is checked at, or a fix that
-    # restored only the two driver joints would still pass. The couplers move least,
-    # by ~3e-4 rad.
+    # restored only the two driver joints would still pass. The couplers move least.
     assert np.all(np.abs(closed_qpos - gripper_qpos()) > 1e-4)
 
     env.set_state(closed_state)

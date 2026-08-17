@@ -20,9 +20,6 @@ from kinder.envs.dynamic3d.base_env import (
     ObjectCentricDynamic3DRobotEnv,
 )
 from kinder.envs.dynamic3d.object_types import (
-    GRIPPER_JOINT_POS_FEATURES,
-    GRIPPER_JOINT_VEL_FEATURES,
-    ROBOTIQ_2F85_JOINT_SUFFIXES,
     MujocoFR3RobotObjectType,
     MujocoObjectTypeFeatures,
     MujocoRBY1ARobotObjectType,
@@ -1230,30 +1227,9 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
         simulation.
         """
 
-    def _get_gripper_joint_addrs(self) -> tuple[list[int], list[int]]:
-        """Get the qpos and qvel addresses of every joint in the gripper's linkage.
-
-        Only the two driver joints are exposed through the robot env's "gripper" qpos
-        group; the six passive coupler/spring/follower joints are reached by name.
-        """
-        assert self._robot_env is not None, "Robot environment not initialized"
-        assert self._robot_env.qpos is not None
-        model = self._robot_env.sim.model
-        names = [
-            f"{self._robot_env.name}_{suffix}" for suffix in ROBOTIQ_2F85_JOINT_SUFFIXES
-        ]
-        # Raises a ValueError naming the model's joints if this robot's gripper is not
-        # the Robotiq 2F-85 these features describe.
-        qpos_addrs = [model.get_joint_qpos_addr(name) for name in names]
-        qvel_addrs = [model.get_joint_qvel_addr(name) for name in names]
-        # The driver joints the robot env already tracks have to be part of that block,
-        # or the two are describing different grippers.
-        driver_addrs = set(self._robot_env.qpos["gripper"].indices)
-        assert driver_addrs <= set(qpos_addrs), (
-            f"the robot env's gripper qpos addresses {sorted(driver_addrs)} are not "
-            f"among the Robotiq 2F-85 joints {names} at {qpos_addrs}"
-        )
-        return qpos_addrs, qvel_addrs
+    # Joints in the "gripper" qpos/qvel views: the whole Robotiq 2F-85 linkage, not
+    # only its two actuated drivers. Both robots that reach these helpers carry one.
+    _NUM_GRIPPER_JOINTS = 8
 
     def _get_arm_and_gripper_pos_data(self) -> dict[str, float]:
         """Get position features shared by robots with a 7-joint arm and a [0, 255]
@@ -1264,11 +1240,12 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
         data: dict[str, float] = {
             f"pos_arm_joint{i}": self._robot_env.qpos["arm"][i - 1] for i in range(1, 8)
         }
+        # The commanded control value.
         data["pos_gripper"] = self._robot_env.ctrl["gripper"][0] / 255.0
-        qpos_addrs, _ = self._get_gripper_joint_addrs()
-        mj_qpos = self._robot_env.sim.data.mj_data.qpos
-        for feature, addr in zip(GRIPPER_JOINT_POS_FEATURES, qpos_addrs):
-            data[feature] = float(mj_qpos[addr])
+        gripper_qpos = self._robot_env.qpos["gripper"]
+        assert len(gripper_qpos) == self._NUM_GRIPPER_JOINTS
+        for i in range(1, self._NUM_GRIPPER_JOINTS + 1):
+            data[f"pos_gripper_joint{i}"] = gripper_qpos[i - 1]
         return data
 
     def _get_arm_and_gripper_vel_data(self) -> dict[str, float]:
@@ -1279,11 +1256,11 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
         data: dict[str, float] = {
             f"vel_arm_joint{i}": self._robot_env.qvel["arm"][i - 1] for i in range(1, 8)
         }
-        data["vel_gripper"] = self._robot_env.qvel["gripper"][0]
-        _, qvel_addrs = self._get_gripper_joint_addrs()
-        mj_qvel = self._robot_env.sim.data.mj_data.qvel
-        for feature, addr in zip(GRIPPER_JOINT_VEL_FEATURES, qvel_addrs):
-            data[feature] = float(mj_qvel[addr])
+        gripper_qvel = self._robot_env.qvel["gripper"]
+        assert len(gripper_qvel) == self._NUM_GRIPPER_JOINTS
+        data["vel_gripper"] = gripper_qvel[0]
+        for i in range(1, self._NUM_GRIPPER_JOINTS + 1):
+            data[f"vel_gripper_joint{i}"] = gripper_qvel[i - 1]
         return data
 
     def _set_arm_and_gripper_state(
@@ -1317,19 +1294,17 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
 
         robot_arm_vel = [state.get(robot_obj, f"vel_arm_joint{i}") for i in range(1, 8)]
         self._robot_env.qvel["arm"][:] = robot_arm_vel
-        self._robot_env.qvel["gripper"][:] = state.get(robot_obj, "vel_gripper")
 
-        # Restore where the fingers are, not only what they were commanded to do. This
-        # writes the driver joints a second time, per joint rather than through the
-        # single "vel_gripper" scalar above, and adds the six passive joints the
-        # gripper qpos group does not cover.
-        qpos_addrs, qvel_addrs = self._get_gripper_joint_addrs()
-        mj_qpos = self._robot_env.sim.data.mj_data.qpos
-        mj_qvel = self._robot_env.sim.data.mj_data.qvel
-        for feature, addr in zip(GRIPPER_JOINT_POS_FEATURES, qpos_addrs):
-            mj_qpos[addr] = state.get(robot_obj, feature)
-        for feature, addr in zip(GRIPPER_JOINT_VEL_FEATURES, qvel_addrs):
-            mj_qvel[addr] = state.get(robot_obj, feature)
+        # Restore where the fingers are, not only what the gripper was commanded to do.
+        # `vel_gripper` is an alias for `vel_gripper_joint1` -- both are
+        # qvel["gripper"][0] -- so only the per-joint features are written back.
+        for i in range(1, self._NUM_GRIPPER_JOINTS + 1):
+            self._robot_env.qpos["gripper"][i - 1] = state.get(
+                robot_obj, f"pos_gripper_joint{i}"
+            )
+            self._robot_env.qvel["gripper"][i - 1] = state.get(
+                robot_obj, f"vel_gripper_joint{i}"
+            )
 
 
 class ObjectCentricTidyBot3DEnv(ObjectCentricRobotEnv):

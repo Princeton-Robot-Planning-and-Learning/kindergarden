@@ -33,10 +33,25 @@ _GRIPPER_JOINT_SUFFIXES = (
 )
 
 
+def _make_env() -> ObjectCentricTidyBot3DEnv:
+    env = ObjectCentricTidyBot3DEnv(
+        num_objects=1,
+        task_config_path=str(_TASK_CONFIG_PATH),
+        scene_bg=False,
+        allow_state_access=True,
+    )
+    env.reset(seed=0)
+    return env
+
+
 def _gripper_qpos_qvel(
     env: ObjectCentricTidyBot3DEnv,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """All eight gripper joint positions and velocities, read out of MuJoCo."""
+    """All eight gripper joint positions and velocities, read straight from MuJoCo.
+
+    Resolved by joint name rather than through the robot env's "gripper" view, so this
+    stays an independent oracle for the tests that check what that view covers.
+    """
     robot_env = env._robot_env  # pylint: disable=protected-access
     assert robot_env is not None
     model = robot_env.sim.model
@@ -73,6 +88,29 @@ def _grasp_the_cube(env: ObjectCentricTidyBot3DEnv) -> None:
     _drive_gripper(env, 1.0)
 
 
+def test_tidybot3d_the_gripper_views_cover_every_robotiq_joint():
+    """The robot env's "gripper" qpos/qvel views must expose all eight joints.
+
+    Only the two drivers are actuated; the six passive coupler/spring-link/follower
+    joints carry the grasp geometry. The views are where this robot says which joints
+    are its gripper, so anything that reads or restores the hand goes through them the
+    same way the base and arm go through their own views.
+    """
+    env = _make_env()
+    robot_env = env._robot_env  # pylint: disable=protected-access
+    assert robot_env is not None
+    model = robot_env.sim.model
+    names = [f"{robot_env.name}_{s}" for s in _GRIPPER_JOINT_SUFFIXES]
+
+    assert list(robot_env.qpos["gripper"].indices) == [
+        model.get_joint_qpos_addr(n) for n in names
+    ]
+    assert list(robot_env.qvel["gripper"].indices) == [
+        model.get_joint_qvel_addr(n) for n in names
+    ]
+    env.close()
+
+
 def test_tidybot3d_restoring_a_grasp_after_a_release_restores_the_grasp():
     """A state captured mid-grasp restores a grasp, even after a release.
 
@@ -83,13 +121,7 @@ def test_tidybot3d_restoring_a_grasp_after_a_release_restores_the_grasp():
     What this does not claim is that the replay is bit-faithful: MuJoCo's solver
     warm-start is not part of the object-centric state.
     """
-    env = ObjectCentricTidyBot3DEnv(
-        num_objects=1,
-        task_config_path=str(_TASK_CONFIG_PATH),
-        scene_bg=False,
-        allow_state_access=True,
-    )
-    env.reset(seed=0)
+    env = _make_env()
 
     _grasp_the_cube(env)
     holding_state = env._get_current_state()  # pylint: disable=protected-access

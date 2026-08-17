@@ -86,9 +86,18 @@ class FR3RobotEnv(RobotEnv):
         assert self.sim is not None, "Simulation must be initialized."
 
         arm_joint_names: list[str] = [f"{self.name}_fr3_joint{i}" for i in range(1, 8)]
+        # Every joint of the Robotiq 2F-85, in model order. Only the two drivers are
+        # actuated; the six passive coupler/spring-link/follower joints carry the grasp
+        # geometry, so all eight are needed to say where the fingers actually are.
         gripper_joint_names = [
             f"{self.name}_right_driver_joint",
+            f"{self.name}_right_coupler_joint",
+            f"{self.name}_right_spring_link_joint",
+            f"{self.name}_right_follower_joint",
             f"{self.name}_left_driver_joint",
+            f"{self.name}_left_coupler_joint",
+            f"{self.name}_left_spring_link_joint",
+            f"{self.name}_left_follower_joint",
         ]
         # In fr3.xml, arm actuator names match the joint names.
         arm_actuator_names = arm_joint_names

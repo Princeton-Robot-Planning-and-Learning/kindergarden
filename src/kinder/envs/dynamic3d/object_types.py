@@ -4,31 +4,6 @@ from relational_structs import Type
 
 MujocoObjectTypeFeatures: dict[Type, list[str]] = {}
 
-# Every joint of the Robotiq 2F-85, in model order, suffixed onto the robot's name.
-# Only the two driver joints are actuated; the other six are the passive linkage that
-# carries the grasp geometry, and all eight are needed to restore a pose. The TidyBot
-# and the FR3 carry the same gripper under the same names.
-ROBOTIQ_2F85_JOINT_SUFFIXES = (
-    "right_driver_joint",
-    "right_coupler_joint",
-    "right_spring_link_joint",
-    "right_follower_joint",
-    "left_driver_joint",
-    "left_coupler_joint",
-    "left_spring_link_joint",
-    "left_follower_joint",
-)
-
-# Feature names for those joints. `pos_gripper` is the commanded ctrl value in [0, 1],
-# which does not determine where the fingers are: a gripper closed on an object stops
-# short of one closed on air, and both report the same command.
-GRIPPER_JOINT_POS_FEATURES = [
-    f"pos_gripper_joint{i}" for i in range(1, len(ROBOTIQ_2F85_JOINT_SUFFIXES) + 1)
-]
-GRIPPER_JOINT_VEL_FEATURES = [
-    f"vel_gripper_joint{i}" for i in range(1, len(ROBOTIQ_2F85_JOINT_SUFFIXES) + 1)
-]
-
 # Parent class for different object types, whether they are movable or not.
 MujocoObjectType = Type("mujoco_object")
 MujocoObjectTypeFeatures[MujocoObjectType] = [
@@ -99,8 +74,16 @@ MujocoObjectTypeFeatures[MujocoTidyBotRobotObjectType] = [
     "pos_arm_joint5",
     "pos_arm_joint6",
     "pos_arm_joint7",
+    # The commanded control in [0, 1], then where the fingers actually are.
     "pos_gripper",
-    *GRIPPER_JOINT_POS_FEATURES,
+    "pos_gripper_joint1",
+    "pos_gripper_joint2",
+    "pos_gripper_joint3",
+    "pos_gripper_joint4",
+    "pos_gripper_joint5",
+    "pos_gripper_joint6",
+    "pos_gripper_joint7",
+    "pos_gripper_joint8",
     "vel_base_x",
     "vel_base_y",
     "vel_base_rot",
@@ -112,7 +95,14 @@ MujocoObjectTypeFeatures[MujocoTidyBotRobotObjectType] = [
     "vel_arm_joint6",
     "vel_arm_joint7",
     "vel_gripper",
-    *GRIPPER_JOINT_VEL_FEATURES,
+    "vel_gripper_joint1",
+    "vel_gripper_joint2",
+    "vel_gripper_joint3",
+    "vel_gripper_joint4",
+    "vel_gripper_joint5",
+    "vel_gripper_joint6",
+    "vel_gripper_joint7",
+    "vel_gripper_joint8",
 ]
 
 MujocoFR3RobotObjectType = Type("mujoco_fr3_robot")
@@ -128,8 +118,17 @@ MujocoObjectTypeFeatures[MujocoFR3RobotObjectType] = [
     "pos_arm_joint5",
     "pos_arm_joint6",
     "pos_arm_joint7",
+    # The commanded control in [0, 1], then where the fingers actually are. The FR3
+    # carries the same Robotiq 2F-85 as the TidyBot, read through the same helpers.
     "pos_gripper",
-    *GRIPPER_JOINT_POS_FEATURES,
+    "pos_gripper_joint1",
+    "pos_gripper_joint2",
+    "pos_gripper_joint3",
+    "pos_gripper_joint4",
+    "pos_gripper_joint5",
+    "pos_gripper_joint6",
+    "pos_gripper_joint7",
+    "pos_gripper_joint8",
     "vel_arm_joint1",
     "vel_arm_joint2",
     "vel_arm_joint3",
@@ -138,7 +137,14 @@ MujocoObjectTypeFeatures[MujocoFR3RobotObjectType] = [
     "vel_arm_joint6",
     "vel_arm_joint7",
     "vel_gripper",
-    *GRIPPER_JOINT_VEL_FEATURES,
+    "vel_gripper_joint1",
+    "vel_gripper_joint2",
+    "vel_gripper_joint3",
+    "vel_gripper_joint4",
+    "vel_gripper_joint5",
+    "vel_gripper_joint6",
+    "vel_gripper_joint7",
+    "vel_gripper_joint8",
 ]
 
 MujocoRBY1ARobotObjectType = Type("mujoco_rby1a_robot")

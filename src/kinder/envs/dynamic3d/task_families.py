@@ -1,17 +1,18 @@
-"""Count-parameterized access to the registered dynamic3D task families.
+"""Count-parameterized access to the JSON-configured dynamic3D task families.
 
-Every dynamic3D task ships as its own JSON under ``tasks/<Family>/``, named
-``<Family>-o<count>[-<instruction>].json``, and the robot envs in
-:mod:`kinder.envs.dynamic3d.envs` take one such file through ``task_config_path``.
-An object count is therefore baked into the file, unlike every other kinder
-family (``Obstruction2D``, ``DynScoopPour2D``, ``Table3D``, ...), which takes its
-count as a constructor argument.
+The robot envs in :mod:`kinder.envs.dynamic3d.envs` are each configured by a task
+JSON, passed as ``task_config_path``. Those tasks ship under ``tasks/<Family>/``,
+named ``<Family>-o<count>[-<instruction>].json``, so an object count is baked
+into the file -- unlike families that take their count as a constructor argument
+(``Obstruction2D``, ``DynScoopPour2D``, ``Table3D``, ...). Other dynamic3D
+environments, such as the limb repositioning ones, are not configured this way and
+are unaffected by anything here.
 
-The classes here restore that constructor form for dynamic3D: each one names a
-family and the counts it registers, and turns ``num_objects`` back into a normal
-argument. That lets a caller sweep an object count over one family without
-knowing how the task files are laid out -- for generalization experiments, for
-instance, where a single policy must run across instance sizes.
+The classes here restore the constructor form for the JSON-configured families:
+each one names a family and the counts it registers, and turns ``num_objects``
+back into a normal argument. That lets a caller sweep an object count over one
+family without knowing how the task files are laid out -- for generalization
+experiments, for instance, where a single policy must run across instance sizes.
 
 Families whose variants also differ by instruction ("sweep the blocks to the left
 side of the kitchen island") carry a ``default_instruction`` that holds the goal
@@ -159,8 +160,8 @@ class ScoopPour3DEnv(TaskFamilyEnvMixin, TidyBot3DEnv):
 class SweepSimple3DEnv(TaskFamilyEnvMixin, TidyBot3DEnv):
     """Select a SweepSimple3D task by its number of cubes to sweep.
 
-    Defaults to sweeping left on the island, the one instruction every count
-    registers; the right-side instructions exist at 50 cubes only.
+    Defaults to sweeping left on the island, the one instruction every count registers;
+    the right-side instructions exist at 50 cubes only.
     """
 
     family = "SweepSimple3D"
@@ -171,8 +172,8 @@ class SweepSimple3DEnv(TaskFamilyEnvMixin, TidyBot3DEnv):
 class SortClutteredBlocks3DEnv(TaskFamilyEnvMixin, TidyBot3DEnv):
     """Select a SortClutteredBlocks3D task by its number of cubes to sort.
 
-    Defaults to sorting into bins, which keeps four bins fixed while the cubes
-    scale. The cupboard and bowl instructions each register one count only.
+    Defaults to sorting into bins, which keeps four bins fixed while the cubes scale.
+    The cupboard and bowl instructions each register one count only.
     """
 
     family = "SortClutteredBlocks3D"

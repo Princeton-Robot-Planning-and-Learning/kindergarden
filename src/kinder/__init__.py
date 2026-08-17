@@ -440,12 +440,6 @@ def _register_kinematic3d_v2() -> None:
 
 def _register_dynamic3d() -> None:
     # Tasks with different scenes and object counts
-    # Imported here rather than at module scope: this function only runs when the
-    # mujoco backend is installed, and the constant lives beside the envs it names.
-    from kinder.envs.dynamic3d import (  # pylint: disable=import-outside-toplevel
-        ROBOT_ENV_CLASSES,
-    )
-
     tasks_root = Path(__file__).parent / "envs" / "dynamic3d" / "tasks"
 
     env_class_variants: dict[str, dict[str, list[str]]] = {}
@@ -458,7 +452,13 @@ def _register_dynamic3d() -> None:
                 # Go through variants for this task
                 if task_config.is_file():
                     config_name = task_config.stem
-                    robot_env_classes = ROBOT_ENV_CLASSES
+                    # Map the robot type declared in the task config to the
+                    # environment class implementing it.
+                    robot_env_classes = {
+                        "tidybot": "TidyBot3D",
+                        "fr3": "Franka3D",
+                        "rby1a": "RBY1A3D",
+                    }
                     try:
                         with open(task_config, "r", encoding="utf-8") as f:
                             robot_key = next(iter(json.load(f)["robots"]))

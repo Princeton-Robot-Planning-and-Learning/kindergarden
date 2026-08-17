@@ -4,7 +4,6 @@ import json
 
 import pytest
 
-from kinder.envs.dynamic3d import ROBOT_ENV_CLASSES
 from kinder.envs.dynamic3d import envs as dynamic3d_envs
 from kinder.envs.dynamic3d.task_families import (
     TASK_FAMILY_ENVS,
@@ -24,6 +23,16 @@ _RESET_CASES = [
     pytest.param(SweepSimple3DEnv, "cube_", [1, 5], id="sweepsimple"),
     pytest.param(SortClutteredBlocks3DEnv, "cube", [4, 20], id="sortclutteredblocks"),
 ]
+
+# The robot key a task JSON names, mapped to the env class implementing it. Kept
+# here rather than shared with the gym registration in :mod:`kinder`, which holds
+# its own copy: this is the expectation the test checks task files against, so it
+# is worth stating independently.
+_ROBOT_ENV_CLASSES = {
+    "tidybot": "TidyBot3D",
+    "fr3": "Franka3D",
+    "rby1a": "RBY1A3D",
+}
 
 
 def test_every_family_registers_its_declared_counts() -> None:
@@ -46,15 +55,15 @@ def test_every_family_subclasses_the_env_its_tasks_declare() -> None:
             with open(env_cls.task_path(count), encoding="utf-8") as task_file:
                 robots.add(next(iter(json.load(task_file)["robots"])))
         assert len(robots) == 1, f"{env_cls.family} mixes robots: {sorted(robots)}"
-        expected = getattr(dynamic3d_envs, f"{ROBOT_ENV_CLASSES[robots.pop()]}Env")
+        expected = getattr(dynamic3d_envs, f"{_ROBOT_ENV_CLASSES[robots.pop()]}Env")
         assert issubclass(env_cls, expected), (env_cls, expected)
 
 
 def test_default_instruction_spans_every_count() -> None:
     """A family's default instruction is registered for all of its counts.
 
-    Otherwise the goal would silently change with the count, which is the one
-    thing these classes exist to hold fixed.
+    Otherwise the goal would silently change with the count, which is the one thing
+    these classes exist to hold fixed.
     """
     for env_cls in TASK_FAMILY_ENVS:
         if not env_cls.default_instruction:

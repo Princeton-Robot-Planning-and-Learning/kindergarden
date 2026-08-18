@@ -879,6 +879,14 @@ class MjRenderContext:
                     EGLGLContext as GLContext,)
 
                 # TODO this needs testing on a Linux machine  # pylint: disable=fixme
+            elif _SYSTEM == "Darwin" and _MUJOCO_GL == "cgl":
+                from kinder.envs.dynamic3d.renderers.context.cgl_context import (  # type: ignore[assignment] # pylint: disable=line-too-long
+                    CGLGLContext as GLContext,)
+
+                # cgl is accepted above on Darwin but used to fall through to GLFW,
+                # which creates an NSWindow. macOS allows that on the main thread
+                # only, so rendering from a worker thread -- what any env server
+                # does -- aborted the process instead of returning a frame.
             else:
                 from kinder.envs.dynamic3d.renderers.context.glfw_context import (  # type: ignore[assignment] # pylint: disable=line-too-long
                     GLFWGLContext as GLContext,)

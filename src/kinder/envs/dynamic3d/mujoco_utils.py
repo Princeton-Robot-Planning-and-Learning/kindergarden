@@ -879,14 +879,16 @@ class MjRenderContext:
                     EGLGLContext as GLContext,)
 
                 # TODO this needs testing on a Linux machine  # pylint: disable=fixme
-            elif _SYSTEM == "Darwin" and _MUJOCO_GL == "cgl":
+            elif _SYSTEM == "Darwin" and _MUJOCO_GL != "glfw":
                 from kinder.envs.dynamic3d.renderers.context.cgl_context import (  # type: ignore[assignment] # pylint: disable=line-too-long
                     CGLGLContext as GLContext,)
 
-                # cgl is accepted above on Darwin but used to fall through to GLFW,
-                # which creates an NSWindow. macOS allows that on the main thread
-                # only, so rendering from a worker thread -- what any env server
-                # does -- aborted the process instead of returning a frame.
+                # Everything on macOS except an explicit glfw request renders
+                # offscreen. GLFW creates an NSWindow, which AppKit permits on the
+                # main thread only, so rendering from a worker thread -- what any
+                # env server does -- aborts the process instead of returning a
+                # frame. That caught "cgl" (accepted above yet still routed to
+                # GLFW) and equally the unset default, which reads as "" here.
             else:
                 from kinder.envs.dynamic3d.renderers.context.glfw_context import (  # type: ignore[assignment] # pylint: disable=line-too-long
                     GLFWGLContext as GLContext,)

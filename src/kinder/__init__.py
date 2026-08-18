@@ -65,11 +65,15 @@ def register_all_environments() -> None:
     """
     # NOTE: ids must start with "kinder/" to be properly registered.
 
-    # Detect headless mode (no DISPLAY) and set OSMesa if needed
+    # Detect headless mode (no DISPLAY) and pick that platform's offscreen backend.
     if not os.environ.get("DISPLAY"):
         if sys.platform == "darwin":
-            os.environ["MUJOCO_GL"] = "glfw"
-            os.environ["PYOPENGL_PLATFORM"] = "glfw"
+            # cgl is the macOS counterpart of osmesa below. glfw would open an
+            # NSWindow, which is both pointless with no display and fatal when the
+            # render is driven from a worker thread, since AppKit allows NSWindow
+            # on the main thread only.
+            os.environ["MUJOCO_GL"] = "cgl"
+            os.environ["PYOPENGL_PLATFORM"] = "darwin"
         else:
             os.environ["MUJOCO_GL"] = "osmesa"
             os.environ["PYOPENGL_PLATFORM"] = "osmesa"

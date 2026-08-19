@@ -10,6 +10,7 @@ from pybullet_helpers.geometry import Pose, SE2Pose
 from pybullet_helpers.motion_planning import (
     create_joint_distance_fn,
     remap_joint_position_plan_to_constant_distance,
+    remap_se2_pose_plan_to_constant_distance,
     run_single_arm_mobile_base_motion_planning,
     smoothly_follow_end_effector_path,
 )
@@ -112,6 +113,9 @@ def test_goal_reached_after_pick(env) -> None:  # pylint: disable=redefined-oute
         seed=123,
     )
     assert base_plan is not None
+    base_plan = remap_se2_pose_plan_to_constant_distance(
+        base_plan, max_distance=config.max_action_mag
+    )
 
     for target_base_pose in base_plan[1:]:
         current_base_pose = obs.base_pose

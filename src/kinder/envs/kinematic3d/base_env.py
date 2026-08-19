@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import abc
+import math
 from dataclasses import dataclass, field
 from typing import Any, Generic
 from typing import Type as TypingType
@@ -79,6 +80,8 @@ class Kinematic3DEnvConfig(KinDEREnvConfig):
     end_effector_viz_half_extents: tuple[float, float, float] = (0.01, 0.01, 0.035)
     end_effector_viz_color: tuple[float, float, float, float] = (1.0, 0.2, 0.2, 0.0)
     max_action_mag: float = 0.4
+    # None disables intermediate collision checks.
+    max_collision_check_step: float | None = None
     check_base_collisions: bool = False
 
     # This is used to check whether a grasped object can be placed on a surface.
@@ -517,11 +520,12 @@ class ObjectCentricKinematic3DRobotEnv(
 
     def step(self, action: Array) -> tuple[_ObsType, float, bool, bool, dict]:
         # execute the base action
-        base_action = action[:3]
-        current_base_pose = self.robot.get_base()
-        next_base_pose = current_base_pose + SE2Pose(
-            base_action[0], base_action[1], base_action[2]
+        base_action = np.clip(
+            action[:3],
+            -self.config.max_action_mag,
+            self.config.max_action_mag,
         )
+        current_base_pose = self.robot.get_base()
 
         # Store the current robot joints because we may need to revert in collision.
         current_joints = remove_fingers_from_extended_joints(
@@ -543,13 +547,39 @@ class ObjectCentricKinematic3DRobotEnv(
             self._robot_arm.joint_lower_limits[:7],
             self._robot_arm.joint_upper_limits[:7],
         ).tolist()
-        self._set_robot_and_held_object(
-            next_base_pose, next_joints, current_finger_state
+        # Validate the action path at evenly spaced configurations.
+        max_delta = max(
+            np.max(np.abs(base_action)),
+            np.max(np.abs(np.asarray(next_joints) - np.asarray(current_joints))),
         )
+        if self.config.max_collision_check_step is None:
+            num_collision_checks = 1
+        else:
+            if self.config.max_collision_check_step <= 0:
+                raise ValueError("max_collision_check_step must be positive")
+            num_collision_checks = max(
+                1, math.ceil(max_delta / self.config.max_collision_check_step)
+            )
+        motion_valid = True
+        for i in range(1, num_collision_checks + 1):
+            t = i / num_collision_checks
+            intermediate_base_pose = current_base_pose + SE2Pose(
+                t * base_action[0], t * base_action[1], t * base_action[2]
+            )
+            intermediate_joints = (
+                np.asarray(current_joints)
+                + t * (np.asarray(next_joints) - np.asarray(current_joints))
+            ).tolist()
+            self._set_robot_and_held_object(
+                intermediate_base_pose,
+                intermediate_joints,
+                current_finger_state,
+            )
+            if self._robot_or_held_object_collision_exists():
+                motion_valid = False
+                break
 
-        # Check for collisions.
-        if self._robot_or_held_object_collision_exists():
-            # Revert!
+        if not motion_valid:
             self._set_robot_and_held_object(
                 current_base_pose, current_joints, current_finger_state
             )

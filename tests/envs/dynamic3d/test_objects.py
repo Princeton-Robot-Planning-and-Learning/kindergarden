@@ -438,6 +438,83 @@ def test_bin_inherits_from_mujoco_object():
     assert isinstance(bin_obj, Bin)
 
 
+def test_bin_region_with_six_value_range_carries_its_own_z_bounds():
+    """A region attached to an object (not the ground) needs real z bounds when it must
+    span the object's own height -- e.g. a goal region that has to score anywhere inside a
+    bin's interior, not just in a hairline slice at the bin's own local z=0. A 6-value
+    range [x_start, y_start, z_start, x_end, y_end, z_end] carries z_start/z_end through
+    instead of the historical fixed +/-1cm band (see the four-value test below).
+    """
+    options = {
+        "length": 0.2,
+        "width": 0.2,
+        "height": 0.1,
+        "regions": {
+            "goal_region": {
+                "target": "test_bin",
+                "ranges": [[-0.05, -0.05, 0.0, 0.05, 0.05, 0.08]],
+            }
+        },
+    }
+    bin_obj = Bin("test_bin", options=options)
+
+    (region,) = bin_obj.region_objects["goal_region"]
+    site = region.site_element
+    assert site is not None
+    size = [float(v) for v in site.get("size", "").split()]
+    pos = [float(v) for v in site.get("pos", "").split()]
+
+    placement_threshold = 0.01
+    z_min = pos[2] - size[2]
+    z_max = pos[2] + size[2]
+    assert z_min == pytest.approx(0.0 - placement_threshold)
+    assert z_max == pytest.approx(0.08 + placement_threshold)
+
+
+def test_bin_region_with_four_value_range_keeps_the_historical_thin_z_band():
+    """Same construction, but a 4-value range: the pre-existing behaviour must be
+    unchanged by six-value support -- a small, fixed z band around the object's own local
+    origin, regardless of the x/y extent requested."""
+    options = {
+        "length": 0.2,
+        "width": 0.2,
+        "height": 0.1,
+        "regions": {
+            "surface_region": {
+                "target": "test_bin",
+                "ranges": [[-0.05, -0.05, 0.05, 0.05]],
+            }
+        },
+    }
+    bin_obj = Bin("test_bin", options=options)
+
+    (region,) = bin_obj.region_objects["surface_region"]
+    site = region.site_element
+    assert site is not None
+    size = [float(v) for v in site.get("size", "").split()]
+    pos = [float(v) for v in site.get("pos", "").split()]
+
+    z_min = pos[2] - size[2]
+    z_max = pos[2] + size[2]
+    assert z_min == pytest.approx(-0.01)
+    assert z_max == pytest.approx(0.01)
+
+
+def test_bin_region_with_bad_range_length_raises():
+    """Neither 3 nor 5 values means anything; `_create_regions` should say so rather than
+    fail with an opaque unpacking error."""
+    options = {
+        "regions": {
+            "bad_region": {
+                "target": "test_bin",
+                "ranges": [[0.0, 0.0, 0.0]],
+            }
+        },
+    }
+    with pytest.raises(ValueError, match="4 or 6 values"):
+        Bin("test_bin", options=options)
+
+
 # Tests for GeneratedBowl
 
 

@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import kinder
+import pytest
 from kinder.envs.dynamic3d.envs import ObjectCentricTidyBot3DEnv
 
 _TASK_CONFIG_PATH = (
@@ -51,10 +52,12 @@ def test_tossing3d_cube_in_bin_is_a_success():
 
     # Place the cube where it comes to rest on the floor of the bin: the bin's
     # centre in x/y, and one wall thickness plus one cube half-extent up in z.
-    # z is not discriminating here -- ground regions are inflated by
-    # MujocoGround.ground_placement_threshold, so blocks_goal_region spans z in
-    # [0, 0.15] and _check_goals cannot tell a cube in the bin from one on the
-    # floor beneath it. The x/y comparison is what this assertion rests on.
+    # z is not discriminating here -- blocks_goal_region.target is bin_0, and its
+    # ranges are inflated by MujocoObject's per-object placement threshold (1cm), so
+    # in the bin's own local frame the region spans z in [-0.01, 0.11] and
+    # _check_goals cannot tell a cube in the bin from one on the floor beneath it
+    # (the region reaches all the way down to the bin's own base). The x/y
+    # comparison is what this assertion rests on.
     current_state = env._get_current_state()  # pylint: disable=protected-access
     bin_obj = current_state.get_object_from_name("bin_0")
     bin_config = env.task_config["objects"]["bin"]["bin_0"]
@@ -105,41 +108,44 @@ def test_tossing3d_cube_short_of_the_bin_is_not_a_success():
     env.close()
 
 
-def test_tossing3d_goal_region_is_covered_by_the_bin():
-    """Test that the bin's footprint still covers blocks_goal_region in x and y.
+@pytest.mark.parametrize("seed", [0, 1, 2, 3, 4])
+def test_tossing3d_goal_region_is_covered_by_the_bin(seed: int):
+    """Test that the bin's footprint covers blocks_goal_region in x and y, at whatever
+    position bin_init_region actually placed the bin -- swept across several seeds, since
+    bin_init_region now samples a real range rather than one fixed point.
 
-    The two tests above sample single points, so they only detect a large drift. This
-    one pins the invariant they rely on: because blocks_goal_region reaches down to the
-    floor, it encodes "in the bin" only while the bin's footprint covers it in x and y.
-    Only x and y -- in z the region spans [0, 0.15], which reaches below the bin's
-    floor, so a success position is not necessarily inside the bin at all.
+    The two tests above sample single points, so they only detect a large drift. This one
+    pins the invariant they rely on: because blocks_goal_region reaches down to the floor,
+    it encodes "in the bin" only while the bin's footprint covers it in x and y. Only x
+    and y -- in the bin's own local frame the region spans z in [-0.01, 0.11], which
+    reaches below the bin's floor, so a success position is not necessarily inside the
+    bin at all.
+
+    Before `blocks_goal_region.target` became `bin_0` (previously `ground`), this
+    coverage held only because `bin_init_region` was a zero-width range placing the bin
+    exactly on the region's own scene-fixed centre -- "no margin to spare", as this test
+    used to say. Now the region is a site on the bin's own body, so coverage is
+    guaranteed by construction at any bin position, which is exactly what sweeping
+    several seeds here demonstrates.
     """
     env = _make_env()
-    env.reset(seed=0)
+    env.reset(seed=seed)
 
-    # _check_goals tests membership against the region's inflated bounding box,
-    # so compare against that rather than against the task config's raw ranges.
-    region = env._ground_fixture.region_objects[  # pylint: disable=protected-access
-        "blocks_goal_region"
-    ][0]
+    # _check_goals tests membership against the region's inflated bounding box, so
+    # compare against that rather than against the task config's raw ranges. The region
+    # lives on bin_0 itself now, not the ground fixture.
+    bin_obj = env._objects_dict["bin_0"]  # pylint: disable=protected-access
+    region = bin_obj.region_objects["blocks_goal_region"][0]
     x_min, y_min, _, x_max, y_max, _ = region.bbox
 
     current_state = env._get_current_state()  # pylint: disable=protected-access
-    bin_obj = current_state.get_object_from_name("bin_0")
+    bin_symbolic = current_state.get_object_from_name("bin_0")
     bin_config = env.task_config["objects"]["bin"]["bin_0"]
-    bin_x = current_state.get(bin_obj, "x")
-    bin_y = current_state.get(bin_obj, "y")
+    bin_x = current_state.get(bin_symbolic, "x")
+    bin_y = current_state.get(bin_symbolic, "y")
 
-    # The bin's footprint is exactly the size of the inflated goal region -- both
-    # are 0.3 x 0.3, since the region's raw half-extent of 0.10 plus 0.05 of ground
-    # inflation is the bin's length / 2. So the two coincide only when the bin's
-    # centre lands on the region's centre, and there is no margin to spare.
-    # bin_init_region is a zero-width range placing the bin on the region's centre,
-    # so the footprint and the goal box coincide to within floating-point noise on
-    # every seed. The tolerance is therefore not absorbing any placement error; it
-    # is kept because the bin still settles slightly under physics, and because a
-    # tolerance of a few mm is already the regime where a cube on the bare floor
-    # scores a success, so it stays tight enough to catch any real drift.
+    # A few mm of slack for physics settling -- still tight enough to catch any real
+    # drift between the bin's footprint and its own attached region.
     tol = 0.002
     assert (
         bin_x - bin_config["length"] / 2 <= x_min + tol

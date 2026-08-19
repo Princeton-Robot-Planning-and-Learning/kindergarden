@@ -321,33 +321,46 @@ class MujocoObject:
     def _create_regions(self) -> None:
         """Create Region objects with site elements for each region.
 
-        Each region's 2D ranges [x_start, y_start, x_end, y_end] are converted to 3D
-        bounding boxes [x_min, y_min, z_min, x_max, y_max, z_max] where the z dimension
-        spans a small height above the object surface.
+        Each region's ranges are converted to 3D bounding boxes
+        [x_min, y_min, z_min, x_max, y_max, z_max]. A 4-value range
+        [x_start, y_start, x_end, y_end] gets a small, fixed z band around the object's
+        own local origin (the historical behaviour, still right for a region that only
+        needs to test "on top of this object's surface"). A 6-value range
+        [x_start, y_start, z_start, x_end, y_end, z_end] carries its own z bounds instead
+        -- needed for a region that must span real height in the parent's local frame,
+        e.g. a goal region attached to a container object rather than to the ground.
         """
         assert self.regions is not None, "Regions must be defined"
         assert (
             self.xml_element is not None
         ), "XML element must be defined to create regions"
         placement_threshold = 0.01  # 1cm tolerance for placement
-        # Note: we are currently hard-coding the z range for the bounding boxes
-        # This could potentially be made configurable in the future.
 
         for region_name, region_config in self.regions.items():
             region_list: list[Region] = []
 
             for region_idx, region_range in enumerate(region_config["ranges"]):
-                x_start, y_start, x_end, y_end = region_range
+                if len(region_range) == 4:
+                    x_start, y_start, x_end, y_end = region_range
+                    z_start, z_end = 0.0, 0.0
+                elif len(region_range) == 6:
+                    x_start, y_start, z_start, x_end, y_end, z_end = region_range
+                else:
+                    raise ValueError(
+                        f"Region range must have 4 or 6 values "
+                        f"[x_start, y_start, x_end, y_end] or "
+                        f"[x_start, y_start, z_start, x_end, y_end, z_end], "
+                        f"got {len(region_range)}"
+                    )
 
-                # Create 3D bounding box with z range and tolerance on x/y bounds
-                # Apply tolerance to x and y boundaries
+                # Create 3D bounding box with z range and tolerance on all bounds
                 bbox = [
                     x_start - placement_threshold,
                     y_start - placement_threshold,
-                    -placement_threshold,
+                    z_start - placement_threshold,
                     x_end + placement_threshold,
                     y_end + placement_threshold,
-                    placement_threshold,
+                    z_end + placement_threshold,
                 ]
 
                 # Calculate center and half-sizes for MuJoCo box site

@@ -1212,6 +1212,10 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
         """Set the camera to use for rendering."""
         self._render_camera_name = camera_name
 
+    def get_object(self, name: str) -> MujocoObject:
+        """Look up a live scene object by name."""
+        return self._objects_dict[name]
+
     @abc.abstractmethod
     def _get_object_centric_robot_data(self) -> dict[Object, dict[str, float]]:
         """Get object-centric data for the robot.

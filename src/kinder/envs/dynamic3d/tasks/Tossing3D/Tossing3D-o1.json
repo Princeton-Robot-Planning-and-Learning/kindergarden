@@ -24,7 +24,7 @@
             "target": "bin_0",
             "ranges": [[-0.10, -0.10, 0.0, 0.10, 0.10, 0.10]],
             "yaw_ranges": [[0, 0]],
-            "rgba": [0.2, 0.6, 0.2, 0.0]
+            "rgba": [0.2, 0.6, 0.2, 0.4]
         },
         "barrier_init_region": {
             "target": "ground",

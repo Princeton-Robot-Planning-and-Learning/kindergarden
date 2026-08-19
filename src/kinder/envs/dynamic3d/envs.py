@@ -80,7 +80,7 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
         show_images: bool = False,
         scene_bg: bool | str | None = None,
         scene_render_camera: str | None = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> None:
         # Initialize ObjectCentricKinDEREnv first
         super().__init__(config, **kwargs)
@@ -1227,27 +1227,40 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
         simulation.
         """
 
+    # Joints in the "gripper" qpos/qvel views: the whole Robotiq 2F-85 linkage, not
+    # only its two actuated drivers. Both robots that reach these helpers carry one.
+    _NUM_GRIPPER_JOINTS = 8
+
     def _get_arm_and_gripper_pos_data(self) -> dict[str, float]:
         """Get position features shared by robots with a 7-joint arm and a [0, 255]
-        gripper actuator: pos_arm_joint1..7 and pos_gripper."""
+        gripper actuator: pos_arm_joint1..7, pos_gripper and pos_gripper_joint1..8."""
         assert self._robot_env is not None, "Robot environment not initialized"
         assert self._robot_env.qpos is not None
         assert self._robot_env.ctrl is not None
         data: dict[str, float] = {
             f"pos_arm_joint{i}": self._robot_env.qpos["arm"][i - 1] for i in range(1, 8)
         }
+        # The commanded control value.
         data["pos_gripper"] = self._robot_env.ctrl["gripper"][0] / 255.0
+        gripper_qpos = self._robot_env.qpos["gripper"]
+        assert len(gripper_qpos) == self._NUM_GRIPPER_JOINTS
+        for i in range(1, self._NUM_GRIPPER_JOINTS + 1):
+            data[f"pos_gripper_joint{i}"] = gripper_qpos[i - 1]
         return data
 
     def _get_arm_and_gripper_vel_data(self) -> dict[str, float]:
         """Get velocity features shared by robots with a 7-joint arm and a [0, 255]
-        gripper actuator: vel_arm_joint1..7 and vel_gripper."""
+        gripper actuator: vel_arm_joint1..7, vel_gripper and vel_gripper_joint1..8."""
         assert self._robot_env is not None, "Robot environment not initialized"
         assert self._robot_env.qvel is not None
         data: dict[str, float] = {
             f"vel_arm_joint{i}": self._robot_env.qvel["arm"][i - 1] for i in range(1, 8)
         }
-        data["vel_gripper"] = self._robot_env.qvel["gripper"][0]
+        gripper_qvel = self._robot_env.qvel["gripper"]
+        assert len(gripper_qvel) == self._NUM_GRIPPER_JOINTS
+        data["vel_gripper"] = gripper_qvel[0]
+        for i in range(1, self._NUM_GRIPPER_JOINTS + 1):
+            data[f"vel_gripper_joint{i}"] = gripper_qvel[i - 1]
         return data
 
     def _set_arm_and_gripper_state(
@@ -1281,7 +1294,17 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
 
         robot_arm_vel = [state.get(robot_obj, f"vel_arm_joint{i}") for i in range(1, 8)]
         self._robot_env.qvel["arm"][:] = robot_arm_vel
-        self._robot_env.qvel["gripper"][:] = state.get(robot_obj, "vel_gripper")
+
+        # Restore where the fingers are, not only what the gripper was commanded to do.
+        # `vel_gripper` is an alias for `vel_gripper_joint1` -- both are
+        # qvel["gripper"][0] -- so only the per-joint features are written back.
+        for i in range(1, self._NUM_GRIPPER_JOINTS + 1):
+            self._robot_env.qpos["gripper"][i - 1] = state.get(
+                robot_obj, f"pos_gripper_joint{i}"
+            )
+            self._robot_env.qvel["gripper"][i - 1] = state.get(
+                robot_obj, f"vel_gripper_joint{i}"
+            )
 
 
 class ObjectCentricTidyBot3DEnv(ObjectCentricRobotEnv):

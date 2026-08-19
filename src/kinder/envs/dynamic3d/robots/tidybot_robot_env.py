@@ -121,9 +121,18 @@ class TidyBotRobotEnv(RobotEnv):
             f"{self.name}_joint_6",
             f"{self.name}_joint_7",
         ]
+        # Every joint of the Robotiq 2F-85, in model order. Only the two drivers are
+        # actuated; the six passive coupler/spring-link/follower joints carry the grasp
+        # geometry, so all eight are needed to say where the fingers actually are.
         gripper_joint_names = [
             f"{self.name}_right_driver_joint",
+            f"{self.name}_right_coupler_joint",
+            f"{self.name}_right_spring_link_joint",
+            f"{self.name}_right_follower_joint",
             f"{self.name}_left_driver_joint",
+            f"{self.name}_left_coupler_joint",
+            f"{self.name}_left_spring_link_joint",
+            f"{self.name}_left_follower_joint",
         ]
         gripper_ctrl_joint_names = [f"{self.name}_fingers_actuator"]
 

@@ -287,3 +287,28 @@ def test_pick_place_after_moving(env):  # pylint: disable=redefined-outer-name
         obs = Transport3DObjectCentricState(oc_obs.data, oc_obs.type_features)
 
     assert obs.grasped_object is None, "Object not released"
+
+
+def _get_aabb(obs, object_name):
+    """Axis-aligned bounding box (lower, upper) of an object in the state."""
+    center = np.array(obs.get_object_pose(object_name).position)
+    half_extents = np.array(obs.get_object_half_extents(object_name))
+    return center - half_extents, center + half_extents
+
+
+def test_reset_objects_avoid_table(env):  # pylint: disable=redefined-outer-name
+    """Reset samples do not penetrate the table."""
+    assert isinstance(env.observation_space, ObjectCentricBoxSpace)
+    for seed in [57, 97, 148]:
+        vec_obs, _ = env.reset(seed=seed)
+        oc_obs = env.observation_space.devectorize(vec_obs)
+        obs = Transport3DObjectCentricState(oc_obs.data, oc_obs.type_features)
+        table_lo, table_hi = _get_aabb(obs, "table")
+        for obj in obs:
+            if not (obj.name.startswith("cube") or obj.name.startswith("box")):
+                continue
+            lo, hi = _get_aabb(obs, obj.name)
+            overlap = np.minimum(hi, table_hi) - np.maximum(lo, table_lo)
+            assert (
+                overlap.min() <= 1e-6
+            ), f"{obj.name} intersects the table after reset(seed={seed})"

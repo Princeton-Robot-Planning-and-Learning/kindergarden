@@ -280,7 +280,7 @@ class ObjectCentricTransport3DEnv(
             ),
             physics_client_id=self.physics_client_id,
             rng=self.np_random,
-            other_collision_ids={self.robot.base.robot_id},
+            other_collision_ids={self.robot.base.robot_id, self.table_id},
         )
 
         sample_collision_free_object_poses(
@@ -302,7 +302,7 @@ class ObjectCentricTransport3DEnv(
             ),
             physics_client_id=self.physics_client_id,
             rng=self.np_random,
-            other_collision_ids=box_ids | {self.robot.base.robot_id},
+            other_collision_ids=box_ids | {self.robot.base.robot_id, self.table_id},
         )
 
     def _set_object_states(self, obs: Kinematic3DObjectCentricState) -> None:

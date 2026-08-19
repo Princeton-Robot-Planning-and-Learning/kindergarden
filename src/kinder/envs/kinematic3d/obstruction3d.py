@@ -9,7 +9,13 @@ from typing import Type as TypingType
 
 import numpy as np
 import pybullet as p
-from pybullet_helpers.geometry import Pose, SE2Pose, set_pose
+from pybullet_helpers.geometry import (
+    Pose,
+    SE2Pose,
+    get_pose,
+    multiply_poses,
+    set_pose,
+)
 from pybullet_helpers.inverse_kinematics import check_body_collisions
 from pybullet_helpers.utils import create_pybullet_block
 from relational_structs import Object, ObjectCentricState
@@ -34,6 +40,8 @@ class Obstruction3DEnvConfig(Kinematic3DEnvConfig, metaclass=FinalConfigMeta):
     """Config for Obstruction3DEnv()."""
 
     # Robot.
+    max_action_mag: float = 0.2
+    max_collision_check_step: float = 0.005
     robot_base_home_pose: SE2Pose = SE2Pose(-0.12, 0, 0)
     robot_base_z: float = -0.4
 
@@ -427,9 +435,33 @@ class ObjectCentricObstruction3DEnv(
     def goal_reached(self) -> bool:
         if self._grasped_object is not None:
             return False
+        return self._target_block_on_target_region()
+
+    def _target_block_on_target_region(self) -> bool:
+        """Check that the block rests fully within the target region."""
         assert self._target_block_id is not None
-        target_supports = self._get_surfaces_supporting_object(self._target_block_id)
-        return self._target_region_id in target_supports
+        assert self._target_region_id is not None
+        block_pose = get_pose(self._target_block_id, self.physics_client_id)
+        region_pose = get_pose(self._target_region_id, self.physics_client_id)
+        region_half_extents = self._target_region_half_extents
+        block_half_extents = self._target_block_half_extents
+        # Work in the region's frame so a yawed region is handled uniformly.
+        block_in_region = multiply_poses(region_pose.invert(), block_pose)
+        resting_height = region_half_extents[2] + block_half_extents[2]
+        tol = self.config.min_placement_dist
+        if abs(block_in_region.position[2] - resting_height) > tol:
+            return False
+        # Require every bottom corner inside the region footprint.
+        half_x, half_y, half_z = block_half_extents
+        for sign_x, sign_y in ((1, 1), (1, -1), (-1, 1), (-1, -1)):
+            corner_offset = Pose((sign_x * half_x, sign_y * half_y, -half_z))
+            corner = multiply_poses(block_in_region, corner_offset).position
+            if (
+                abs(corner[0]) > region_half_extents[0] + tol
+                or abs(corner[1]) > region_half_extents[1] + tol
+            ):
+                return False
+        return True
 
 
 class Obstruction3DEnv(ConstantObjectKinDEREnv):
@@ -501,10 +533,8 @@ The resulting joint positions are clipped to the robot's joint limits before bei
 - **Termination** occurs when the target block is placed on the target region (while not being grasped)
 
 The goal is considered reached when:
-1. The robot is not currently grasping the target block
-2. The target block is resting on (supported by) the target region
-
-Support is determined based on contact between the target block and target region, within a small distance threshold (1e-4).
+1. The robot is not currently grasping any object
+2. The target block is resting on the target region, fully within its boundaries
 
 This encourages the robot to place the target block while avoiding infinite episodes.
 """

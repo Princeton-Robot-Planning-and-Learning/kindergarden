@@ -129,8 +129,22 @@ def film(
     cam.azimuth = _CAMERA_AZIMUTH
     cam.elevation = _CAMERA_ELEVATION
 
+    marker_pos: dict = {"xyz": None}  # set once PICKUP's snapshot happens, held fixed after
+
     def render_frame() -> np.ndarray:
         renderer.update_scene(mj_data, camera=cam)
+        if marker_pos["xyz"] is not None:
+            scene = renderer.scene
+            g = scene.geoms[scene.ngeom]
+            mujoco.mjv_initGeom(
+                g,
+                type=mujoco.mjtGeom.mjGEOM_SPHERE,
+                size=np.array([0.012, 0, 0]),
+                pos=np.array(marker_pos["xyz"]),
+                mat=np.eye(3).flatten(),
+                rgba=_MARKER_RGBA,
+            )
+            scene.ngeom += 1
         return renderer.render().copy()
 
     frames: list = []
@@ -175,6 +189,7 @@ def film(
     held_qpos = _gripper_qpos(robot_env)
     snapshot_frame_idx = len(frames)
     snapshot_qpos_full = mj_data.qpos.copy()
+    marker_pos["xyz"] = (held_x, held_y, held_z)  # visible in every frame from here on
 
     # One extra render at the snapshotted full qpos, reused as a ghost overlay for every
     # subsequent frame in the compose step below (the pose is static, so one render

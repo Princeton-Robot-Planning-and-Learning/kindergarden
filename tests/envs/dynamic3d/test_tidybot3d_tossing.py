@@ -2,8 +2,9 @@
 
 from pathlib import Path
 
-import kinder
 import pytest
+
+import kinder
 from kinder.envs.dynamic3d.envs import ObjectCentricTidyBot3DEnv
 
 _TASK_CONFIG_PATH = (
@@ -114,10 +115,10 @@ def test_tossing3d_goal_region_is_covered_by_the_bin(seed: int):
     position bin_init_region actually placed the bin -- swept across several seeds, since
     bin_init_region now samples a real range rather than one fixed point.
 
-    The two tests above sample single points, so they only detect a large drift. This one
-    pins the invariant they rely on: because blocks_goal_region reaches down to the floor,
-    it encodes "in the bin" only while the bin's footprint covers it in x and y. Only x
-    and y -- in the bin's own local frame the region spans z in [-0.01, 0.11], which
+    The two tests above sample single points, so they only detect a large drift. This
+    one pins the invariant they rely on: because blocks_goal_region reaches down to the
+    floor, it encodes "in the bin" only while the bin's footprint covers it in x and
+    y -- in the bin's own local frame the region spans z in [-0.01, 0.11], which
     reaches below the bin's floor, so a success position is not necessarily inside the
     bin at all.
 

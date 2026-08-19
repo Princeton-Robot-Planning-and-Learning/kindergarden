@@ -440,10 +440,11 @@ def test_bin_inherits_from_mujoco_object():
 
 def test_bin_region_with_six_value_range_carries_its_own_z_bounds():
     """A region attached to an object (not the ground) needs real z bounds when it must
-    span the object's own height -- e.g. a goal region that has to score anywhere inside a
-    bin's interior, not just in a hairline slice at the bin's own local z=0. A 6-value
-    range [x_start, y_start, z_start, x_end, y_end, z_end] carries z_start/z_end through
-    instead of the historical fixed +/-1cm band (see the four-value test below).
+    span the object's own height -- e.g. a goal region that has to score anywhere
+    inside a bin's interior, not just in a hairline slice at the bin's own local z=0.
+    A 6-value range [x_start, y_start, z_start, x_end, y_end, z_end] carries
+    z_start/z_end through instead of the historical fixed +/-1cm band (see the
+    four-value test below).
     """
     options = {
         "length": 0.2,

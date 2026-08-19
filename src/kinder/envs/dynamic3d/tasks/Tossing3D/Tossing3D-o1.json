@@ -23,7 +23,7 @@
         "blocks_goal_region": {
             "target": "bin_0",
             "ranges": [[-0.10, -0.10, 0.0, 0.10, 0.10, 0.10]],
-            "yaw_ranges": [[-360, 360]],
+            "yaw_ranges": [[0, 0]],
             "rgba": [0.2, 0.6, 0.2, 0.0]
         },
         "barrier_init_region": {

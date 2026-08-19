@@ -325,8 +325,7 @@ class MujocoObject:
         x_max, y_max, z_max]. A 4-value range [x_start, y_start, x_end, y_end] spans a
         small, fixed height above the object's own local origin, as before; a 6-value
         range [x_start, y_start, z_start, x_end, y_end, z_end] carries real z bounds
-        instead, for a region -- e.g. a goal box on a container -- that needs real
-        interior height.
+        instead.
         """
         assert self.regions is not None, "Regions must be defined"
         assert (

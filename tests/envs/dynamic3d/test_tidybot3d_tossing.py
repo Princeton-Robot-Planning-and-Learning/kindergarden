@@ -53,12 +53,11 @@ def test_tossing3d_cube_in_bin_is_a_success():
 
     # Place the cube where it comes to rest on the floor of the bin: the bin's
     # centre in x/y, and one wall thickness plus one cube half-extent up in z.
-    # z is not discriminating here -- blocks_goal_region.target is bin_0, and its
-    # ranges are inflated by MujocoObject's per-object placement threshold (1cm), so
-    # in the bin's own local frame the region spans z in [-0.01, 0.11] and
-    # _check_goals cannot tell a cube in the bin from one on the floor beneath it
-    # (the region reaches all the way down to the bin's own base). The x/y
-    # comparison is what this assertion rests on.
+    # z is not discriminating here -- blocks_goal_region now lives on bin_0, inflated
+    # by MujocoObject's per-object placement threshold (1cm), so in the bin's local
+    # frame the region spans z in [-0.01, 0.11] and _check_goals cannot tell a cube
+    # in the bin from one on the floor beneath it. The x/y comparison is what this
+    # assertion rests on.
     current_state = env._get_current_state()  # pylint: disable=protected-access
     bin_obj = current_state.get_object_from_name("bin_0")
     bin_config = env.task_config["objects"]["bin"]["bin_0"]

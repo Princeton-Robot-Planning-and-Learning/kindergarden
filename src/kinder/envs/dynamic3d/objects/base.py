@@ -321,14 +321,12 @@ class MujocoObject:
     def _create_regions(self) -> None:
         """Create Region objects with site elements for each region.
 
-        Each region's ranges are converted to 3D bounding boxes
-        [x_min, y_min, z_min, x_max, y_max, z_max]. A 4-value range
-        [x_start, y_start, x_end, y_end] gets a small, fixed z band around the object's
-        own local origin (the historical behaviour, still right for a region that only
-        needs to test "on top of this object's surface"). A 6-value range
-        [x_start, y_start, z_start, x_end, y_end, z_end] carries its own z bounds instead
-        -- needed for a region that must span real height in the parent's local frame,
-        e.g. a goal region attached to a container object rather than to the ground.
+        Each region's ranges are converted to 3D bounding boxes [x_min, y_min, z_min,
+        x_max, y_max, z_max]. A 4-value range [x_start, y_start, x_end, y_end] spans a
+        small, fixed height above the object's own local origin, as before; a 6-value
+        range [x_start, y_start, z_start, x_end, y_end, z_end] carries real z bounds
+        instead, for a region -- e.g. a goal box on a container -- that needs real
+        interior height.
         """
         assert self.regions is not None, "Regions must be defined"
         assert (

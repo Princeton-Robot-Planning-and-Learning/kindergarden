@@ -8,6 +8,7 @@ from kinder.envs.dynamic3d.mujoco_utils import (
     CONTROL_SCHEDULE_TIMESTEP,
     SIMULATION_TIMESTEP,
     MjObs,
+    MjSim,
     MujocoEnv,
 )
 
@@ -123,3 +124,47 @@ def test_a_schedule_survives_a_gymnasium_wrapper():
         unwrapped.get_obs()["qpos"], wrapped.unwrapped.get_obs()["qpos"]
     )
     assert len(wrapped.render()) == 1
+
+
+def test_a_control_period_does_not_call_forward_dynamics_twice_per_tick(monkeypatch):
+    """mj_step already runs the forward pass, so the loop must not run it as well.
+
+    Contact solving dominates a control period, and calling forward() before step()
+    pays for it twice. This counts rather than times, so it fails on a slow machine
+    for the right reason instead of flaking. Patched on the class via monkeypatch:
+    binding a counter onto the instance would close over the bound method and leave
+    a reference cycle, which defers the env's teardown into a later test -- and a
+    render context freed at that point takes the process down on macOS.
+    """
+    calls = 0
+    real_forward = MjSim.forward
+
+    def counting_forward(self) -> None:
+        nonlocal calls
+        calls += 1
+        real_forward(self)
+
+    # After make_env, so the forward() that reset legitimately runs is not counted.
+    env = make_env()
+    monkeypatch.setattr(MjSim, "forward", counting_forward)
+    env.step(np.array([0.7]))
+
+    assert calls == 0, f"step() ran mj_forward {calls} times; mj_step already does"
+
+
+def test_dropping_the_per_tick_forward_leaves_the_trajectory_untouched():
+    """The removed call was dead work: nothing reads mjData between it and mj_step.
+
+    Pinned as an equality rather than a tolerance because the claim is that the two
+    loops issue the same MuJoCo calls in the same order, not that they merely agree
+    to within integration error.
+    """
+    stepped, with_forward = make_env(), make_env()
+    action = np.array([0.7])
+
+    stepped.step(action)
+    # replay_ticks still calls forward() before every step(), i.e. the old loop.
+    replay_ticks(with_forward, np.repeat(action[None], TICKS_PER_STEP, axis=0))
+
+    assert np.array_equal(stepped.get_obs()["qpos"], with_forward.get_obs()["qpos"])
+    assert np.array_equal(stepped.get_obs()["qvel"], with_forward.get_obs()["qvel"])

@@ -170,7 +170,13 @@ class MujocoEnv(gymnasium.Env[MjObs, Array]):
 
         for tick in range(num_sim_steps):
             self._update_ctrl(schedule[tick // ticks_per_row])
-            self.sim.forward()
+            # No mj_forward here: mj_step recomputes forward dynamics itself before
+            # integrating, and nothing reads mjData in between, so the extra call is
+            # the whole forward pass done twice. Contact solving dominates the cost,
+            # so dropping it roughly halves the time of a control period. State that
+            # is written directly (joint positions, object poses) still needs an
+            # explicit forward() at the point of the write -- see the call sites in
+            # the robot envs -- because no mj_step follows those.
             self.sim.step()
 
         # Post-action processing

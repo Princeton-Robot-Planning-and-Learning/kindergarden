@@ -8,6 +8,7 @@ from pathlib import Path
 import numpy as np
 from numpy.typing import NDArray
 from relational_structs import Object
+from scipy.spatial.transform import Rotation
 
 from kinder.envs.dynamic3d.mujoco_utils import MujocoEnv
 from kinder.envs.dynamic3d.object_types import MujocoMovableObjectType
@@ -390,7 +391,47 @@ class GeneratedSeesaw(MujocoObject):
         self.xml_element = self._create_xml_element()
 
         if self.regions is not None:
+            # A region attached to a seesaw may leave its ranges out, in which case it
+            # covers the beam. A task that wants "these objects end up on the beam" can
+            # then say so with the ordinary `on` predicate without restating geometry
+            # the seesaw already owns, and without going stale when that geometry
+            # changes. Rebuilt rather than mutated: the dicts come straight from the
+            # task config and are shared with it.
+            self.regions = {
+                name: (
+                    config
+                    if config.get("ranges")
+                    else {**config, "ranges": [self.beam_surface_range()]}
+                )
+                for name, config in self.regions.items()
+            }
             self._create_regions()
+
+    def beam_surface_range(self) -> list[float]:
+        """The volume an object occupies when it is resting on the beam.
+
+        Returns ``[x_min, y_min, z_min, x_max, y_max, z_max]`` in the seesaw's own
+        frame, so the beam runs along x whatever yaw the task spawns the seesaw with.
+
+        The floor sits at the pivot rather than at the beam's top surface. The beam
+        tilts, so an object near the end rides below the level surface by up to
+        ``beam_length / 2 * sin(tilt)`` -- 1.6cm at the 5 degrees BalanceBeam3D calls
+        balanced, more than the 1cm of slack region bounds are given. The pivot is
+        still well clear of anything lying on the ground beside or beneath the beam.
+
+        The ceiling is deliberately generous: gravity decides what is resting on the
+        beam, so it only has to exclude something held far above it.
+        """
+        half_length = self.beam_length / 2
+        half_width = self.beam_width / 2
+        return [
+            -half_length,
+            -half_width,
+            self.pivot_height,
+            half_length,
+            half_width,
+            self.pivot_height + self.beam_clearance + half_length,
+        ]
 
     def _generate_and_save_pivot_mesh(self) -> str:
         """Generate triangular prism pivot mesh and save to a temporary OBJ file.
@@ -673,29 +714,44 @@ class GeneratedSeesaw(MujocoObject):
         if self.env is None:
             raise ValueError("Environment must be set to check object position")
 
-        # Get seesaw position
-        seesaw_pos, _ = self.env.get_joint_pos_quat(self.joint_name)
+        # Get seesaw pose. The beam runs along the seesaw's local +x, which is not
+        # world +x whenever the task spawns the seesaw with a yaw (BalanceBeam3D-o3
+        # pins yaw to 90 degrees), so the extent checks below have to be made in the
+        # seesaw's frame. Comparing world offsets instead swaps the length and width
+        # limits, and a block placed correctly along the beam reads as off it.
+        seesaw_pos, seesaw_quat = self.env.get_joint_pos_quat(self.joint_name)
 
-        obj_x, obj_y, obj_z = object_position[0], object_position[1], object_position[2]
+        # MuJoCo quaternions are (w, x, y, z); scipy wants (x, y, z, w).
+        rotation = Rotation.from_quat(
+            [seesaw_quat[1], seesaw_quat[2], seesaw_quat[3], seesaw_quat[0]]
+        )
+        # Yaw only: the beam pitches about its hinge as it tilts, and folding that
+        # rotation in would shrink the footprint an object has to sit within just
+        # because the beam is not level. The pivot stays upright regardless.
+        yaw = rotation.as_euler("xyz")[2]
+        world_offset = np.asarray(object_position, dtype=np.float64) - np.asarray(
+            seesaw_pos, dtype=np.float64
+        )
+        local_offset = Rotation.from_euler("z", -yaw).apply(world_offset)
 
         beam_half_length = self.beam_length / 2
         beam_half_width = self.beam_width / 2
         min_height = seesaw_pos[2] + self.pivot_height * 0.5
 
-        # Check X is within beam length
-        x_offset = obj_x - seesaw_pos[0]
+        # Check the along-beam offset is within the beam length
         if not (
-            -beam_half_length - tolerance < x_offset < beam_half_length + tolerance
+            -beam_half_length - tolerance
+            < local_offset[0]
+            < beam_half_length + tolerance
         ):
             return False
 
-        # Check Y is within beam width
-        y_offset = abs(obj_y - seesaw_pos[1])
-        if not y_offset < beam_half_width + tolerance:
+        # Check the across-beam offset is within the beam width
+        if not abs(local_offset[1]) < beam_half_width + tolerance:
             return False
 
         # Check Z is above pivot (object is resting on beam)
-        if not obj_z > min_height:
+        if not object_position[2] > min_height:
             return False
 
         return True

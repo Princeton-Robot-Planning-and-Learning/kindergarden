@@ -11,6 +11,7 @@ There are four kinds of scene, in increasing order of clutter:
 from __future__ import annotations
 
 import abc
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -22,8 +23,13 @@ from pybullet_helpers.utils import create_pybullet_block
 from kinder.envs.dynamic3d.limb_utils import ASSETS_DIR, NUM_LIMB_JOINTS
 from kinder.envs.dynamic3d.limbs import (
     ALL_LIMB_NAMES,
+    DEFAULT_BODY_MASS,
+    DEFAULT_RANGE_OF_MOTION,
+    BodyMass,
     HumanLimbPyBulletRobot,
+    RangeOfMotion,
     create_human_limb,
+    validate_human_joint_positions,
 )
 
 # Offsets from a limb's grasp frame to the robot's end effector
@@ -49,8 +55,12 @@ class LimbRepositioningSceneConfig:
     limb_name: str
     limb_init_joint_positions: tuple[float, ...]
     limb_goal_joint_positions: tuple[float, ...]
-    limb_joint_limits_model_name: str = "none"
+    limb_joint_limits_model_name: str = "box"
     limb_muscle_tone_model_name: str = "none"
+    limb_range_of_motion: RangeOfMotion | Mapping[str, RangeOfMotion] = (
+        DEFAULT_RANGE_OF_MOTION
+    )
+    limb_body_mass: BodyMass | Mapping[str, BodyMass] = DEFAULT_BODY_MASS
 
     torso_base_pose: Pose = Pose.identity()
     limb_base_pose: Pose = Pose.identity()
@@ -90,6 +100,7 @@ class LimbRepositioningSceneConfig:
         assert self.limb_name in ALL_LIMB_NAMES
         assert len(self.limb_init_joint_positions) == NUM_LIMB_JOINTS
         assert len(self.limb_goal_joint_positions) == NUM_LIMB_JOINTS
+        self._validate_joint_limits()
         if self.scene_type == "isolated":
             return
         if self.use_limb_pose_to_initialize:
@@ -98,6 +109,33 @@ class LimbRepositioningSceneConfig:
         else:
             limb = multiply_poses(self.torso_base_pose, self.torso_to_limb)
             object.__setattr__(self, "limb_base_pose", limb)
+
+    def _validate_joint_limits(self) -> None:
+        """Reject a scene that starts, or aims, outside the person's joint limits.
+
+        The goal is checked here because nothing downstream would: the limb is only ever
+        constructed at its initial configuration.
+        """
+        if self.limb_joint_limits_model_name == "none":
+            return
+        limbs = (
+            [self.limb_name] if self.scene_type == "isolated" else list(ALL_LIMB_NAMES)
+        )
+        for limb_name in limbs:
+            validate_human_joint_positions(
+                limb_name,
+                list(self.get_limb_init_joint_positions(limb_name)),
+                f"the initial configuration of {limb_name}",
+                self.get_limb_range_of_motion(limb_name),
+                self.limb_joint_limits_model_name,
+            )
+        validate_human_joint_positions(
+            self.limb_name,
+            list(self.limb_goal_joint_positions),
+            f"the goal configuration of {self.limb_name}",
+            self.get_limb_range_of_motion(self.limb_name),
+            self.limb_joint_limits_model_name,
+        )
 
     def get_torso_to_limb(self, limb_name: str) -> Pose:
         """The transform from the torso to any limb, active or not."""
@@ -128,6 +166,24 @@ class LimbRepositioningSceneConfig:
             "human-left-leg": self.left_leg_init_joint_positions,
             "human-right-leg": self.right_leg_init_joint_positions,
         }[limb_name]
+
+    def get_limb_range_of_motion(self, limb_name: str) -> RangeOfMotion:
+        """The range of motion of any limb, active or not."""
+        if isinstance(self.limb_range_of_motion, RangeOfMotion):
+            return self.limb_range_of_motion
+        return self.limb_range_of_motion.get(limb_name, DEFAULT_RANGE_OF_MOTION)
+
+    def get_limb_body_mass(self, limb_name: str) -> BodyMass:
+        """The body mass of any limb, active or not."""
+        if isinstance(self.limb_body_mass, BodyMass):
+            return self.limb_body_mass
+        return self.limb_body_mass.get(limb_name, DEFAULT_BODY_MASS)
+
+    def get_torso_body_mass(self) -> BodyMass:
+        """The person the torso belongs to; per-limb masses describe limbs only."""
+        if isinstance(self.limb_body_mass, BodyMass):
+            return self.limb_body_mass
+        return DEFAULT_BODY_MASS
 
     def get_limb_base_pose(self, limb_name: str) -> Pose:
         """The base pose of any limb, active or not."""
@@ -189,6 +245,8 @@ class LimbRepositioningScene(abc.ABC):
             config.limb_joint_limits_model_name,
             config.limb_muscle_tone_model_name,
             self.physics_client_id,
+            config.get_limb_range_of_motion(limb_name),
+            config.get_limb_body_mass(limb_name),
         )
 
     def _visualize_goal(self) -> None:
@@ -241,6 +299,13 @@ class HumanScene(LimbRepositioningScene):
             physicsClientId=self.physics_client_id,
         )
         set_pose(self.torso_id, config.torso_base_pose, self.physics_client_id)
+        # The torso's mass is deliberately left alone. PyBullet implements
+        # `useFixedBase` by giving the base link zero mass, so assigning it one turns
+        # the body dynamic and it falls out of the pose set just above: tens of metres
+        # in the human scenes, which have no furniture to land on. Nothing needs it to
+        # be dynamic - the limbs are separate fixed-base bodies, and the torso is only
+        # an obstacle - so `BodyMass.torso_mass` stays a property of the person rather
+        # than of the simulation.
 
         self.limbs: dict[str, HumanLimbPyBulletRobot] = {
             limb_name: self._create_limb(limb_name) for limb_name in ALL_LIMB_NAMES

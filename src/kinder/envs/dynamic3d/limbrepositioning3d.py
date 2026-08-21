@@ -37,7 +37,7 @@ from kinder.envs.dynamic3d.limb_utils import (
     get_torque_action_from_gui_input,
     joint_position_distance,
 )
-from kinder.envs.dynamic3d.limbs import ALL_LIMB_NAMES, get_sampling_bounds
+from kinder.envs.dynamic3d.limbs import ALL_LIMB_NAMES
 from kinder.envs.kinematic3d.utils import extend_joints_to_include_fingers
 
 # Draws before a reset gives up and falls back to the nominal configuration.
@@ -128,7 +128,8 @@ class ObjectCentricLimbRepositioning3DEnv(
     def _sample_limb_init_joint_positions(self) -> JointPositions:
         """Perturb the nominal configuration without driving the limb into the scene."""
         nominal = np.array(self.config.scene.limb_init_joint_positions)
-        lower, upper = get_sampling_bounds(self.config.scene.limb_name, nominal)
+        lower = np.array(self.limb.joint_lower_limits)
+        upper = np.array(self.limb.joint_upper_limits)
         for attempt in range(_MAX_INIT_SAMPLE_ATTEMPTS):
             noise = self.config.init_joint_noise * _INIT_NOISE_DECAY**attempt
             low = np.maximum(nominal - noise, lower)
@@ -262,14 +263,45 @@ _FREE_LIMB_INIT = (
 )
 _FREE_LIMB_GOAL = (-0.7, 0.0, -0.03, -0.8, 0.0, 0.0)
 
+# The realistic joint limits model rejects _FREE_LIMB_INIT's shoulder, so the free arms
+# start from the nearest configuration it admits with margin under the reset noise.
+_FREE_ARM_INIT = (
+    -0.40335719438145545,
+    0.05292781876657404,
+    -0.09289427173389816,
+    -0.5010609575327076,
+    0.0,
+    0.0,
+)
+
 # Where the limb floats in the isolated scenes, and where it sits in the human scenes.
 _FREE_LIMB_BASE_POSE = Pose.from_rpy((0.730, -0.396, 0.270), (0.0, 0.0, np.pi))
 
+
+def _mirror_arm(joints: tuple[float, ...]) -> tuple[float, ...]:
+    """The arm configuration mirrored across the body's sagittal plane."""
+    q = joints
+    return (-q[0], q[1], -q[2], -q[3], -q[4], q[5])
+
+
+def _flip_knee(joints: tuple[float, ...]) -> tuple[float, ...]:
+    """The leg configuration with the knee, the fourth joint, bent the other way."""
+    q = joints
+    return (q[0], q[1], q[2], -q[3], q[4], q[5])
+
+
+def _mirror_leg(joints: tuple[float, ...]) -> tuple[float, ...]:
+    """The leg configuration mirrored across the body's sagittal plane."""
+    q = joints
+    return (q[0], -q[1], -q[2], q[3], q[4], -q[5])
+
+
 # Seated and lying postures for the limbs that are not being repositioned.
 _WHEELCHAIR_TORSO_POSE = Pose.from_rpy((0.0, -0.15, 0.75), (-0.2, 0.0, 0.0))
+_WHEELCHAIR_RESTING_ARM = (0.0, 0.3, 0.2, -1.1, 0.0, 0.0)
 _WHEELCHAIR_RESTING_JOINTS = {
-    "left_arm_init_joint_positions": (0.0, -0.3, -0.2, -1.1, 0.0, 0.0),
-    "right_arm_init_joint_positions": (0.0, 0.3, 0.2, -1.1, 0.0, 0.0),
+    "left_arm_init_joint_positions": _mirror_arm(_WHEELCHAIR_RESTING_ARM),
+    "right_arm_init_joint_positions": _WHEELCHAIR_RESTING_ARM,
     "left_leg_init_joint_positions": (-1.3, 0.0, 0.0, 1.57, 0.0, 0.0),
     "right_leg_init_joint_positions": (-1.3, 0.0, 0.0, 1.57, 0.0, 0.0),
 }
@@ -319,19 +351,6 @@ _SCENE_DESCRIPTIONS = {
 }
 
 
-def _mirror_arm(joints: tuple[float, ...]) -> tuple[float, ...]:
-    """The arm configuration mirrored across the body's sagittal plane."""
-    # The left arm URDF already flips all but the second and sixth axes.
-    q = joints
-    return (-q[0], q[1], -q[2], -q[3], -q[4], q[5])
-
-
-def _flip_knee(joints: tuple[float, ...]) -> tuple[float, ...]:
-    """The leg configuration with the knee, the fourth joint, bent the other way."""
-    q = joints
-    return (q[0], q[1], q[2], -q[3], q[4], q[5])
-
-
 # Initial and goal joint positions, per variant.
 _LIMB_TASKS: dict[str, tuple[tuple[float, ...], tuple[float, ...]]] = {
     "wheelchair-left-arm": (
@@ -364,45 +383,53 @@ _LIMB_TASKS: dict[str, tuple[tuple[float, ...], tuple[float, ...]]] = {
         (-1.3, 0.2, 0.0, 0.5, 0.0, 0.0),
         (-1.3, 0.0, 0.0, 1.57, 0.0, 0.0),
     ),
+    # The elbow and the knee carry the flexion every other scene gives them, -0.5 rad
+    # resting and -0.8 at the goal. A limb straight at that joint is a kinematic
+    # singularity: its Jacobian loses rank, so no wrench through a grasp can control
+    # all six of its joints, and nothing holding it can hold it there.
     "bed-left-arm": (
-        _mirror_arm((0.0, 0.3, 0.0, 0.0, 0.0, 0.0)),
-        _mirror_arm((-0.3, 0.0, -0.03, -0.2, 0.0, 0.0)),
+        _mirror_arm((0.0, 0.3, 0.0, -0.5, 0.0, 0.0)),
+        _mirror_arm((-0.3, 0.0, -0.03, -0.8, 0.0, 0.0)),
     ),
     "bed-right-arm": (
-        (0.0, 0.3, 0.0, 0.0, 0.0, 0.0),
-        (-0.3, 0.0, -0.03, -0.2, 0.0, 0.0),
+        (0.0, 0.3, 0.0, -0.5, 0.0, 0.0),
+        (-0.3, 0.0, -0.03, -0.8, 0.0, 0.0),
     ),
-    "bed-left-leg": ((0.0,) * 6, (-0.5, -0.1, 0.0, 0.4, 0.0, 0.0)),
-    "bed-right-leg": ((0.0,) * 6, (-0.5, 0.1, 0.0, 0.4, 0.0, 0.0)),
+    "bed-left-leg": (
+        (0.0, 0.0, 0.0, 0.5, 0.0, 0.0),
+        (-0.5, -0.1, 0.0, 0.8, 0.0, 0.0),
+    ),
+    "bed-right-leg": (
+        (0.0, 0.0, 0.0, 0.5, 0.0, 0.0),
+        (-0.5, 0.1, 0.0, 0.8, 0.0, 0.0),
+    ),
 }
-for _limb in LIMB_NAMES:
-    for _scene in ("isolated", "human"):
-        _LIMB_TASKS[f"{_scene}-{_limb}"] = (_FREE_LIMB_INIT, _FREE_LIMB_GOAL)
 
-
-_LIMB_TASKS["human-left-arm"] = (
-    _mirror_arm(_FREE_LIMB_INIT),
-    _mirror_arm(_FREE_LIMB_GOAL),
-)
 for _scene in ("isolated", "human"):
-    for _limb in ("left-leg", "right-leg"):
-        _LIMB_TASKS[f"{_scene}-{_limb}"] = (
-            _flip_knee(_FREE_LIMB_INIT),
-            _flip_knee(_FREE_LIMB_GOAL),
-        )
+    for _limb in LIMB_NAMES:
+        if _limb == "left-arm":
+            _init, _goal = _mirror_arm(_FREE_ARM_INIT), _mirror_arm(_FREE_LIMB_GOAL)
+        elif _limb == "left-leg":
+            _init, _goal = _flip_knee(_FREE_LIMB_INIT), _flip_knee(_FREE_LIMB_GOAL)
+        elif _limb == "right-leg":
+            _init = _mirror_leg(_flip_knee(_FREE_LIMB_INIT))
+            _goal = _mirror_leg(_flip_knee(_FREE_LIMB_GOAL))
+        else:
+            _init, _goal = _FREE_ARM_INIT, _FREE_LIMB_GOAL
+        _LIMB_TASKS[f"{_scene}-{_limb}"] = (_init, _goal)
 
 ALL_VARIANTS = tuple(f"{scene}-{limb}" for scene in SCENE_TYPES for limb in LIMB_NAMES)
 
 # Where TidyBot stands, as (base SE2 pose, base height).
 _ROBOT_PLACEMENTS: dict[str, tuple[SE2Pose, float]] = {
-    "isolated-left-arm": (SE2Pose(1.0196, -0.6916, -0.3958), -0.701),
+    "isolated-left-arm": (SE2Pose(1.0787, 0.1832, -0.8140), -0.726),
     "isolated-right-arm": (SE2Pose(0.3566, 0.4849, -0.6971), -0.329),
     "isolated-left-leg": (SE2Pose(0.1548, -0.1575, 2.1953), -0.965),
-    "isolated-right-leg": (SE2Pose(0.1548, -0.1575, 2.1953), -0.965),
+    "isolated-right-leg": (SE2Pose(0.4548, -0.1575, 0.1009), -0.965),
     "human-left-arm": (SE2Pose(1.0787, 0.1832, -0.8140), -0.726),
     "human-right-arm": (SE2Pose(0.3566, 0.4849, -0.6971), -0.329),
     "human-left-leg": (SE2Pose(0.1651, 0.4351, 0.4988), -0.976),
-    "human-right-leg": (SE2Pose(0.1626, 0.4349, 0.5051), -0.976),
+    "human-right-leg": (SE2Pose(0.5626, 0.1349, -0.5421), -0.976),
     "wheelchair-left-arm": (SE2Pose(0.9111, -0.6310, -2.6352), 0.335),
     "wheelchair-right-arm": (SE2Pose(-0.7040, -1.1983, 0.7716), 0.510),
     "wheelchair-left-leg": (SE2Pose(0.6645, -1.0218, -2.4336), 0.0),

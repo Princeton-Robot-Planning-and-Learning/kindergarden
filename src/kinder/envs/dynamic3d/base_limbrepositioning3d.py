@@ -1,7 +1,7 @@
 """Base environment class for all limb repositioning environments.
 
-These are Dynamic3D environments, but run on PyBullet not the MuJoCo backend
-used by the rest of the category.
+These are Dynamic3D environments, but run on PyBullet not the MuJoCo backend used by the
+rest of the category.
 """
 
 from __future__ import annotations
@@ -247,6 +247,15 @@ class ObjectCentricLimb3DRobotEnv(
             worst = min(worst, distance - self._limb_rest_clearance.get(body_id, 0.0))
         return worst
 
+    def limb_joint_limit_violation(self) -> float:
+        """How far the limb's worst joint is outside its limits, in radians.
+
+        Zero when the person's range of motion is respected. The limb URDFs use
+        continuous joints, so PyBullet does not enforce the limits itself: torques can
+        drive the limb past them, and this is what reports that they did.
+        """
+        return self.limb.joint_limit_violation(self.limb.get_joint_positions())
+
     def get_collision_clearance(self) -> float:
         """The smallest distance between the robot or limb and any static scene body.
 
@@ -460,7 +469,10 @@ class ObjectCentricLimb3DRobotEnv(
         )
         self._apply_torques(list(torque), self._get_extra_limb_torque())
         obs = self._get_obs()
-        info = {"limb_distance_to_goal": obs.limb_distance_to_goal}
+        info = {
+            "limb_distance_to_goal": obs.limb_distance_to_goal,
+            "limb_joint_limit_violation": self.limb_joint_limit_violation(),
+        }
         return obs, self._get_reward(), self.goal_reached(), False, info
 
     def _create_observation_space(self, config: _ConfigType) -> ObjectCentricStateSpace:

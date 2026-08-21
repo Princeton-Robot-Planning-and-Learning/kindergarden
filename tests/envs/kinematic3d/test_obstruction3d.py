@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 from gymnasium.wrappers import RecordVideo
 from prpl_utils.utils import wrap_angle
-from pybullet_helpers.geometry import Pose, multiply_poses
+from pybullet_helpers.geometry import Pose, multiply_poses, set_pose
 from pybullet_helpers.inverse_kinematics import inverse_kinematics
 from pybullet_helpers.motion_planning import (
     create_joint_distance_fn,
@@ -44,6 +44,10 @@ def test_obstruction3d_env(env):  # pylint: disable=redefined-outer-name
     """Tests for basic methods in obstruction3d env."""
     obs, _ = env.reset(seed=123)
     assert isinstance(obs, np.ndarray)
+    assert np.all(env.action_space.low[:10] == -0.2)
+    assert np.all(env.action_space.high[:10] == 0.2)
+    config = env.unwrapped._object_centric_env.config  # pylint: disable=protected-access
+    assert config.max_collision_check_step == 0.005
 
     for _ in range(10):
         act = env.action_space.sample()
@@ -229,6 +233,78 @@ def test_pick_place_no_obstructions(env):  # pylint: disable=redefined-outer-nam
     # visualize_pose(end_effector_placement_pose, env.physics_client_id)
     # while True:
     #     p.getMouseEvents(env.physics_client_id)
+
+
+def test_goal_requires_block_on_target_region():
+    """The goal requires support and full footprint containment."""
+    config = Obstruction3DEnvConfig()
+    oc_env = ObjectCentricObstruction3DEnv(
+        num_obstructions=0, config=config, realistic_bg=False
+    )
+    obs, _ = oc_env.reset(seed=123)
+
+    region_pose = obs.target_region_pose
+    region_half = obs.target_region_half_extents
+    block_half = obs.target_block_half_extents
+    table_top = config.table_pose.position[2] + config.table_half_extents[2]
+    block_id = oc_env._target_block_id  # pylint: disable=protected-access
+    client_id = oc_env.physics_client_id
+
+    beside_pose = Pose(
+        (
+            region_pose.position[0],
+            region_pose.position[1] + region_half[1] + block_half[1] + 1e-3,
+            table_top + block_half[2],
+        )
+    )
+    set_pose(block_id, beside_pose, client_id)
+    assert not oc_env.goal_reached(), "Goal reached with block beside the region"
+
+    on_region_pose = Pose(
+        (
+            region_pose.position[0],
+            region_pose.position[1],
+            region_pose.position[2] + region_half[2] + block_half[2] + 1e-4,
+        )
+    )
+    set_pose(block_id, on_region_pose, client_id)
+    assert oc_env.goal_reached(), "Goal not reached with block on the region"
+
+    yawed_pose = Pose.from_rpy(on_region_pose.position, (0.0, 0.0, np.pi / 36))
+    set_pose(block_id, yawed_pose, client_id)
+    assert oc_env.goal_reached(), "Goal not reached with yawed block on the region"
+
+    overhang_pose = Pose(
+        (
+            region_pose.position[0],
+            region_pose.position[1] + region_half[1] - 1e-3,
+            on_region_pose.position[2],
+        )
+    )
+    set_pose(block_id, overhang_pose, client_id)
+    assert not oc_env.goal_reached(), "Goal reached with block overhanging region"
+
+    hover_pose = Pose(
+        (
+            on_region_pose.position[0],
+            on_region_pose.position[1],
+            on_region_pose.position[2] + 0.05,
+        )
+    )
+    set_pose(block_id, hover_pose, client_id)
+    assert not oc_env.goal_reached(), "Goal reached with block hovering above region"
+
+    far_pose = Pose(
+        (
+            region_pose.position[0],
+            region_pose.position[1] + 0.2,
+            table_top + block_half[2],
+        )
+    )
+    set_pose(block_id, far_pose, client_id)
+    assert not oc_env.goal_reached(), "Goal reached with block far from region"
+
+    oc_env.close()
 
 
 def test_grasp_fails_when_fingers_collide_with_table():

@@ -1,11 +1,16 @@
 """Tests for packing3d.py."""
 
+# pylint: disable=protected-access
+
 from typing import Any, cast
 
 import numpy as np
+import pybullet as p
+import pytest
+from gymnasium.spaces import Box
 from gymnasium.wrappers import RecordVideo
 from prpl_utils.utils import wrap_angle
-from pybullet_helpers.geometry import Pose, multiply_poses
+from pybullet_helpers.geometry import Pose, get_pose, multiply_poses, set_pose
 from pybullet_helpers.motion_planning import (
     create_joint_distance_fn,
     remap_joint_position_plan_to_constant_distance,
@@ -15,12 +20,17 @@ from pybullet_helpers.motion_planning import (
 from pybullet_helpers.utils import get_triangle_vertices
 from relational_structs import Object
 from relational_structs.spaces import ObjectCentricBoxSpace
+from scipy.spatial.transform import Rotation
 from shapely.geometry import Polygon
 
-from kinder.envs.kinematic3d.object_types import Kinematic3DTriangleType
+from kinder.envs.kinematic3d.object_types import (
+    Kinematic3DCuboidType,
+    Kinematic3DTriangleType,
+)
 from kinder.envs.kinematic3d.packing3d import (
     ObjectCentricPacking3DEnv,
     Packing3DEnv,
+    Packing3DEnvConfig,
     Packing3DObjectCentricState,
 )
 from kinder.envs.kinematic3d.save_utils import DEFAULT_DEMOS_DIR, save_demo
@@ -48,8 +58,196 @@ def test_packing3d_env_basic():
         env.close()
 
 
-def test_packing3d_goal():
-    """Test the current triangle containment issue in Packing3D goal checks."""
+def test_packing3d_uses_standard_action_magnitude() -> None:
+    """Packing3D uses a 0.2 action bound."""
+    env = Packing3DEnv(num_parts=1, use_gui=False, realistic_bg=False)
+    assert isinstance(env.action_space, Box)
+    assert np.all(env.action_space.low[:10] == -0.2)
+    assert np.all(env.action_space.high[:10] == 0.2)
+    assert env._object_centric_env.config.max_collision_check_step == 0.005
+    env.close()
+
+
+def test_packing3d_rotated_triangle_state_round_trip() -> None:
+    """Triangle state poses round-trip without moving the PyBullet body origin."""
+    env = ObjectCentricPacking3DEnv(
+        num_parts=1,
+        config=Packing3DEnvConfig(part_triangular_prob=0.0),
+        use_gui=False,
+        realistic_bg=False,
+        allow_state_access=True,
+    )
+    obs, _ = env.reset(seed=0)
+    part = obs.get_object_from_name("part0")
+    assert part.type == Kinematic3DTriangleType
+
+    origin_position = (0.18, -0.11, 0.09)
+    orientation = tuple(Rotation.from_euler("z", np.pi / 2).as_quat())
+    for feature, value in zip(
+        ("pose_x", "pose_y", "pose_z"), origin_position, strict=True
+    ):
+        obs.set(part, feature, value)
+    for feature, value in zip(
+        ("pose_qx", "pose_qy", "pose_qz", "pose_qw"),
+        orientation,
+        strict=True,
+    ):
+        obs.set(part, feature, value)
+    obs.set(part, "side_a", 0.12)
+    obs.set(part, "side_b", 0.09)
+    obs.set(part, "depth", 0.02)
+    obs.set(part, "triangle_type", 1.0)
+
+    local_vertices = np.asarray(get_triangle_vertices("right", (0.12, 0.09)))
+    expected_center = np.asarray(origin_position) + Rotation.from_quat(
+        orientation
+    ).apply(np.mean(local_vertices, axis=0))
+    assert np.allclose(obs.get_object_pose("part0").position, expected_center)
+
+    env.set_state(obs)
+    restored = env.get_state()
+    assert obs.allclose(restored)
+    assert restored.get_object_origin_pose("part0").allclose(
+        Pose(origin_position, orientation)
+    )
+    assert restored.get_object_pose("part0").allclose(
+        Pose(tuple(expected_center), orientation)
+    )
+    assert get_pose(
+        env._part_ids["part0"],
+        env.physics_client_id,  # pylint: disable=protected-access
+    ).allclose(Pose(origin_position, orientation))
+    env.close()
+
+
+def test_packing3d_set_state_recreates_geometry() -> None:
+    """Part and rack dimensions in a state determine the recreated bodies."""
+    config = Packing3DEnvConfig(part_triangular_prob=0.5)
+    env = ObjectCentricPacking3DEnv(
+        num_parts=2,
+        config=config,
+        use_gui=False,
+        realistic_bg=False,
+        allow_state_access=True,
+    )
+    obs, _ = env.reset(seed=0)
+    cuboid = obs.get_object_from_name("part0")
+    triangle = obs.get_object_from_name("part1")
+    rack = obs.get_object_from_name("rack")
+    assert cuboid.type == Kinematic3DCuboidType
+    assert triangle.type == Kinematic3DTriangleType
+
+    cuboid_half_extents = (0.035, 0.04, 0.012)
+    for feature, value in zip(
+        ("half_extent_x", "half_extent_y", "half_extent_z"),
+        cuboid_half_extents,
+        strict=True,
+    ):
+        obs.set(cuboid, feature, value)
+    triangle_features = (0.07, 0.09, 0.018, 1.0)
+    for feature, value in zip(
+        ("side_a", "side_b", "depth", "triangle_type"),
+        triangle_features,
+        strict=True,
+    ):
+        obs.set(triangle, feature, value)
+    rack_half_extents = (0.13, 0.18, 0.025)
+    for feature, value in zip(
+        ("half_extent_x", "half_extent_y", "half_extent_z"),
+        rack_half_extents,
+        strict=True,
+    ):
+        obs.set(rack, feature, value)
+
+    env.set_state(obs)
+    restored = env.get_state()
+    assert obs.allclose(restored)
+    assert np.allclose(
+        restored.get_object_half_extents_packing3d("part0")[:3],
+        cuboid_half_extents,
+    )
+    assert np.allclose(
+        restored.get_object_triangle_features("part1"), triangle_features
+    )
+    assert np.allclose(restored.rack_half_extents, rack_half_extents)
+
+    cuboid_id = env._part_ids["part0"]  # pylint: disable=protected-access
+    triangle_id = env._part_ids["part1"]  # pylint: disable=protected-access
+    assert env._part_ids_to_type[cuboid_id] == Kinematic3DCuboidType
+    assert env._part_ids_to_type[triangle_id] == Kinematic3DTriangleType
+    assert cuboid_id not in env._part_ids_to_triangle_features
+    assert np.allclose(
+        env._part_ids_to_triangle_features[triangle_id], triangle_features
+    )
+    aabb_min, aabb_max = p.getAABB(
+        cuboid_id, linkIndex=0, physicsClientId=env.physics_client_id
+    )
+    assert np.allclose(
+        np.asarray(aabb_max) - np.asarray(aabb_min),
+        2 * np.asarray(cuboid_half_extents),
+    )
+
+    reset_obs, _ = env.reset(seed=1)
+    assert np.allclose(reset_obs.rack_half_extents, config.rack_half_extents)
+    env.close()
+
+
+def test_packing3d_reset_raises_when_placement_is_infeasible(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Reset fails explicitly when rejection sampling exhausts its attempts."""
+    monkeypatch.setattr("kinder.envs.kinematic3d.packing3d._MAX_PLACEMENT_ATTEMPTS", 2)
+    env = ObjectCentricPacking3DEnv(
+        num_parts=1,
+        config=Packing3DEnvConfig(rack_half_extents=(1.0, 1.0, 0.02)),
+        use_gui=False,
+        realistic_bg=False,
+        allow_state_access=True,
+    )
+    with pytest.raises(RuntimeError, match="Failed to place part0"):
+        env.reset(seed=0)
+    env.close()
+
+
+def test_packing3d_rejects_collision_tunneling_action() -> None:
+    """A collision-free endpoint is invalid when the swept motion collides."""
+    env = Packing3DEnv(
+        num_parts=3,
+        config=Packing3DEnvConfig(
+            max_action_mag=0.4,
+            max_collision_check_step=0.05,
+        ),
+        use_gui=False,
+        realistic_bg=False,
+    )
+    obs, _ = env.reset(seed=7138484576005690180)
+
+    # The arm crosses a collision before reaching a collision-free endpoint.
+    action = np.array(
+        [
+            0.0417,
+            -0.3489,
+            0.0,
+            -0.0018,
+            0.3679,
+            0.0094,
+            0.0146,
+            -0.0002,
+            0.2311,
+            0.0072,
+            -1.0,
+        ],
+        dtype=np.float32,
+    )
+    next_obs, _, _, _, _ = env.step(action)
+
+    assert np.allclose(next_obs[:11], obs[:11])
+    assert np.all(next_obs[[38, 50, 62]] == 0.0)
+    env.close()
+
+
+def test_packing3d_goal_rejects_part_outside_rack_cavity():
+    """A part on the outer rack footprint is not seated in its cavity."""
     env = ObjectCentricPacking3DEnv(
         num_parts=1,
         use_gui=False,
@@ -71,9 +269,6 @@ def test_packing3d_goal():
     part_x = rack_pose.position[0] - rack_half_extents[0]
     part_y = rack_pose.position[1] - side_b / 2
 
-    # set_state() restores triangle pose fields as raw PyBullet body poses.
-    # Subtracting the centroid here would encode the old get_object_pose()
-    # restoration behavior and place the true triangle footprint outside the rack.
     obs.set(part, "pose_x", part_x)
     obs.set(part, "pose_y", part_y)
     obs.set(part, "pose_z", rack_pose.position[2])
@@ -118,8 +313,238 @@ def test_packing3d_goal():
         updated_obs.get_object_half_extents_packing3d("part0")[:3],
     )
     assert "part0" not in updated_obs.available_parts
-    assert env.goal_reached()
+    assert not env.goal_reached()
 
+    env.close()
+
+
+def _get_part_shape_name(obs: Packing3DObjectCentricState, part_name: str) -> str:
+    part = obs.get_object_from_name(part_name)
+    if part.type == Kinematic3DCuboidType:
+        return "cuboid"
+    assert part.type == Kinematic3DTriangleType
+    triangle_type = obs.get_object_triangle_features(part_name)[3]
+    return {0: "equilateral", 1: "right"}[int(triangle_type)]
+
+
+def _place_part_on_rack_floor(
+    env: ObjectCentricPacking3DEnv,
+    part_name: str,
+    target_xy: tuple[float, float],
+    yaw: float = 0.0,
+) -> None:
+    part_id = env._part_ids[part_name]
+    old_pose = get_pose(part_id, env.physics_client_id)
+    orientation = Pose.from_rpy((0.0, 0.0, 0.0), (0.0, 0.0, yaw)).orientation
+    set_pose(
+        part_id,
+        Pose(old_pose.position, orientation),
+        env.physics_client_id,
+    )
+    vertices = env._get_part_convex_components(part_name)[0][0]
+    polygon = Polygon(vertices[:, :2]).convex_hull
+    rack_pose = get_pose(env._rack_id, env.physics_client_id)
+    floor_z = (
+        rack_pose.position[2]
+        - env.config.rack_half_extents[2]
+        + env.config.rack_wall_thickness
+    )
+    current_pose = get_pose(part_id, env.physics_client_id)
+    set_pose(
+        part_id,
+        Pose(
+            (
+                current_pose.position[0] + target_xy[0] - polygon.centroid.x,
+                current_pose.position[1] + target_xy[1] - polygon.centroid.y,
+                current_pose.position[2] + floor_z + 0.002 - vertices[:, 2].min(),
+            ),
+            current_pose.orientation,
+        ),
+        env.physics_client_id,
+    )
+
+
+@pytest.mark.parametrize(
+    ("triangle_probability", "seed", "expected_shapes"),
+    [
+        (1.0, 0, ("cuboid", "cuboid")),
+        (0.5, 0, ("cuboid", "right")),
+        (0.5, 5, ("cuboid", "equilateral")),
+        (0.0, 0, ("right", "right")),
+        (0.0, 1, ("equilateral", "right")),
+        (0.0, 11, ("equilateral", "equilateral")),
+    ],
+)
+def test_packing3d_goal_handles_every_part_shape_pair(
+    triangle_probability: float,
+    seed: int,
+    expected_shapes: tuple[str, str],
+) -> None:
+    """All supported shape pairs reject overlap and accept clear packing."""
+    env = ObjectCentricPacking3DEnv(
+        num_parts=2,
+        config=Packing3DEnvConfig(part_triangular_prob=triangle_probability),
+        use_gui=False,
+        realistic_bg=False,
+        allow_state_access=True,
+    )
+    obs, _ = env.reset(seed=seed)
+    assert (
+        tuple(_get_part_shape_name(obs, f"part{i}") for i in range(2))
+        == expected_shapes
+    )
+    rack_pose = get_pose(env._rack_id, env.physics_client_id)
+
+    # Overlap two rotated parts inside the rack.
+    target_xy = (rack_pose.position[0], rack_pose.position[1])
+    for part_name in ("part0", "part1"):
+        _place_part_on_rack_floor(
+            env, part_name, target_xy, yaw=0.0 if part_name == "part0" else np.pi / 6
+        )
+
+    obs = env.get_state()
+    assert env._part_is_seated_in_rack("part0", obs)
+    assert env._part_is_seated_in_rack("part1", obs)
+    assert env._parts_overlap("part0", "part1")
+    assert not env.goal_reached()
+
+    _place_part_on_rack_floor(
+        env, "part0", (rack_pose.position[0], rack_pose.position[1] - 0.07)
+    )
+    _place_part_on_rack_floor(
+        env, "part1", (rack_pose.position[0], rack_pose.position[1] + 0.07)
+    )
+    obs = env.get_state()
+    assert env._part_is_seated_in_rack("part0", obs)
+    assert env._part_is_seated_in_rack("part1", obs)
+    assert not env._parts_overlap("part0", "part1")
+    assert env.goal_reached()
+    env.close()
+
+
+def test_packing3d_rejects_triangle_overlap_missed_by_pybullet() -> None:
+    """Analytic geometry catches triangular-prism overlap."""
+    env = ObjectCentricPacking3DEnv(
+        num_parts=2,
+        config=Packing3DEnvConfig(part_triangular_prob=0.0),
+        use_gui=False,
+        realistic_bg=False,
+        allow_state_access=True,
+    )
+    obs, _ = env.reset(seed=0)
+    assert tuple(_get_part_shape_name(obs, f"part{i}") for i in range(2)) == (
+        "right",
+        "right",
+    )
+    rack_pose = get_pose(env._rack_id, env.physics_client_id)
+    _place_part_on_rack_floor(
+        env, "part0", (rack_pose.position[0] - 0.003, rack_pose.position[1] - 0.028)
+    )
+    _place_part_on_rack_floor(
+        env, "part1", (rack_pose.position[0] + 0.003, rack_pose.position[1] + 0.028)
+    )
+
+    part0_id = env._part_ids["part0"]
+    part1_id = env._part_ids["part1"]
+    assert not env._bodies_overlap(part0_id, part1_id)
+    assert env._parts_overlap("part0", "part1")
+    assert not env.goal_reached()
+
+    # Held parts use the same analytic collision check.
+    env._grasped_object = "part0"
+    env._grasped_object_transform = multiply_poses(
+        env.robot.arm.get_end_effector_pose().invert(),
+        get_pose(part0_id, env.physics_client_id),
+    )
+    assert env._robot_or_held_object_collision_exists()
+    env.close()
+
+
+def test_packing3d_part_collision_includes_grasp_pegs() -> None:
+    """Part collision geometry includes grasp pegs."""
+    env = ObjectCentricPacking3DEnv(
+        num_parts=2,
+        config=Packing3DEnvConfig(part_triangular_prob=1.0),
+        use_gui=False,
+        realistic_bg=False,
+        allow_state_access=True,
+    )
+    env.reset(seed=0)
+    first_id = env._part_ids["part0"]
+    second_id = env._part_ids["part1"]
+    set_pose(first_id, Pose((0.0, 0.0, 0.0)), env.physics_client_id)
+
+    # The main bodies are separate while the lower peg overlaps the upper body.
+    set_pose(second_id, Pose((0.0, 0.0, 0.065)), env.physics_client_id)
+    first_main = env._get_part_convex_components("part0")[0][0]
+    second_main = env._get_part_convex_components("part1")[0][0]
+    assert first_main[:, 2].max() < second_main[:, 2].min()
+    assert env._parts_overlap("part0", "part1")
+
+    # Exact contact is allowed; only strict overlap is rejected.
+    set_pose(second_id, Pose((0.0, 0.0, 0.07)), env.physics_client_id)
+    assert not env._parts_overlap("part0", "part1")
+    env.close()
+
+
+@pytest.mark.parametrize("triangle_probability", [0.0, 0.5, 1.0])
+def test_packing3d_reset_avoids_analytic_part_overlap(
+    triangle_probability: float,
+) -> None:
+    """Initial rejection sampling works for triangle and cuboid mixtures."""
+    env = ObjectCentricPacking3DEnv(
+        num_parts=3,
+        config=Packing3DEnvConfig(part_triangular_prob=triangle_probability),
+        use_gui=False,
+        realistic_bg=False,
+        allow_state_access=True,
+    )
+    for seed in range(10):
+        env.reset(seed=seed)
+        for first_index in range(3):
+            for second_index in range(first_index + 1, 3):
+                assert not env._parts_overlap(
+                    f"part{first_index}", f"part{second_index}"
+                )
+    env.close()
+
+
+def test_packing3d_goal_rejects_rack_overlap_and_hovering() -> None:
+    """Cavity containment alone is insufficient without valid floor support."""
+    env = ObjectCentricPacking3DEnv(
+        num_parts=1,
+        use_gui=False,
+        realistic_bg=False,
+        allow_state_access=True,
+    )
+    env.reset(seed=0)
+    rack_pose = get_pose(env._rack_id, env.physics_client_id)
+    floor_z = (
+        rack_pose.position[2]
+        - env.config.rack_half_extents[2]
+        + env.config.rack_wall_thickness
+    )
+    part_id = env._part_ids["part0"]
+    part_pose = get_pose(part_id, env.physics_client_id)
+    part_lower, _ = p.getAABB(part_id, 0, physicsClientId=env.physics_client_id)
+    lower_z_offset = part_lower[2] - part_pose.position[2]
+    xy = (rack_pose.position[0] - 0.03, rack_pose.position[1] - 0.02)
+
+    # The footprint is inside and the part overlaps the rack floor.
+    set_pose(
+        part_id,
+        Pose((*xy, floor_z - 0.002 - lower_z_offset)),
+        env.physics_client_id,
+    )
+    assert not env.goal_reached()
+
+    # The footprint remains inside, but the part is too high to be supported.
+    set_pose(
+        part_id,
+        Pose((*xy, floor_z + 0.01 - lower_z_offset)),
+        env.physics_client_id,
+    )
+    assert not env.goal_reached()
     env.close()
 
 

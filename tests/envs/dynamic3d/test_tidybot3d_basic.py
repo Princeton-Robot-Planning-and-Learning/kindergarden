@@ -50,6 +50,18 @@ def test_tidybot3d_action_space():
     env.close()
 
 
+def test_get_object_looks_up_a_live_scene_object_by_name():
+    """get_object() is the public way to reach a scene object without touching
+    _objects_dict directly."""
+    env = ObjectCentricTidyBot3DEnv(
+        num_objects=3,
+        task_config_path=str(_TEST_TASKS / "tidybot-ground-o3.json"),
+    )
+    env.reset()
+    assert env.get_object("cube1") is env._objects_dict["cube1"]  # pylint: disable=protected-access
+    env.close()
+
+
 def test_tidybot3d_step():
     """Test that stepping the environment leads to some nontrivial change."""
     env = ObjectCentricTidyBot3DEnv(

@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 from gymnasium.wrappers import RecordVideo
 from pybullet_helpers.motion_planning import (
+    remap_se2_pose_plan_to_constant_distance,
     run_single_arm_mobile_base_motion_planning,
 )
 from relational_structs.spaces import ObjectCentricBoxSpace
@@ -13,6 +14,7 @@ from relational_structs.spaces import ObjectCentricBoxSpace
 import kinder
 from kinder.envs.kinematic3d.base_motion3d import (
     BaseMotion3DEnv,
+    BaseMotion3DEnvConfig,
     BaseMotion3DObjectCentricState,
     ObjectCentricBaseMotion3DEnv,
 )
@@ -40,6 +42,33 @@ def test_base_motion3d_env(env):  # pylint: disable=redefined-outer-name
         act = env.action_space.sample()
         assert isinstance(act, np.ndarray)
         obs, _, _, _, _ = env.step(act)
+
+
+def test_standard_action_magnitude_and_base_action_clipping():
+    """Base and arm deltas use the environment's configured action magnitude."""
+    config = BaseMotion3DEnvConfig(max_action_mag=0.2)
+    environment = BaseMotion3DEnv(config=config, use_gui=False, realistic_bg=False)
+    try:
+        vec_obs, _ = environment.reset(seed=123)
+        assert np.all(environment.action_space.low[:10] == -0.2)
+        assert np.all(environment.action_space.high[:10] == 0.2)
+
+        initial_obs = environment.observation_space.devectorize(vec_obs)
+        initial_state = BaseMotion3DObjectCentricState(
+            initial_obs.data, initial_obs.type_features
+        )
+        out_of_range_action = np.array(
+            [1.0, 0.0, 0.0] + [0.0] * 7 + [0.0], dtype=np.float32
+        )
+        next_vec_obs, _, _, _, _ = environment.step(out_of_range_action)
+        next_obs = environment.observation_space.devectorize(next_vec_obs)
+        next_state = BaseMotion3DObjectCentricState(
+            next_obs.data, next_obs.type_features
+        )
+
+        assert np.isclose(next_state.base_pose.x - initial_state.base_pose.x, 0.2)
+    finally:
+        environment.close()
 
     # Uncomment to debug.
     # import pybullet as p
@@ -72,6 +101,9 @@ def test_motion_planning_in_base_motion3d_env(
         seed=123,
     )
     assert base_plan is not None
+    base_plan = remap_se2_pose_plan_to_constant_distance(
+        base_plan, max_distance=config.max_action_mag
+    )
 
     env.action_space.seed(123)
     for target_base_pose in base_plan[1:]:

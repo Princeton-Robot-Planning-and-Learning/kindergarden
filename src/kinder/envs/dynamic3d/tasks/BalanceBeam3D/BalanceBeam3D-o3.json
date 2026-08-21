@@ -16,6 +16,10 @@
             "yaw_ranges": [[90, 90]],
             "rgba": [0.2, 0.6, 0.2, 0.0]
         },
+        "beam_goal_region": {
+            "target": "seesaw_1",
+            "rgba": [0.2, 0.6, 0.2, 0.4]
+        },
         "blocks_init_region": {
             "target": "ground",
             "ranges": [[0.5, -0.25, 0.75, 0.25]],
@@ -84,6 +88,10 @@
         ["on", "large_block", "blocks_init_region"]
     ],
     "goal_state": [
+        "and",
+        ["on", "small_block_1", "beam_goal_region"],
+        ["on", "small_block_2", "beam_goal_region"],
+        ["on", "large_block", "beam_goal_region"],
         ["balanced", "seesaw_1", 5.0]
     ]
 }

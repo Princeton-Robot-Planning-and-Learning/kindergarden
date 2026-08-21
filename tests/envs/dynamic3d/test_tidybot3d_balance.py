@@ -11,6 +11,7 @@ from typing import Any
 import numpy as np
 from numpy.typing import NDArray
 from relational_structs import Object, ObjectCentricState
+from scipy.spatial.transform import Rotation
 
 from kinder.envs.dynamic3d.envs import ObjectCentricTidyBot3DEnv
 from kinder.envs.dynamic3d.objects.generated_objects import GeneratedSeesaw
@@ -380,3 +381,225 @@ def test_tidybot3d_balance_reward_negative_per_timestep():
     assert reward < 0, "Reward should be negative per timestep"
 
     env.close()
+
+
+# The shipped variant, as opposed to the o4 fixture above. It spawns the seesaw with a
+# 90 degree yaw, which is what makes it the interesting case here.
+_SHIPPED_TASK = "tasks/BalanceBeam3D/BalanceBeam3D-o3.json"
+
+
+def _get_shipped_balancebeam_env() -> ObjectCentricTidyBot3DEnv:
+    """Create the BalanceBeam3D-o3 environment that ships with kinder."""
+    return ObjectCentricTidyBot3DEnv(
+        scene_type="balance",
+        num_objects=3,
+        task_config_path=_SHIPPED_TASK,
+        allow_state_access=True,
+    )
+
+
+def _seesaw_yaw(env: ObjectCentricTidyBot3DEnv, seesaw: GeneratedSeesaw) -> float:
+    """Return the seesaw's yaw in radians."""
+    _pos, quat = env._robot_env.get_joint_pos_quat(  # pylint: disable=protected-access
+        seesaw.joint_name
+    )
+    # MuJoCo quaternions are (w, x, y, z); scipy wants (x, y, z, w).
+    rotation = Rotation.from_quat([quat[1], quat[2], quat[3], quat[0]])
+    return float(rotation.as_euler("xyz")[2])
+
+
+def test_balancebeam3d_is_not_solved_by_doing_nothing():
+    """The shipped task must not be satisfied by the state it starts in.
+
+    An empty beam sits level, so a goal of ["balanced", ...] alone is true at reset:
+    every policy, including one that emits zero actions, scored a solve. The goal has
+    to name the cubes it wants on the beam for the task to mean anything.
+    """
+    env = _get_shipped_balancebeam_env()
+    env.reset(seed=0)
+
+    assert not env._check_goals()  # pylint: disable=protected-access
+
+    action_shape = env.action_space.shape
+    assert action_shape is not None
+    null_action = np.zeros(action_shape, dtype=np.float32)
+    for _ in range(20):
+        env.step(null_action)
+        assert not env._check_goals()  # pylint: disable=protected-access
+
+    env.close()
+
+
+def test_balancebeam3d_is_solved_when_the_cubes_sit_balanced_on_the_beam():
+    """Placing the three cubes to balance the beam satisfies the shipped goal.
+
+    The counterpart to the test above: tightening the goal must not make the task
+    impossible. Offsets are along the beam, so this also covers the yawed seesaw.
+    """
+    env = _get_shipped_balancebeam_env()
+    env.reset(seed=0)
+
+    seesaw = env._objects_dict["seesaw_1"]  # pylint: disable=protected-access
+    assert isinstance(seesaw, GeneratedSeesaw)
+    seesaw_pos, _ = (
+        env._robot_env.get_joint_pos_quat(  # pylint: disable=protected-access
+            seesaw.joint_name
+        )
+    )
+    yaw = _seesaw_yaw(env, seesaw)
+    beam_height = seesaw.pivot_height + seesaw.beam_clearance + seesaw.beam_thickness
+    placement_distance = (seesaw.beam_length / 2) * 0.7
+
+    state = env._get_current_state().copy()  # pylint: disable=protected-access
+
+    def place(name: str, along: float, across: float = 0.0) -> Object:
+        """Put a cube on the beam at (along, across) in the seesaw's own frame."""
+        block = state.get_object_from_name(name)
+        offset = Rotation.from_euler("z", yaw).apply([along, across, 0.0])
+        _place_block_on_seesaw(
+            block,
+            state,
+            np.array(
+                [seesaw_pos[0] + offset[0], seesaw_pos[1] + offset[1], seesaw_pos[2]]
+            ),
+            beam_height,
+            x_offset=0.0,
+        )
+        return block
+
+    # Two small cubes (0.05 each) against one large cube (0.10) at equal distances.
+    small_block_size = 0.012
+    blocks = [
+        place("small_block_1", -placement_distance, -small_block_size),
+        place("small_block_2", -placement_distance, small_block_size),
+        place("large_block", placement_distance),
+    ]
+    env.set_state(state)
+
+    action_shape = env.action_space.shape
+    assert action_shape is not None
+    null_action = np.zeros(action_shape, dtype=np.float32)
+    for _ in range(50):
+        env.step(null_action)
+
+    final_state = env._get_current_state()  # pylint: disable=protected-access
+    for block in blocks:
+        _assert_block_on_seesaw(block, final_state, seesaw)
+    assert seesaw.is_balanced(5.0)
+    assert env._check_goals()  # pylint: disable=protected-access
+
+    env.close()
+
+
+def test_is_object_on_beam_measures_along_the_beam_not_along_world_x():
+    """A yawed beam's extents follow the beam, not the world axes.
+
+    The check compared world x against half the beam *length* and world y against half
+    its *width*. On the shipped task the seesaw is yawed 90 degrees, so those two limits
+    were swapped and a cube resting mid-beam read as off it -- 0.18m of beam judged
+    against a 0.035m half-width.
+    """
+    env = _get_shipped_balancebeam_env()
+    env.reset(seed=0)
+
+    seesaw = env._objects_dict["seesaw_1"]  # pylint: disable=protected-access
+    assert isinstance(seesaw, GeneratedSeesaw)
+    seesaw_pos, _ = (
+        env._robot_env.get_joint_pos_quat(  # pylint: disable=protected-access
+            seesaw.joint_name
+        )
+    )
+    yaw = _seesaw_yaw(env, seesaw)
+    assert not np.isclose(yaw, 0.0), "this task is only interesting while it is yawed"
+
+    beam_height = seesaw.pivot_height + seesaw.beam_clearance + seesaw.beam_thickness
+    height = seesaw_pos[2] + beam_height + 0.015
+
+    def world_point(along: float, across: float) -> NDArray[np.float32]:
+        offset = Rotation.from_euler("z", yaw).apply([along, across, 0.0])
+        return np.array(
+            [seesaw_pos[0] + offset[0], seesaw_pos[1] + offset[1], height],
+            dtype=np.float32,
+        )
+
+    near_the_end = (seesaw.beam_length / 2) * 0.9
+    assert seesaw.is_object_on_beam(world_point(near_the_end, 0.0))
+    assert seesaw.is_object_on_beam(world_point(-near_the_end, 0.0))
+    # Past the end of the beam, and off its side, are both still off the beam.
+    assert not seesaw.is_object_on_beam(world_point(seesaw.beam_length, 0.0))
+    assert not seesaw.is_object_on_beam(world_point(0.0, seesaw.beam_width))
+
+    env.close()
+
+
+def test_beam_goal_region_is_derived_from_the_seesaw_it_is_attached_to():
+    """The goal region's extents come from the beam, not from numbers in the task JSON.
+
+    BalanceBeam3D-o3 declares `beam_goal_region` with a target and no ranges, so a task
+    never restates beam_length or beam_width and the region cannot go stale when the
+    seesaw's geometry changes.
+    """
+    env = _get_shipped_balancebeam_env()
+    env.reset(seed=0)
+
+    seesaw = env._objects_dict["seesaw_1"]  # pylint: disable=protected-access
+    assert isinstance(seesaw, GeneratedSeesaw)
+
+    x_min, y_min, _z_min, x_max, y_max, _z_max = seesaw.beam_surface_range()
+    assert x_max - x_min == seesaw.beam_length
+    assert y_max - y_min == seesaw.beam_width
+
+    # And the region actually built from it tracks the beam through the seesaw's yaw:
+    # at 90 degrees the beam's length lies along world y, its width along world x.
+    (region,) = seesaw.region_objects["beam_goal_region"]
+    world = region.bbox
+    tolerance = 0.01  # placement_threshold, applied to every bound by _create_regions
+    # Within a millimetre: the seesaw is a free body that has settled under physics, so
+    # its yaw is a hair off 90 degrees and the world-aligned bound inflates by that much.
+    assert np.isclose(world[3] - world[0], seesaw.beam_width + 2 * tolerance, atol=1e-3)
+    assert np.isclose(
+        world[4] - world[1], seesaw.beam_length + 2 * tolerance, atol=1e-3
+    )
+
+
+def test_a_cube_beside_the_beam_is_not_in_the_goal_region():
+    """The region is the beam's footprint, not a box loose enough to catch the floor.
+
+    Worth pinning: the region rotates with the seesaw, and a rotation that fell back to
+    an axis-aligned bound would quietly widen it.
+    """
+    env = _get_shipped_balancebeam_env()
+    env.reset(seed=0)
+
+    seesaw = env._objects_dict["seesaw_1"]  # pylint: disable=protected-access
+    assert isinstance(seesaw, GeneratedSeesaw)
+    seesaw_pos, _ = (
+        env._robot_env.get_joint_pos_quat(  # pylint: disable=protected-access
+            seesaw.joint_name
+        )
+    )
+    yaw = _seesaw_yaw(env, seesaw)
+    (region,) = seesaw.region_objects["beam_goal_region"]
+
+    beam_height = seesaw.pivot_height + seesaw.beam_clearance + seesaw.beam_thickness
+
+    def world_point(along: float, across: float) -> NDArray[np.float32]:
+        offset = Rotation.from_euler("z", yaw).apply([along, across, 0.0])
+        return np.array(
+            [
+                seesaw_pos[0] + offset[0],
+                seesaw_pos[1] + offset[1],
+                seesaw_pos[2] + beam_height + 0.015,
+            ],
+            dtype=np.float32,
+        )
+
+    assert region.check_in_region(world_point(0.0, 0.0))
+    assert region.check_in_region(world_point((seesaw.beam_length / 2) * 0.9, 0.0))
+    # Off the side of the beam, and past its end.
+    assert not region.check_in_region(world_point(0.0, seesaw.beam_width))
+    assert not region.check_in_region(world_point(seesaw.beam_length, 0.0))
+    # And lying on the ground beneath the beam is not on the beam.
+    on_the_ground = world_point((seesaw.beam_length / 2) * 0.5, 0.0)
+    on_the_ground[2] = np.float32(seesaw_pos[2] + 0.018)
+    assert not region.check_in_region(on_the_ground)

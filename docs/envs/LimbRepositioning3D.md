@@ -10,7 +10,7 @@ A 3D task where the robot must reposition a passive human limb, as an assistive 
 The robot's end effector is welded to the limb's grasp frame and drives the limb to a goal joint configuration with joint torques. The limb has no actuation of its own. The goal is drawn as a translucent green copy of the limb.
 
 - Robot: a TidyBot Kinova Gen3 arm with 7 joints, on a base that stays put
-- Simulation: PyBullet forward dynamics, unlike Kinematic3D and Dynamic3D
+- Simulation: PyBullet forward dynamics
 - Gravity: off by default; set `gravity` in the config to enable it
 
 On reset, each limb joint is perturbed within that limb's joint range around the variant's nominal starting configuration, and the draw is rejected if it pushes the limb into the scene, so the initial state varies with the seed while staying collision free. The robot re-solves its grasp for the sampled configuration.

@@ -172,6 +172,7 @@ obs, info = env.reset(seed=42)
 | BalanceBeam3D | Dynamic3D | `kinder/BalanceBeam3D-o3-v0` |
 | ConstrainedCupboard3D | Dynamic3D | `kinder/ConstrainedCupboard3D-o1-v0` |
 | Dynamo3D | Dynamic3D | `kinder/Dynamo3D-o3-v0` |
+| LimbRepositioning3D | Dynamic3D | `kinder/LimbRepositioning3D-wheelchair-left-arm-v0` |
 | Rearrange3D | Dynamic3D | `kinder/Rearrange3D-o2-put_the_boxed_drink_on_the_left_and_the_can_on_the_right_side_of_the_bowl-v0` |
 | ScoopPour3D | Dynamic3D | `kinder/ScoopPour3D-o100-v0` |
 | Shelf3D | Dynamic3D | `kinder/Shelf3D-o2-v0` |

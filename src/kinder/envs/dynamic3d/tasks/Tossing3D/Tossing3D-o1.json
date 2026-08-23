@@ -16,8 +16,8 @@
         },
         "blocks_init_region": {
             "target": "ground",
-            "ranges": [[0.5, -0.25, 0.75, 0.25]],
-            "yaw_ranges": [[-45, 45]],
+            "ranges": [[0.5029, -0.0305, 0.5029, -0.0305]],
+            "yaw_ranges": [[21.673, 21.673]],
             "rgba": [0.2, 0.6, 0.2, 0.0]
         },
         "blocks_goal_region": {

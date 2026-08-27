@@ -15,7 +15,7 @@ from typing import Type as TypingType
 
 import pybullet as p
 from pybullet_helpers.geometry import Pose, get_pose, set_pose
-from pybullet_helpers.utils import create_pybullet_cylinder, create_pybullet_shelf
+from pybullet_helpers.utils import create_pybullet_cylinder
 from relational_structs import Object, ObjectCentricState
 from relational_structs.utils import create_state_from_dict
 
@@ -55,6 +55,11 @@ class CylinderShelf3DEnvConfig(Kinematic3DEnvConfig, metaclass=FinalConfigMeta):
     shelf_spacing: float = 0.254
     shelf_support_width: float = 0.0127
     shelf_num_layers: int = 4
+    # Board indices absent from the physical shelf. Removing an inner board
+    # merges the openings around it — e.g. (1,) models a shelf whose bottom
+    # inner board was taken out, leaving one tall opening above the bottom
+    # board for objects taller than the board spacing.
+    shelf_omitted_layers: tuple[int, ...] = ()
     shelf_texture: Path = Path(__file__).parent / "assets" / "dark-wood-texture.png"
 
     # World bounds.
@@ -80,9 +85,9 @@ class CylinderShelf3DEnvConfig(Kinematic3DEnvConfig, metaclass=FinalConfigMeta):
     # Gripper.
     gripper_open_threshold: float = 0.01
 
-    # Goal checking: tolerance below the first shelf layer for determining if
-    # a cylinder is "on the shelf". Cylinders must be above (shelf_pose.z +
-    # shelf_spacing - on_shelf_z_tolerance) to count as placed.
+    # Goal checking: a cylinder counts as placed when it stands within the
+    # shelf footprint with its resting height within this tolerance of some
+    # present board's surface.
     on_shelf_z_tolerance: float = 0.05
 
     def get_camera_kwargs(self) -> dict[str, Any]:
@@ -98,9 +103,135 @@ class CylinderShelf3DEnvConfig(Kinematic3DEnvConfig, metaclass=FinalConfigMeta):
         """Get the height of the cylinder with the given index."""
         return self.cylinder_heights[idx % len(self.cylinder_heights)]
 
+    def get_present_layer_indices(self) -> list[int]:
+        """Indices of the boards actually present on the shelf."""
+        return [
+            i
+            for i in range(self.shelf_num_layers)
+            if i not in self.shelf_omitted_layers
+        ]
+
+    def get_layer_surface_zs(self) -> list[float]:
+        """World-frame z of each present board's top surface, ascending."""
+        return [
+            self.shelf_pose.position[2]
+            + i * (self.shelf_spacing + self.shelf_height)
+            + self.shelf_height / 2
+            for i in self.get_present_layer_indices()
+        ]
+
+    def get_layer_openings(self) -> list[tuple[float, float]]:
+        """Per present board: (surface z, clear height above it).
+
+        The clear height runs to the underside of the next present board, or
+        infinity for the topmost board.
+        """
+        surface_zs = self.get_layer_surface_zs()
+        openings = []
+        for k, surface_z in enumerate(surface_zs):
+            if k + 1 < len(surface_zs):
+                clearance = surface_zs[k + 1] - self.shelf_height - surface_z
+            else:
+                clearance = float("inf")
+            openings.append((surface_z, clearance))
+        return openings
+
     def get_cylinder_rgba(self, idx: int) -> tuple[float, float, float, float]:
         """Get the color of the cylinder with the given index."""
         return self.cylinder_rgbas[idx % len(self.cylinder_rgbas)]
+
+
+def _create_shelf_with_omitted_layers(
+    config: CylinderShelf3DEnvConfig, physics_client_id: int
+) -> tuple[int, set[int]]:
+    """Build the shelf multibody, skipping the omitted board indices.
+
+    Adapted from pybullet_helpers' create_pybullet_shelf, which only builds evenly
+    spaced boards; the side supports still span the full height so the frame matches a
+    shelf whose inner board was physically removed.
+    """
+    collision_shape_ids = []
+    visual_shape_ids = []
+    link_positions = []
+
+    present_layers = config.get_present_layer_indices()
+    for i in present_layers:
+        layer_z = i * (config.shelf_spacing + config.shelf_height)
+        half_extents = [
+            config.shelf_width / 2,
+            config.shelf_depth / 2,
+            config.shelf_height / 2,
+        ]
+        collision_shape_ids.append(
+            p.createCollisionShape(
+                p.GEOM_BOX,
+                halfExtents=half_extents,
+                physicsClientId=physics_client_id,
+            )
+        )
+        visual_shape_ids.append(
+            p.createVisualShape(
+                p.GEOM_BOX,
+                halfExtents=half_extents,
+                rgbaColor=config.shelf_rgba,
+                physicsClientId=physics_client_id,
+            )
+        )
+        link_positions.append([0, 0, layer_z])
+
+    shelf_link_ids = set(range(len(present_layers)))
+
+    support_height = (
+        config.shelf_num_layers - 1
+    ) * config.shelf_spacing + config.shelf_num_layers * config.shelf_height
+    support_half_height = support_height / 2
+    for x_offset in [
+        -config.shelf_width / 2 - config.shelf_support_width / 2,
+        config.shelf_width / 2 + config.shelf_support_width / 2,
+    ]:
+        half_extents = [
+            config.shelf_support_width / 2,
+            config.shelf_depth / 2,
+            support_half_height,
+        ]
+        collision_shape_ids.append(
+            p.createCollisionShape(
+                p.GEOM_BOX,
+                halfExtents=half_extents,
+                physicsClientId=physics_client_id,
+            )
+        )
+        visual_shape_ids.append(
+            p.createVisualShape(
+                p.GEOM_BOX,
+                halfExtents=half_extents,
+                rgbaColor=config.shelf_rgba,
+                physicsClientId=physics_client_id,
+            )
+        )
+        link_positions.append(
+            [x_offset, 0, support_half_height - config.shelf_height / 2]
+        )
+
+    num_links = len(collision_shape_ids)
+    shelf_id = p.createMultiBody(
+        baseMass=0,
+        baseCollisionShapeIndex=-1,
+        baseVisualShapeIndex=-1,
+        basePosition=(0, 0, 0),  # set externally
+        linkMasses=[0] * num_links,
+        linkCollisionShapeIndices=collision_shape_ids,
+        linkVisualShapeIndices=visual_shape_ids,
+        linkPositions=link_positions,
+        linkOrientations=[[0, 0, 0, 1]] * num_links,
+        linkInertialFramePositions=[[0, 0, 0]] * num_links,
+        linkInertialFrameOrientations=[[0, 0, 0, 1]] * num_links,
+        linkParentIndices=[0] * num_links,
+        linkJointTypes=[p.JOINT_FIXED] * num_links,
+        linkJointAxis=[[0, 0, 0]] * num_links,
+        physicsClientId=physics_client_id,
+    )
+    return shelf_id, shelf_link_ids
 
 
 class CylinderShelf3DObjectCentricState(Kinematic3DObjectCentricState):
@@ -140,15 +271,8 @@ class ObjectCentricCylinderShelf3DEnv(
             self._cylinders[f"cylinder{idx}"] = cylinder_id
 
         # Create shelf.
-        self._shelf_id, self._shelf_surface_ids = create_pybullet_shelf(
-            color=self.config.shelf_rgba,
-            shelf_width=self.config.shelf_width,
-            shelf_depth=self.config.shelf_depth,
-            shelf_height=self.config.shelf_height,
-            spacing=self.config.shelf_spacing,
-            support_width=self.config.shelf_support_width,
-            num_layers=self.config.shelf_num_layers,
-            physics_client_id=self.physics_client_id,
+        self._shelf_id, self._shelf_surface_ids = _create_shelf_with_omitted_layers(
+            self.config, self.physics_client_id
         )
         set_pose(self._shelf_id, self.config.shelf_pose, self.physics_client_id)
 
@@ -253,16 +377,25 @@ class ObjectCentricCylinderShelf3DEnv(
         robot_gripper_pose = self._robot_arm.get_finger_state()
         if robot_gripper_pose > self.config.gripper_open_threshold:
             return False
-        # Check that all cylinders are above the first shelf layer (with
-        # tolerance).
-        min_on_shelf_z = (
-            self.config.shelf_pose.position[2]
-            + self.config.shelf_spacing
-            - self.config.on_shelf_z_tolerance
-        )
-        for _, cylinder_id in self._cylinders.items():
+        # Check that every cylinder stands within the shelf footprint with
+        # its center at resting height on some present board.
+        shelf_x, shelf_y, _ = self.config.shelf_pose.position
+        surface_zs = self.config.get_layer_surface_zs()
+        for idx, (_, cylinder_id) in enumerate(sorted(self._cylinders.items())):
             cylinder_pose = get_pose(cylinder_id, self.physics_client_id)
-            if cylinder_pose.position[2] < min_on_shelf_z:
+            x, y, z = cylinder_pose.position
+            if abs(x - shelf_x) > self.config.shelf_width / 2:
+                return False
+            if abs(y - shelf_y) > self.config.shelf_depth / 2:
+                return False
+            resting_z_options = [
+                surface_z + self.config.get_cylinder_height(idx) / 2
+                for surface_z in surface_zs
+            ]
+            if not any(
+                abs(z - resting_z) <= self.config.on_shelf_z_tolerance
+                for resting_z in resting_z_options
+            ):
                 return False
 
         return True
@@ -309,7 +442,7 @@ class CylinderShelf3DEnv(ConstantObjectKinDEREnv):
     def _create_reward_markdown_description(self) -> str:
         """Create reward description."""
         # pylint: disable=line-too-long
-        return """The reward is -1 per timestep to encourage efficient task completion. The episode terminates successfully when all cylinders are placed on the shelf (i.e., above the first shelf layer) and the gripper is closed. The gripper must be closed to prevent accidental "success" while a cylinder is still being held above the shelf."""
+        return """The reward is -1 per timestep to encourage efficient task completion. The episode terminates successfully when all cylinders stand within the shelf footprint at resting height on one of the shelf boards and the gripper is closed. The gripper must be closed to prevent accidental "success" while a cylinder is still being held above the shelf."""
 
     def _create_references_markdown_description(self) -> str:
         """Create references description."""

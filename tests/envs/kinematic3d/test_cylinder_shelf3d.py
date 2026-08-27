@@ -4,7 +4,7 @@
 
 import numpy as np
 import pytest
-from pybullet_helpers.geometry import Pose, SE2Pose
+from pybullet_helpers.geometry import Pose, SE2Pose, set_pose
 from pybullet_helpers.inverse_kinematics import inverse_kinematics
 from pybullet_helpers.joint import get_jointwise_difference
 from scipy.spatial.transform import Rotation
@@ -12,6 +12,7 @@ from scipy.spatial.transform import Rotation
 from kinder.envs.kinematic3d.cylinder_shelf3d import (
     CYLINDER_OBJECT_TYPE,
     CylinderShelf3DEnv,
+    CylinderShelf3DEnvConfig,
     ObjectCentricCylinderShelf3DEnv,
 )
 
@@ -182,3 +183,42 @@ def test_gym_env_wrapper():
     assert state.get_object_from_name("cylinder0") is not None
     assert state.get_object_from_name("shelf") is not None
     gym_env.close()
+
+
+def test_omitted_layers_shelf_and_goal():
+    """A shelf with the bottom inner board removed has one tall opening, and a cylinder
+    standing on the bottom board inside the footprint reaches the goal."""
+    config = CylinderShelf3DEnvConfig(
+        shelf_omitted_layers=(1,),
+        cylinder_heights=(0.233,),
+        cylinder_radius=0.039,
+    )
+    assert config.get_present_layer_indices() == [0, 2, 3]
+    openings = config.get_layer_openings()
+    # The bottom opening spans up to the second present board.
+    assert openings[0][1] == pytest.approx(
+        2 * (config.shelf_spacing + config.shelf_height) - config.shelf_height
+    )
+    assert openings[-1][1] == float("inf")
+
+    environment = ObjectCentricCylinderShelf3DEnv(
+        num_cylinders=1, config=config, realistic_bg=False
+    )
+    environment.reset(seed=0)
+    # Stand the cylinder on the bottom board, inside the footprint.
+    shelf_x, shelf_y, _ = config.shelf_pose.position
+    resting_z = config.get_layer_surface_zs()[0] + 0.233 / 2
+    set_pose(
+        environment._cylinders["cylinder0"],
+        Pose((shelf_x, shelf_y, resting_z)),
+        environment.physics_client_id,
+    )
+    assert environment.goal_reached()
+    # On the floor next to the shelf: not a goal state.
+    set_pose(
+        environment._cylinders["cylinder0"],
+        Pose((shelf_x, shelf_y - 1.0, 0.233 / 2)),
+        environment.physics_client_id,
+    )
+    assert not environment.goal_reached()
+    environment.close()

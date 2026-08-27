@@ -356,6 +356,25 @@ def _register_kinematic3d() -> None:
         variant_ids=variant_ids,
     )
 
+    # KinematicCylinderShelf3D environment.
+    num_cylinders = [1, 2, 3]
+    variant_ids = []
+    for num_cylinder in num_cylinders:
+        variant_id = f"kinder/KinematicCylinderShelf3D-o{num_cylinder}-v0"
+        _register(
+            id=variant_id,
+            entry_point="kinder.envs.kinematic3d.cylinder_shelf3d:CylinderShelf3DEnv",
+            kwargs={"num_cylinders": num_cylinder},
+        )
+        variant_ids.append(variant_id)
+    _register_env_class(
+        class_name="KinematicCylinderShelf3D",
+        entry_point="kinder.envs.kinematic3d.cylinder_shelf3d:CylinderShelf3DEnv",
+        category="Kinematic3D",
+        backend="pybullet",
+        variant_ids=variant_ids,
+    )
+
     # PrplLab3D environment.
     num_cubes = [1, 2]
     variant_ids = []

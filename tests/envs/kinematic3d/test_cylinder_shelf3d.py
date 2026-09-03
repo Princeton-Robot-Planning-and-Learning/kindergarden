@@ -222,3 +222,69 @@ def test_omitted_layers_shelf_and_goal():
     )
     assert not environment.goal_reached()
     environment.close()
+
+
+def test_real_restock_layout():
+    """Explicit board heights, per-cylinder radii, staging boxes and init regions
+    together model a measured physical restock scene: non-uniformly spaced boards
+    (a big bottom opening for tall items), mixed-diameter cylinders starting inside
+    open-top boxes whose walls are collision bodies."""
+    board_half = 0.0127 / 2
+    config = CylinderShelf3DEnvConfig(
+        shelf_pose=Pose((1.5, 1.5, 0.0)),
+        # Board top surfaces at 0.100, 0.538 and 0.800 m above the floor.
+        shelf_layer_zs=(0.100 - board_half, 0.538 - board_half, 0.800 - board_half),
+        cylinder_heights=(0.29, 0.208, 0.12),
+        cylinder_radii=(0.0375, 0.0375, 0.0325),
+        boxes=(
+            (0.30, 0.70, 0.66, 0.98, 0.115, 0.2),  # rotated 0.2 rad about its center
+            (0.30, 0.6975, 0.9325, 1.23, 0.215),
+        ),
+        cylinder_init_regions=(
+            (0.36, 0.64, 0.99, 1.17),
+            (0.36, 0.64, 0.99, 1.17),
+            (0.36, 0.64, 0.72, 0.92),
+        ),
+    )
+    surfaces = config.get_layer_surface_zs()
+    assert surfaces == pytest.approx([0.100, 0.538, 0.800])
+    openings = config.get_layer_openings()
+    # Tall opening ~0.425, short opening ~0.249.
+    assert openings[0][1] == pytest.approx(0.538 - 0.0127 - 0.100)
+    assert openings[1][1] == pytest.approx(0.800 - 0.0127 - 0.538)
+    assert config.get_cylinder_radius(2) == pytest.approx(0.0325)
+
+    environment = ObjectCentricCylinderShelf3DEnv(
+        num_cylinders=3, config=config, realistic_bg=False
+    )
+    try:
+        # Four walls per box, all in the collision set.
+        assert len(environment._box_wall_ids) == 8
+        assert set(environment._box_wall_ids) <= environment._get_collision_object_ids()
+        # Per-cylinder half extents follow the per-cylinder radii.
+        assert environment._get_half_extents("cylinder2")[0] == pytest.approx(0.0325)
+        obs, _ = environment.reset(seed=0)
+        # Every cylinder spawned inside its configured region.
+        for idx in range(3):
+            x_lb, x_ub, y_lb, y_ub = config.get_cylinder_init_region(idx)
+            pose = obs.get_object_pose(f"cylinder{idx}")
+            assert x_lb <= pose.position[0] <= x_ub
+            assert y_lb <= pose.position[1] <= y_ub
+        # Goal check works off the explicit surfaces.
+        shelf_x, shelf_y, _ = config.shelf_pose.position
+        for idx, surface_index in ((0, 0), (1, 0), (2, 1)):
+            height = config.get_cylinder_height(idx)
+            set_pose(
+                environment._cylinders[f"cylinder{idx}"],
+                Pose(
+                    (
+                        shelf_x - 0.15 + 0.15 * idx,
+                        shelf_y,
+                        surfaces[surface_index] + height / 2,
+                    )
+                ),
+                environment.physics_client_id,
+            )
+        assert environment.goal_reached()
+    finally:
+        environment.close()

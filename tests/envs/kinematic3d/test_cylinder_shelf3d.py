@@ -276,7 +276,13 @@ def test_real_restock_layout():
             height = config.get_cylinder_height(idx)
             set_pose(
                 environment._cylinders[f"cylinder{idx}"],
-                Pose((shelf_x - 0.15 + 0.15 * idx, shelf_y, surfaces[surface_index] + height / 2)),
+                Pose(
+                    (
+                        shelf_x - 0.15 + 0.15 * idx,
+                        shelf_y,
+                        surfaces[surface_index] + height / 2,
+                    )
+                ),
                 environment.physics_client_id,
             )
         assert environment.goal_reached()

@@ -345,9 +345,10 @@ class ObjectCentricCylinderShelf3DEnv(
             )
             cos_yaw, sin_yaw = math.cos(yaw), math.sin(yaw)
             # (half extents, wall-center offset in the box's local frame)
+            long_half = (half_x + 2 * thickness, thickness, center_z)
             wall_specs = [
-                ((half_x + 2 * thickness, thickness, center_z), (0.0, -half_y - thickness)),
-                ((half_x + 2 * thickness, thickness, center_z), (0.0, half_y + thickness)),
+                (long_half, (0.0, -half_y - thickness)),
+                (long_half, (0.0, half_y + thickness)),
                 ((thickness, half_y, center_z), (-half_x - thickness, 0.0)),
                 ((thickness, half_y, center_z), (half_x + thickness, 0.0)),
             ]

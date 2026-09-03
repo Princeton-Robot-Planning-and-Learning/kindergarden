@@ -237,7 +237,7 @@ def test_real_restock_layout():
         cylinder_heights=(0.29, 0.208, 0.12),
         cylinder_radii=(0.0375, 0.0375, 0.0325),
         boxes=(
-            (0.30, 0.70, 0.66, 0.98, 0.115),
+            (0.30, 0.70, 0.66, 0.98, 0.115, 0.2),  # rotated 0.2 rad about its center
             (0.30, 0.6975, 0.9325, 1.23, 0.215),
         ),
         cylinder_init_regions=(

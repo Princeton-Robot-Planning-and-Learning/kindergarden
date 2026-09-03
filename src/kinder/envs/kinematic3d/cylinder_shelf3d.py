@@ -13,6 +13,8 @@ from pathlib import Path
 from typing import Any
 from typing import Type as TypingType
 
+import math
+
 import pybullet as p
 from pybullet_helpers.geometry import Pose, get_pose, set_pose
 from pybullet_helpers.utils import create_pybullet_block, create_pybullet_cylinder
@@ -77,9 +79,11 @@ class CylinderShelf3DEnvConfig(Kinematic3DEnvConfig, metaclass=FinalConfigMeta):
     # Open-top staging boxes the cylinders can start inside (real scenes stage the
     # stock in cardboard boxes, which is what rules out horizontal side grasps). Each
     # entry is a box's INNER floor extents plus its wall height, world frame:
-    # (x_lo, x_hi, y_lo, y_hi, wall_height). Walls are real collision bodies; the top
-    # and floor are open. Empty (the default) builds no boxes.
-    boxes: tuple[tuple[float, float, float, float, float], ...] = ()
+    # (x_lo, x_hi, y_lo, y_hi, wall_height), optionally followed by a yaw (rad) that
+    # rotates the box about its floor-extents center — real boxes are rarely set down
+    # axis-aligned. Walls are real collision bodies; the top and floor are open. Empty
+    # (the default) builds no boxes.
+    boxes: tuple[tuple[float, ...], ...] = ()
     box_wall_thickness: float = 0.012
     box_rgba: tuple[float, float, float, float] = (0.72, 0.56, 0.38, 1.0)
 
@@ -325,36 +329,40 @@ class ObjectCentricCylinderShelf3DEnv(
             self._cylinders[f"cylinder{idx}"] = cylinder_id
 
         # Staging boxes: four walls each (open top, open floor), real collision
-        # bodies so grasp approaches must come in from above.
+        # bodies so grasp approaches must come in from above. Walls are laid out in
+        # the box's local frame and then rotated by its yaw about the floor-extents
+        # center.
         self._box_wall_ids: list[int] = []
         thickness = self.config.box_wall_thickness
-        for x_lo, x_hi, y_lo, y_hi, wall_height in self.config.boxes:
+        for box in self.config.boxes:
+            x_lo, x_hi, y_lo, y_hi, wall_height = box[:5]
+            yaw = box[5] if len(box) > 5 else 0.0
+            center_x, center_y = (x_lo + x_hi) / 2, (y_lo + y_hi) / 2
+            half_x, half_y = (x_hi - x_lo) / 2, (y_hi - y_lo) / 2
             center_z = wall_height / 2
+            yaw_quat = tuple(
+                p.getQuaternionFromEuler([0.0, 0.0, yaw])
+            )
+            cos_yaw, sin_yaw = math.cos(yaw), math.sin(yaw)
+            # (half extents, wall-center offset in the box's local frame)
             wall_specs = [
-                (
-                    ((x_hi - x_lo) / 2 + 2 * thickness, thickness, center_z),
-                    ((x_lo + x_hi) / 2, y_lo - thickness, center_z),
-                ),
-                (
-                    ((x_hi - x_lo) / 2 + 2 * thickness, thickness, center_z),
-                    ((x_lo + x_hi) / 2, y_hi + thickness, center_z),
-                ),
-                (
-                    (thickness, (y_hi - y_lo) / 2, center_z),
-                    (x_lo - thickness, (y_lo + y_hi) / 2, center_z),
-                ),
-                (
-                    (thickness, (y_hi - y_lo) / 2, center_z),
-                    (x_hi + thickness, (y_lo + y_hi) / 2, center_z),
-                ),
+                ((half_x + 2 * thickness, thickness, center_z), (0.0, -half_y - thickness)),
+                ((half_x + 2 * thickness, thickness, center_z), (0.0, half_y + thickness)),
+                ((thickness, half_y, center_z), (-half_x - thickness, 0.0)),
+                ((thickness, half_y, center_z), (half_x + thickness, 0.0)),
             ]
-            for half_extents, position in wall_specs:
+            for half_extents, (local_x, local_y) in wall_specs:
                 wall_id = create_pybullet_block(
                     self.config.box_rgba,
                     half_extents,
                     physics_client_id=self.physics_client_id,
                 )
-                set_pose(wall_id, Pose(position), self.physics_client_id)
+                position = (
+                    center_x + cos_yaw * local_x - sin_yaw * local_y,
+                    center_y + sin_yaw * local_x + cos_yaw * local_y,
+                    center_z,
+                )
+                set_pose(wall_id, Pose(position, yaw_quat), self.physics_client_id)
                 self._box_wall_ids.append(wall_id)
 
         # Create shelf.

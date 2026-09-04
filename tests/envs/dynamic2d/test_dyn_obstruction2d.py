@@ -235,3 +235,63 @@ def test_dyn_obstruction2d_reset_consistency():
         _obs, reward, _terminated, _truncated, _info = env.step(action)
         # First step should give -1 reward (goal not satisfied immediately)
         assert reward == -1.0
+
+
+def test_dyn_obstruction2d_reset_from_held_state_moves_with_object():
+    """Resetting from a state in which the robot holds the block (as saved right after a
+    grasp, block still touching the table) must leave the robot mobile: the held block
+    is part of the robot, so its contact with the table must not trigger the robot's
+    static-collision revert."""
+    kinder.register_all_environments()
+    env = kinder.make("kinder/DynObstruction2D-o0-v0")
+    obs, _ = env.reset(seed=0)
+    state = env.observation_space.devectorize(obs)
+    grasp_state = state.copy()
+    name_to_object = {obj.name: obj for obj in state.data}
+    robot_object = name_to_object["robot"]
+    target_block_object = name_to_object["target_block"]
+    # The block rests on the table, as it does right after a pick from the table,
+    # and the robot reaches down onto it from above.
+    # The table is a constant object outside the observation; the sampled block
+    # rests on it, so its bottom edge gives the table top.
+    table_top = state.get(target_block_object, "y") - (
+        state.get(target_block_object, "height") / 2
+    )
+    block_size = 0.2
+    block_y = table_top + block_size / 2
+    grasp_state.set(robot_object, "x", 1.6)
+    grasp_state.set(robot_object, "y", block_y + 0.4)
+    grasp_state.set(robot_object, "theta", -np.pi / 2)
+    grasp_state.set(robot_object, "arm_joint", 0.24)
+    grasp_state.set(robot_object, "finger_gap", 0.32)
+    grasp_state.set(target_block_object, "x", 1.6)
+    grasp_state.set(target_block_object, "y", block_y)
+    grasp_state.set(target_block_object, "theta", 0.0)
+    grasp_state.set(target_block_object, "width", block_size)
+    grasp_state.set(target_block_object, "height", block_size)
+    env.reset(options={"init_state": grasp_state})
+    close_gripper = np.array([0.0, 0.0, 0.0, 0.0, -0.01], dtype=np.float64)
+    for _ in range(7):
+        obs, _, _, _, _ = env.step(close_gripper)
+    held_state = env.observation_space.devectorize(obs)
+    assert held_state.get(target_block_object, "held")
+
+    # Rebuild the scene from the held state, then drive the base sideways so the
+    # held block slides along the table and stays in contact with it.
+    obs, _ = env.reset(options={"init_state": held_state})
+    obj_centric_env = (
+        env.unwrapped._object_centric_env  # pylint: disable=protected-access
+    )
+    assert len(obj_centric_env.robot.held_objects) == 1
+    move_with_object = np.array([-0.05, 0.0, 0.0, 0.0, 0.0], dtype=np.float64)
+    for _ in range(3):
+        before = env.observation_space.devectorize(obs)
+        obs, _, _, _, _ = env.step(move_with_object)
+        after = env.observation_space.devectorize(obs)
+        for obj in (robot_object, target_block_object):
+            assert np.isclose(
+                before.get(obj, "x") + move_with_object[0],
+                after.get(obj, "x"),
+                atol=1e-2,
+            ), f"{obj.name} did not move with the base after the reset"
+        assert after.get(target_block_object, "held")

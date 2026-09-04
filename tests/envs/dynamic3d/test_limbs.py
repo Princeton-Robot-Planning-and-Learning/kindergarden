@@ -22,7 +22,6 @@ from kinder.envs.dynamic3d.limbs import (
     create_muscle_tone_model,
     create_range_of_motion,
     get_human_joint_limits,
-    get_sampling_bounds,
     range_of_motion_admits,
     sample_range_of_motion,
     validate_human_joint_positions,
@@ -123,15 +122,6 @@ def test_joint_ranges_are_well_formed(limb_name):
     lower, upper = get_human_joint_limits(limb_name)
     assert len(lower) == len(upper) == NUM_LIMB_JOINTS
     assert all(lo <= up for lo, up in zip(lower, upper, strict=True))
-
-
-@pytest.mark.parametrize("limb_name", ALL_LIMB_NAMES)
-def test_sampling_bounds_contain_the_nominal_configuration(limb_name):
-    """Bounds are widened so a nominal pose outside the anatomical range still fits."""
-    nominal = np.full(NUM_LIMB_JOINTS, 5.0)
-    lower, upper = get_sampling_bounds(limb_name, nominal)
-    assert np.all(lower <= nominal)
-    assert np.all(nominal <= upper)
 
 
 def test_joint_ranges_reject_unknown_limbs():

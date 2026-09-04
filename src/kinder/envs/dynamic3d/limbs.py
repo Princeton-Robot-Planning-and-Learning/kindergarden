@@ -294,7 +294,11 @@ def get_human_joint_limits(
 def get_sampling_bounds(
     limb_name: str, nominal: NDArray[np.float64]
 ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
-    """Joint limits widened to contain a nominal configuration that sits outside them."""
+    """Joint limits widened to contain a nominal configuration that sits outside them.
+
+    Transitional: limbrepositioning3d.py reads the bounds off the limb once it carries
+    the right person's limits, and this goes with it.
+    """
     lower, upper = get_human_joint_limits(limb_name)
     return np.minimum(lower, nominal), np.maximum(upper, nominal)
 

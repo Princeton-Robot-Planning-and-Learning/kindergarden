@@ -21,7 +21,6 @@ from kinder.envs.dynamic2d.object_types import (
     LObjectType,
 )
 from kinder.envs.dynamic2d.utils import (
-    ARM_COLLISION_TYPE,
     DYNAMIC_COLLISION_TYPE,
     FINGER_COLLISION_TYPE,
     ROBOT_COLLISION_TYPE,
@@ -622,18 +621,21 @@ class ObjectCentricDynPushPullHook2DEnv(
                     # Held dynamic objects are treated as kinematic.
                     # Match on_gripper_grasp: do NOT set velocity from
                     # state — the PD controller will set the correct
-                    # velocity on the next step.
+                    # velocity on the next step — and keep the dynamic
+                    # collision type, since a robot-side type would make
+                    # the held hook's contact with the table fire the
+                    # static-collision handler and freeze the robot.
                     body = pymunk.Body(body_type=pymunk.Body.KINEMATIC)
                     shape1 = pymunk.Poly(body, vs_l1)
                     shape2 = pymunk.Poly(body, vs_l2)
                     shape1.friction = 1.0
                     shape1.density = 1.0
-                    shape1.collision_type = ARM_COLLISION_TYPE
+                    shape1.collision_type = DYNAMIC_COLLISION_TYPE
                     shape1.mass = mass / 2
                     shape2.friction = 1.0
                     shape2.density = 1.0
                     shape2.mass = mass / 2
-                    shape2.collision_type = ARM_COLLISION_TYPE
+                    shape2.collision_type = DYNAMIC_COLLISION_TYPE
                     self.pymunk_space.add(body, shape1, shape2)
                     body.angle = theta
                     body.position = x, y

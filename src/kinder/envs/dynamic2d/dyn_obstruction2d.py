@@ -20,7 +20,6 @@ from kinder.envs.dynamic2d.object_types import (
 )
 from kinder.envs.dynamic2d.utils import (
     DYNAMIC_COLLISION_TYPE,
-    ROBOT_COLLISION_TYPE,
     STATIC_COLLISION_TYPE,
     KinRobotActionSpace,
     create_walls_from_world_boundaries,
@@ -474,13 +473,17 @@ class ObjectCentricDynObstruction2DEnv(
                     body.angular_velocity = omega
                     self._state_obj_to_pymunk_body[obj] = body
                 else:
-                    # Held dynamic objects are treated as kinematic
+                    # Held dynamic objects are treated as kinematic. The shape keeps
+                    # the dynamic collision type, exactly as on_gripper_grasp leaves
+                    # it: a robot collision type would make the held object's contact
+                    # with the table fire the static-collision handler, which reverts
+                    # the robot every substep and freezes it in place.
                     body = pymunk.Body(body_type=pymunk.Body.KINEMATIC)
                     shape = pymunk.Poly(body, vs)
                     shape.friction = 1.0
                     shape.density = 1.0
                     shape.mass = mass
-                    shape.collision_type = ROBOT_COLLISION_TYPE
+                    shape.collision_type = DYNAMIC_COLLISION_TYPE
                     self.pymunk_space.add(body, shape)
                     body.angle = theta
                     body.position = x, y

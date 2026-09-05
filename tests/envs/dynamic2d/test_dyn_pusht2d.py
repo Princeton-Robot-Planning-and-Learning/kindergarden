@@ -2,8 +2,10 @@
 
 import numpy as np
 from gymnasium.spaces import Box
+from tomsgeoms2d.structs import Tobject
 
 import kinder
+from kinder.envs.dynamic2d.dyn_pusht2d import DynPushT2DEnvConfig
 
 
 def test_dyn_pusht2d_observation_space():
@@ -86,3 +88,27 @@ def test_dyn_pusht2d_goal_achievement():
     obs, _ = env.reset(options={"init_state": new_state})
     _, _, terminated, _, _ = env.step(zero_action)
     assert terminated
+
+
+def test_dyn_pusht2d_goal_inside_world():
+    """Tests that the sampled goal pose keeps the whole T-block inside the walls."""
+    kinder.register_all_environments()
+    env = kinder.make("kinder/DynPushT2D-t1-v0")
+    config = DynPushT2DEnvConfig()
+    for seed in range(200):
+        obs, _ = env.reset(seed=seed)
+        state = env.observation_space.devectorize(obs)
+        name_to_object = {obj.name: obj for obj in state.data}
+        goal = name_to_object["goal_tblock"]
+        geom = Tobject(
+            x=state.get(goal, "x"),
+            y=state.get(goal, "y"),
+            width=state.get(goal, "width"),
+            length_horizontal=state.get(goal, "length_horizontal"),
+            length_vertical=state.get(goal, "length_vertical"),
+            theta=state.get(goal, "theta"),
+        )
+        xs, ys = zip(*geom.vertices)
+        assert min(xs) >= config.world_min_x and max(xs) <= config.world_max_x, seed
+        assert min(ys) >= config.world_min_y and max(ys) <= config.world_max_y, seed
+    env.close()

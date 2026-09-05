@@ -224,6 +224,17 @@ class ObjectCentricDynPushT2DEnv(ObjectCentricDynamic2DRobotEnv[DynPushT2DEnvCon
             # We use Kinematic2D collision checker for now
             if state_2d_has_collision(full_state, all_objects, all_objects, {}):
                 continue
+            # The goal marker is static and the collision checker skips static-static
+            # pairs, so the check above never tests the goal pose against the walls.
+            # Test it by placing the movable T-block at the goal pose.
+            goal_check_state = full_state.copy()
+            tblock = Object("tblock", TObjectType)
+            goal_check_state.set(tblock, "x", goal_tblock_pose.x)
+            goal_check_state.set(tblock, "y", goal_tblock_pose.y)
+            goal_check_state.set(tblock, "theta", goal_tblock_pose.theta)
+            static_objects = set(self.initial_constant_state)
+            if state_2d_has_collision(goal_check_state, {tblock}, static_objects, {}):
+                continue
             return state
 
         raise RuntimeError(f"Failed to sample initial state after {n} attempts")

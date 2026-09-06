@@ -1,5 +1,7 @@
 """Tests for limbrepositioning3d.py."""
 
+import dataclasses
+
 import numpy as np
 import pytest
 from gymnasium.wrappers import RecordVideo
@@ -13,7 +15,11 @@ from kinder.envs.dynamic3d.limbrepositioning3d import (
     ObjectCentricLimbRepositioning3DEnv,
     create_variant_config,
 )
-from kinder.envs.dynamic3d.limbs import get_sampling_bounds
+from kinder.envs.dynamic3d.limbs import (
+    get_human_joint_limits,
+    range_of_motion_admits,
+    sample_range_of_motion,
+)
 from tests.conftest import MAKE_VIDEOS
 
 # One variant per scene type, for the tests that step the simulation.
@@ -172,16 +178,54 @@ def test_initial_state_varies_with_seed(variant):
 
 @pytest.mark.parametrize("variant", ALL_VARIANTS)
 def test_initial_state_within_joint_ranges(variant):
-    """Sampled initial configurations stay within the limb's joint ranges."""
+    """Sampled initial configurations stay within the limb's anatomical joint limits."""
     environment = ObjectCentricLimbRepositioning3DEnv(variant=variant)
     try:
-        nominal = np.array(environment.config.scene.limb_init_joint_positions)
-        lower, upper = get_sampling_bounds(environment.config.scene.limb_name, nominal)
+        lower, upper = get_human_joint_limits(environment.config.scene.limb_name)
         for seed in range(5):
             obs, _ = environment.reset(seed=seed)
             joints = np.array(obs.limb_joint_positions)
             assert np.all(joints >= lower - 1e-6), f"{variant} below range at {seed}"
             assert np.all(joints <= upper + 1e-6), f"{variant} above range at {seed}"
+    finally:
+        environment.close()
+
+
+@pytest.mark.parametrize("variant", ALL_VARIANTS)
+def test_variant_tasks_are_anatomically_possible(variant):
+    """Both ends of every task lie inside the range of motion, default or sampled."""
+    scene = create_variant_config(variant).scene
+    people = [scene.get_limb_range_of_motion(scene.limb_name)] + [
+        sample_range_of_motion(seed, relative_spread=0.1, symmetric=False)[
+            scene.limb_name
+        ]
+        for seed in range(5)
+    ]
+    tasks = (scene.limb_init_joint_positions, scene.limb_goal_joint_positions)
+    for person in people:
+        for joints in tasks:
+            assert range_of_motion_admits(
+                scene.limb_name, list(joints), person
+            ), f"{variant}: {joints} is out of reach"
+
+
+def test_a_variant_can_be_given_an_asymmetric_person():
+    """The limb being repositioned takes its own RoM, not the person's."""
+    config = create_variant_config("human-right-arm")
+    person = sample_range_of_motion(0, symmetric=False)
+    stiff_arm = person["human-right-arm"].replace(elbow_flexion=100.0)
+    person = {**person, "human-right-arm": stiff_arm}
+    config = dataclasses.replace(
+        config, scene=dataclasses.replace(config.scene, limb_range_of_motion=person)
+    )
+    environment = ObjectCentricLimbRepositioning3DEnv(
+        variant="human-right-arm", config=config
+    )
+    try:
+        assert environment.limb.range_of_motion == stiff_arm
+        assert np.isclose(environment.limb.joint_lower_limits[3], -np.deg2rad(100.0))
+        other = environment.scene.limbs["human-left-arm"]
+        assert other.range_of_motion == person["human-left-arm"]
     finally:
         environment.close()
 

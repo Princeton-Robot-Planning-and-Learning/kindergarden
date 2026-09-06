@@ -35,6 +35,20 @@
             "target": "ground",
             "ranges": [[0.1, 0.7, 0.3, 1.0]],
             "yaw_ranges": [[0, 0]]
+        },
+        "cupboard_1_cube_1_goal_region": {
+            "target": "cupboard_1",
+            "shelf": 2,
+            "ranges": [[-0.3, -0.12, 0.00, 0.3, 0.12, 0.03]],
+            "rgba": [1.0, 1.0, 0.0, 0.0],
+            "yaw_ranges": [[0, 360]]
+        },
+        "cupboard_1_cube_2_goal_region": {
+            "target": "cupboard_1",
+            "shelf": 2,
+            "ranges": [[-0.3, -0.12, 0.00, 0.3, 0.12, 0.03]],
+            "rgba": [1.0, 1.0, 0.0, 0.0],
+            "yaw_ranges": [[0, 360]]
         }
     },
     "objects": {
@@ -69,5 +83,9 @@
         ["on", "cupboard_1", "ground_cupboard_init_region"],
         ["on", "cube1", "ground_1_object_init_region"],
         ["on", "cube2", "ground_2_object_init_region"]
+    ],
+    "goal_state": [
+        ["on", "cube1", "cupboard_1_cube_1_goal_region"],
+        ["on", "cube2", "cupboard_1_cube_2_goal_region"]
     ]
 }

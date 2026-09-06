@@ -12,6 +12,7 @@ from relational_structs.spaces import ObjectCentricStateSpace
 
 from kinder.envs.dynamic3d.base_limbrepositioning3d import (
     _CLEARANCE_QUERY_RADIUS,
+    LIMB_FURNITURE_FRICTION,
     Limb3DEnvConfig,
     ObjectCentricLimb3DRobotEnv,
 )
@@ -223,6 +224,40 @@ def test_driving_the_limb_into_the_torso_reports_penetration(bed_env):
     bed_env.limb.set_joints([0.0, -1.4, 0.0, 0.0, 0.0, 0.0])
     penetration = bed_env.limb_penetration()
     assert -_CLEARANCE_QUERY_RADIUS < penetration < -0.1
+
+
+def test_the_limb_can_contact_the_furniture(bed_env):
+    """The masks in _prepare_torque_control would otherwise drop the limb through it."""
+    client = bed_env.physics_client_id
+    limb_id = bed_env.limb.robot_id
+    furniture_id = bed_env.scene.get_scene_collision_ids()[0]
+    pose = p.getBasePositionAndOrientation(limb_id, physicsClientId=client)
+    lower, upper = p.getAABB(furniture_id, -1, physicsClientId=client)
+    inside = [(a + b) / 2 for a, b in zip(lower, upper)]
+    p.resetBasePositionAndOrientation(limb_id, inside, pose[1], physicsClientId=client)
+    p.performCollisionDetection(physicsClientId=client)
+    contacts = p.getContactPoints(limb_id, furniture_id, physicsClientId=client)
+    p.resetBasePositionAndOrientation(limb_id, *pose, physicsClientId=client)
+    assert contacts
+
+
+def test_the_limb_has_friction_against_the_furniture(bed_env):
+    """A frictionless limb slides off the bed instead of resting on it."""
+    client = bed_env.physics_client_id
+    for link in range(-1, p.getNumJoints(bed_env.limb.robot_id, client)):
+        friction = p.getDynamicsInfo(bed_env.limb.robot_id, link, client)[1]
+        assert friction == pytest.approx(LIMB_FURNITURE_FRICTION)
+
+
+def test_joint_limit_violation_reports_the_worst_joint(bed_env):
+    """The URDFs use continuous joints, so PyBullet does not enforce the limits."""
+    bed_env.reset()
+    assert bed_env.limb_joint_limit_violation() == 0.0
+    hyperextended = list(bed_env.limb.get_joint_positions())
+    hyperextended[3] = 0.5
+    bed_env.limb.set_joints(hyperextended)
+    assert np.isclose(bed_env.limb_joint_limit_violation(), 0.5)
+    bed_env.reset()
 
 
 def test_closest_distance_saturates_for_an_out_of_range_body(bed_env):

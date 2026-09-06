@@ -62,6 +62,10 @@ _DEFAULT_SCENE = LimbRepositioningSceneConfig(
 )
 
 
+# Friction between the limb and the furniture
+LIMB_FURNITURE_FRICTION = 0.5
+
+
 @dataclass(frozen=True)
 class Limb3DEnvConfig(KinDEREnvConfig):
     """Config for a torque-controlled PyBullet environment."""
@@ -247,6 +251,10 @@ class ObjectCentricLimb3DRobotEnv(
             worst = min(worst, distance - self._limb_rest_clearance.get(body_id, 0.0))
         return worst
 
+    def limb_joint_limit_violation(self) -> float:
+        """How far the limb's worst joint is outside its limits, in radians."""
+        return self.limb.joint_limit_violation(self.limb.get_joint_positions())
+
     def get_collision_clearance(self) -> float:
         """The smallest distance between the robot or limb and any static scene body.
 
@@ -299,11 +307,7 @@ class ObjectCentricLimb3DRobotEnv(
         )
 
     def _prepare_torque_control(self) -> None:
-        """Disable the default motors and joint friction so torques act directly.
-
-        Collision response is disabled for both bodies, so their interaction is mediated
-        purely by the grasp constraint.
-        """
+        """Enable contact between the limb and furniture, also the friction."""
         for body in (self.robot.arm, self.limb):
             p.setJointMotorControlArray(
                 body.robot_id,
@@ -340,6 +344,31 @@ class ObjectCentricLimb3DRobotEnv(
                     0,
                     physicsClientId=self.physics_client_id,
                 )
+
+        limb_links = range(
+            -1,
+            p.getNumJoints(self.limb.robot_id, physicsClientId=self.physics_client_id),
+        )
+        for furniture_id in self.scene.get_scene_collision_ids():
+            furniture_links = range(
+                -1, p.getNumJoints(furniture_id, physicsClientId=self.physics_client_id)
+            )
+            for limb_link in limb_links:
+                p.changeDynamics(
+                    self.limb.robot_id,
+                    limb_link,
+                    lateralFriction=LIMB_FURNITURE_FRICTION,
+                    physicsClientId=self.physics_client_id,
+                )
+                for furniture_link in furniture_links:
+                    p.setCollisionFilterPair(
+                        self.limb.robot_id,
+                        furniture_id,
+                        limb_link,
+                        furniture_link,
+                        1,
+                        physicsClientId=self.physics_client_id,
+                    )
 
     def _settle(self) -> None:
         """Step the simulation with no applied torque so the scene comes to rest."""
@@ -460,7 +489,10 @@ class ObjectCentricLimb3DRobotEnv(
         )
         self._apply_torques(list(torque), self._get_extra_limb_torque())
         obs = self._get_obs()
-        info = {"limb_distance_to_goal": obs.limb_distance_to_goal}
+        info = {
+            "limb_distance_to_goal": obs.limb_distance_to_goal,
+            "limb_joint_limit_violation": self.limb_joint_limit_violation(),
+        }
         return obs, self._get_reward(), self.goal_reached(), False, info
 
     def _create_observation_space(self, config: _ConfigType) -> ObjectCentricStateSpace:

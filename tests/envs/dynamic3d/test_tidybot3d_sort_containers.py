@@ -51,10 +51,13 @@ def test_sort_goals_follow_bins(count: int):
         assert not env._check_goals()  # pylint: disable=protected-access
         # Goal tolerance stays above the bin floor, below its rim, and within walls.
         for color in ["red", "green", "blue", "yellow"]:
-            obj = env._objects_dict[f"bin_{color}"]  # pylint: disable=protected-access
-            region = obj.region_objects[f"table_1_object_goal_{color}_region"][0]
-            size = np.fromstring(region.site_element.get("size"), sep=" ")
-            pos = np.fromstring(region.site_element.get("pos"), sep=" ")
+            bin_geometry = env.get_object(f"bin_{color}")
+            region = bin_geometry.region_objects[f"table_1_object_goal_{color}_region"][
+                0
+            ]
+            assert region.site_element is not None
+            size = np.fromstring(region.site_element.attrib["size"], sep=" ")
+            pos = np.fromstring(region.site_element.attrib["pos"], sep=" ")
             assert np.all(size[:2] <= 0.04)
             assert pos[2] - size[2] > 0.01
             assert pos[2] + size[2] < 0.1

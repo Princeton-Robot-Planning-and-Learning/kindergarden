@@ -17,10 +17,10 @@ _TASK_CONFIG_PATH = (
 )
 
 
-def _make_env() -> ObjectCentricTidyBot3DEnv:
+def _make_env(count: int = 1) -> ObjectCentricTidyBot3DEnv:
     return ObjectCentricTidyBot3DEnv(
-        num_objects=1,
-        task_config_path=str(_TASK_CONFIG_PATH),
+        num_objects=count,
+        task_config_path=str(_TASK_CONFIG_PATH.with_name(f"Tossing3D-o{count}.json")),
         scene_bg=False,
         allow_state_access=True,
     )
@@ -161,3 +161,29 @@ def test_tossing3d_goal_region_is_covered_by_the_bin(seed: int):
     ), "Bin does not cover the high-y edge of blocks_goal_region"
 
     env.close()
+
+
+@pytest.mark.parametrize("count", [1, 2])
+def test_tossing_goal_follows_displaced_bin(count: int):
+    """Scoring follows a displaced bin for both object counts."""
+    env = _make_env(count)
+    try:
+        env.reset(seed=0)
+        state = env._get_current_state()  # pylint: disable=protected-access
+        bin_obj = state.get_object_from_name("bin_0")
+        original_x = state.get(bin_obj, "x")
+        state.set(bin_obj, "x", original_x + 0.4)
+        for i in range(count):
+            cube = state.get_object_from_name(f"cube_{i}")
+            state.set(cube, "x", original_x + 0.4)
+            state.set(cube, "y", state.get(bin_obj, "y") + 0.06 * i)
+            state.set(cube, "z", state.get(bin_obj, "z") + 0.045)
+        env.set_state(state)
+        assert env._check_goals()  # pylint: disable=protected-access
+        for i in range(count):
+            cube = state.get_object_from_name(f"cube_{i}")
+            state.set(cube, "x", original_x)
+        env.set_state(state)
+        assert not env._check_goals()  # pylint: disable=protected-access
+    finally:
+        env.close()

@@ -52,3 +52,34 @@ def test_scoop_target_follows_green_bin():
         assert not env._check_goals()  # pylint: disable=protected-access
     finally:
         env.close()
+
+
+def test_scoop_target_remains_successful_after_settling() -> None:
+    """Ten separated cubes rest inside the target bin and satisfy its goal."""
+    env = ObjectCentricTidyBot3DEnv(
+        num_objects=10,
+        task_config_path=str(_TASKS / "ScoopPour3D-o10.json"),
+        scene_bg=False,
+        allow_state_access=True,
+    )
+    try:
+        env.reset(seed=0)
+        state = env._get_current_state()  # pylint: disable=protected-access
+        target = state.get_object_from_name("bin_green_0")
+        for i in range(10):
+            cube = state.get_object_from_name(f"cube_{i}")
+            for axis, offset in zip(
+                "xyz", [(i % 5 - 2) * 0.02, (i // 5 - 0.5) * 0.02, 0.04]
+            ):
+                state.set(cube, axis, state.get(target, axis) + offset)
+            for axis in ["vx", "vy", "vz", "wx", "wy", "wz"]:
+                state.set(cube, axis, 0)
+        env.set_state(state)
+        for _ in range(1000):
+            env._robot_env.sim.step()  # pylint: disable=protected-access
+        env._current_state = (
+            env._get_object_centric_state()
+        )  # pylint: disable=protected-access
+        assert env._check_goals()  # pylint: disable=protected-access
+    finally:
+        env.close()

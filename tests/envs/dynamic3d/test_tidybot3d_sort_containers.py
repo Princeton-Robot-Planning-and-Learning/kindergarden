@@ -60,3 +60,43 @@ def test_sort_goals_follow_bins(count: int):
             assert pos[2] + size[2] < 0.1
     finally:
         env.close()
+
+
+def test_twenty_sorted_cubes_remain_successful_after_settling() -> None:
+    """Five separated cubes fit in each bin and remain scored after settling."""
+    path = (
+        Path(kinder.__path__[0])
+        / "envs/dynamic3d/tasks/SortClutteredBlocks3D"
+        / "SortClutteredBlocks3D-o20-sort_the_cluttered_blocks_into_bins.json"
+    )
+    env = ObjectCentricTidyBot3DEnv(
+        num_objects=20,
+        task_config_path=str(path),
+        scene_bg=False,
+        allow_state_access=True,
+    )
+    try:
+        env.reset(seed=0)
+        state = env._get_current_state()  # pylint: disable=protected-access
+        counts: dict[str, int] = {}
+        for _, name, region in env.task_config["goal_state"]:
+            target = env.task_config["regions"][region]["target"]
+            obj = state.get_object_from_name(target)
+            cube = state.get_object_from_name(name)
+            index = counts.get(target, 0)
+            counts[target] = index + 1
+            for axis, offset in zip(
+                "xyz", [(index % 3 - 1) * 0.022, (index // 3 - 0.5) * 0.022, 0.045]
+            ):
+                state.set(cube, axis, state.get(obj, axis) + offset)
+            for axis in ["vx", "vy", "vz", "wx", "wy", "wz"]:
+                state.set(cube, axis, 0)
+        env.set_state(state)
+        for _ in range(1000):
+            env._robot_env.sim.step()  # pylint: disable=protected-access
+        env._current_state = (
+            env._get_object_centric_state()
+        )  # pylint: disable=protected-access
+        assert env._check_goals()  # pylint: disable=protected-access
+    finally:
+        env.close()

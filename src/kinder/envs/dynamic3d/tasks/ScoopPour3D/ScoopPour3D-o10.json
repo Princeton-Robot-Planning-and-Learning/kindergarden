@@ -9,6 +9,11 @@
     },
     "scene": "lab2_kitchen_gray",
     "regions": {
+        "target_bin_region": {
+            "target": "bin_green_0",
+            "ranges": [[-0.185, -0.11, 0.03, 0.185, 0.11, 0.055]],
+            "rgba": [0.1, 0.8, 0.1, 0.0]
+        },
         "blocks_init_region": {
             "target": "kitchen_island",
             "shelf": 2,
@@ -110,15 +115,15 @@
         ["in", "scoop_0", "scoop_init_region"]
     ],
     "goal_state": [
-        ["on", "cube_0", "kitchen_island_shelf_1_partition_1_region"],
-        ["on", "cube_1", "kitchen_island_shelf_1_partition_1_region"],
-        ["on", "cube_2", "kitchen_island_shelf_1_partition_1_region"],
-        ["on", "cube_3", "kitchen_island_shelf_1_partition_1_region"],
-        ["on", "cube_4", "kitchen_island_shelf_1_partition_1_region"],
-        ["on", "cube_5", "kitchen_island_shelf_1_partition_1_region"],
-        ["on", "cube_6", "kitchen_island_shelf_1_partition_1_region"],
-        ["on", "cube_7", "kitchen_island_shelf_1_partition_1_region"],
-        ["on", "cube_8", "kitchen_island_shelf_1_partition_1_region"],
-        ["on", "cube_9", "kitchen_island_shelf_1_partition_1_region"]
+        ["on", "cube_0", "target_bin_region"],
+        ["on", "cube_1", "target_bin_region"],
+        ["on", "cube_2", "target_bin_region"],
+        ["on", "cube_3", "target_bin_region"],
+        ["on", "cube_4", "target_bin_region"],
+        ["on", "cube_5", "target_bin_region"],
+        ["on", "cube_6", "target_bin_region"],
+        ["on", "cube_7", "target_bin_region"],
+        ["on", "cube_8", "target_bin_region"],
+        ["on", "cube_9", "target_bin_region"]
     ]
 }

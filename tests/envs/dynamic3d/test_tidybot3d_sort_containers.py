@@ -97,9 +97,9 @@ def test_twenty_sorted_cubes_remain_successful_after_settling() -> None:
         env.set_state(state)
         for _ in range(1000):
             env._robot_env.sim.step()  # pylint: disable=protected-access
-        env._current_state = (
-            env._get_object_centric_state()
-        )  # pylint: disable=protected-access
+        # pylint: disable=protected-access
+        env._current_state = env._get_object_centric_state()
+        # pylint: enable=protected-access
         assert env._check_goals()  # pylint: disable=protected-access
     finally:
         env.close()

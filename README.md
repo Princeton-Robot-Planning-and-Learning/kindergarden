@@ -19,3 +19,6 @@ These clips do not establish complete seed/count coverage. The associated draft 
 - `tossing-farther-no-toss-bypass.gif`: farther-bin o1 seed0 still solved by driving around barrier and placing. Success357+60settling, full cube contained; wide navigation view then closeup. This shows why distance alone does not require tossing.
 
 Both new clips show4x playback and exact step/goal labels. Public code review descriptions explain controller scope and limitations.
+
+- `sort-before-no-bin-success.gif`: normal-reset o4 seed0 original controller on original fixed table goals; first success193, final299 after100releasedsteps, all4cubes ontableoutsidebins.8x playback.
+- `sort-after-rejects-table-placement.gif`: exact299legalactions on4e7a00f fixed bin-relativegoals; finalgoalfalse.5x playback. These are action-only episodes, not injected states. Same action sequence is verified; bitwise final simulator state comparison is not claimed.

@@ -86,9 +86,9 @@ def test_available_instructions_lists_alternatives() -> None:
 
 def test_rejects_unregistered_count_and_explicit_task_path() -> None:
     """Bad arguments fail at construction rather than as a missing-file error."""
-    # Shelf3D registers 1, 2 and 8; 3 lies inside that range but has no task.
+    # Shelf3D registers 1, 2, 3, 4, 6 and 8; 5 lies inside that range but has no task.
     with pytest.raises(ValueError, match="registers counts"):
-        Shelf3DEnv(num_objects=3)
+        Shelf3DEnv(num_objects=5)
 
     with pytest.raises(ValueError, match="builds task_config_path"):
         Shelf3DEnv(num_objects=1, task_config_path="ignored.json")

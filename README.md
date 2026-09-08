@@ -22,3 +22,5 @@ Both new clips show4x playback and exact step/goal labels. Public code review de
 
 - `sort-before-no-bin-success.gif`: normal-reset o4 seed0 original controller on original fixed table goals; first success193, final299 after100releasedsteps, all4cubes ontableoutsidebins.8x playback.
 - `sort-after-rejects-table-placement.gif`: exact299legalactions on4e7a00f fixed bin-relativegoals; finalgoalfalse.5x playback. These are action-only episodes, not injected states. Same action sequence is verified; bitwise final simulator state comparison is not claimed.
+
+- `tossing-reach-drop-before-after-background.gif`: replaces the plain-scene comparison in#191 at the user's request. Full MimicLabs scene backgrounds (`scene_bg=True`), camera inside the room; exact final goal/containment results match the original plain-scene renders.4x playback.

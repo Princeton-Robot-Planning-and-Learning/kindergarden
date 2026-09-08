@@ -30,3 +30,5 @@ Both new clips show4x playback and exact step/goal labels. Public code review de
 - `scoop-pour-controller-background.gif`: full-scene o10 seed0 source-tray pour, first correctedgoal780, source trayreleased1164, armwithdrawn1227,100settlingsteps through1327alltrue. All10fullcubeshapes inside receiver; literal former drawerpredicate evaluatedreadonly remainsfalse on samepatchedtrajectory (not separateold-checkoutreplay). Source traydirectlypoured,scooptoolunused. Oneconstructive seed, notsuccessrate.
 
 - `sort-intended-background.gif`: exact459legalactions from normal-reset o4seed0 successfulcontroller, nowrendered withscene_bg=True. Includes100releasedsettlingsteps; finalgoaltrue and priortracecheckedfullcubecorners. Replacesoriginalplainbackgroundsort.gif in#185. Globalpaletteencoding reducesdownloadsize withoutchangingtrajectory.
+
+Tossing barrier mobility: `tossing-barrier-topple-background.gif` shows normal-reset o1 seed0 with 50 legal forward-base actions followed by 30 zero actions, full scene background. The barrier topples and the robot crosses; this is a passage test, not cube-delivery success. Evidence commit 26e7f56 in the Sept8 barrier review.

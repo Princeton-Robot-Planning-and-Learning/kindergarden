@@ -14,6 +14,7 @@ def test_restore_drawer_positions() -> None:
     """Restore all drawer slides and their attached goal without moving fixtures."""
     kinder.register_all_environments()
     env = kinder.make("kinder/SweepIntoDrawer3D-o5-v0", allow_state_access=True)
+    assert env.action_space.shape is not None
     inner = getattr(env.unwrapped, "_object_centric_env")
     try:
         env.reset(seed=0)

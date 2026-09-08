@@ -5,7 +5,7 @@
 **Random Action Stats**: Total Reward: -25.00, Success: No, Steps: 25
 
 ## Description
-A 3D task where the robot must transfer a pile of objects from one bin to another. There is a tool available that may be used for scooping and pouring.
+A 3D task where the robot must transfer a pile of objects from one bin to another.
 
 The robot has a holonomic mobile base with powered casters and a Kinova Gen3 arm.
 
@@ -17,7 +17,7 @@ The robot can control:
 
 
 ## Available Variants
-The variants require scooping and pouring different numbers of objects.
+The variants require transferring different numbers of objects between bins.
 
 - [`kinder/ScoopPour3D-o10-v0`](variants/ScoopPour3D/ScoopPour3D-o10.md) (o10)
 - [`kinder/ScoopPour3D-o20-v0`](variants/ScoopPour3D/ScoopPour3D-o20.md) (o20)
@@ -25,11 +25,6 @@ The variants require scooping and pouring different numbers of objects.
 - [`kinder/ScoopPour3D-o40-v0`](variants/ScoopPour3D/ScoopPour3D-o40.md) (o40)
 - [`kinder/ScoopPour3D-o50-v0`](variants/ScoopPour3D/ScoopPour3D-o50.md) (o50)
 - [`kinder/ScoopPour3D-o100-v0`](variants/ScoopPour3D/ScoopPour3D-o100.md) (o100)
-
-The intermediate counts allow experiments to increase the number of cubes without
-jumping directly from 10 to 100. Physics cost depends on the coupled contacts and
-can grow faster than the object count. The 100-cube variant remains available;
-choose an action horizon and wall-clock budget appropriate to the selected count.
 
 ## Initial State Distribution
 ![initial state GIF](assets/initial_state_gifs/ScoopPour3D.gif)
@@ -52,10 +47,11 @@ The episode terminates when all objects are placed at their respective targets.
 
 
 ## References
-TidyBot++: An Open-Source Holonomic Mobile Manipulator
-for Robot Learning
-- Jimmy Wu, William Chong, Robert Holmberg, Aaditya Prasad, Yihuai Gao,
-  Oussama Khatib, Shuran Song, Szymon Rusinkiewicz, Jeannette Bohg
-- Conference on Robot Learning (CoRL), 2024
+TidyBot++: An Open-Source Holonomic Mobile Manipulator.
 
-https://github.com/tidybot2/tidybot2
+               for Robot Learning
+               - Jimmy Wu, William Chong, Robert Holmberg, Aaditya Prasad, Yihuai Gao,
+                 Oussama Khatib, Shuran Song, Szymon Rusinkiewicz, Jeannette Bohg
+               - Conference on Robot Learning (CoRL), 2024
+
+               https://github.com/tidybot2/tidybot2

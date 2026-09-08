@@ -35,7 +35,7 @@ FINE_TIMESTEP_ENVS: dict[str, tuple[int, int]] = {
     "LimbRepositioning3D": (1500, 30),
 }
 
-NATURALLY_SORTED_VARIANT_ENVS = {"ConstrainedCupboard3D"}
+NATURALLY_SORTED_VARIANT_ENVS = {"ConstrainedCupboard3D", "ScoopPour3D"}
 
 
 def natural_sort_key(value: str) -> tuple[tuple[int, int | str], ...]:

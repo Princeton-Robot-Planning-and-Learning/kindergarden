@@ -32,3 +32,5 @@ Both new clips show4x playback and exact step/goal labels. Public code review de
 - `sort-intended-background.gif`: exact459legalactions from normal-reset o4seed0 successfulcontroller, nowrendered withscene_bg=True. Includes100releasedsettlingsteps; finalgoaltrue and priortracecheckedfullcubecorners. Replacesoriginalplainbackgroundsort.gif in#185. Globalpaletteencoding reducesdownloadsize withoutchangingtrajectory.
 
 Tossing barrier mobility: `tossing-barrier-topple-background.gif` shows normal-reset o1 seed0 with 50 legal forward-base actions followed by 30 zero actions, full scene background. The barrier topples and the robot crosses; this is a passage test, not cube-delivery success. Evidence commit 26e7f56 in the Sept8 barrier review.
+
+Sorting o20 partial controller: `sort-o20-partial-background.gif` shows a normal-reset seed0 trajectory with full scene background, 6,001 legal actions and no task success. Final official goals and full-cube containment both count15/20; the blue bin has been tipped onto its side. The clip is labelled partial and accelerated; it is not a full20-block witness.

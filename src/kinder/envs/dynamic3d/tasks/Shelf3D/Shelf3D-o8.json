@@ -65,6 +65,62 @@
             "target": "ground",
             "ranges": [[0.5, -0.7, 0.7, -0.65]],
             "yaw_ranges": [[0, 0]]
+        },
+        "cupboard_1_cube_1_goal_region": {
+            "target": "cupboard_1",
+            "shelf": 2,
+            "ranges": [[-0.3, -0.12, 0.00, 0.3, 0.12, 0.03]],
+            "rgba": [1.0, 1.0, 0.0, 0.0],
+            "yaw_ranges": [[0, 360]]
+        },
+        "cupboard_1_cube_2_goal_region": {
+            "target": "cupboard_1",
+            "shelf": 2,
+            "ranges": [[-0.3, -0.12, 0.00, 0.3, 0.12, 0.03]],
+            "rgba": [1.0, 1.0, 0.0, 0.0],
+            "yaw_ranges": [[0, 360]]
+        },
+        "cupboard_1_cube_3_goal_region": {
+            "target": "cupboard_1",
+            "shelf": 2,
+            "ranges": [[-0.3, -0.12, 0.00, 0.3, 0.12, 0.03]],
+            "rgba": [1.0, 1.0, 0.0, 0.0],
+            "yaw_ranges": [[0, 360]]
+        },
+        "cupboard_1_cube_4_goal_region": {
+            "target": "cupboard_1",
+            "shelf": 2,
+            "ranges": [[-0.3, -0.12, 0.00, 0.3, 0.12, 0.03]],
+            "rgba": [1.0, 1.0, 0.0, 0.0],
+            "yaw_ranges": [[0, 360]]
+        },
+        "cupboard_1_cube_5_goal_region": {
+            "target": "cupboard_1",
+            "shelf": 2,
+            "ranges": [[-0.3, -0.12, 0.00, 0.3, 0.12, 0.03]],
+            "rgba": [1.0, 1.0, 0.0, 0.0],
+            "yaw_ranges": [[0, 360]]
+        },
+        "cupboard_1_cube_6_goal_region": {
+            "target": "cupboard_1",
+            "shelf": 2,
+            "ranges": [[-0.3, -0.12, 0.00, 0.3, 0.12, 0.03]],
+            "rgba": [1.0, 1.0, 0.0, 0.0],
+            "yaw_ranges": [[0, 360]]
+        },
+        "cupboard_1_cube_7_goal_region": {
+            "target": "cupboard_1",
+            "shelf": 2,
+            "ranges": [[-0.3, -0.12, 0.00, 0.3, 0.12, 0.03]],
+            "rgba": [1.0, 1.0, 0.0, 0.0],
+            "yaw_ranges": [[0, 360]]
+        },
+        "cupboard_1_cube_8_goal_region": {
+            "target": "cupboard_1",
+            "shelf": 2,
+            "ranges": [[-0.3, -0.12, 0.00, 0.3, 0.12, 0.03]],
+            "rgba": [1.0, 1.0, 0.0, 0.0],
+            "yaw_ranges": [[0, 360]]
         }
     },
     "objects": {
@@ -135,5 +191,15 @@
         ["on", "cube6", "ground_6_object_init_region"],
         ["on", "cube7", "ground_7_object_init_region"],
         ["on", "cube8", "ground_8_object_init_region"]
+    ],
+    "goal_state": [
+        ["on", "cube1", "cupboard_1_cube_1_goal_region"],
+        ["on", "cube2", "cupboard_1_cube_2_goal_region"],
+        ["on", "cube3", "cupboard_1_cube_3_goal_region"],
+        ["on", "cube4", "cupboard_1_cube_4_goal_region"],
+        ["on", "cube5", "cupboard_1_cube_5_goal_region"],
+        ["on", "cube6", "cupboard_1_cube_6_goal_region"],
+        ["on", "cube7", "cupboard_1_cube_7_goal_region"],
+        ["on", "cube8", "cupboard_1_cube_8_goal_region"]
     ]
 }

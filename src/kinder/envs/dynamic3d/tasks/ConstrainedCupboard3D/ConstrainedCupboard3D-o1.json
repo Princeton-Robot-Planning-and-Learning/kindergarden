@@ -92,11 +92,6 @@
                 [-5, 5]
             ]
         },
-        "cupboard_0_shelf_1_goal": {
-            "target": "cupboard_0",
-            "shelf": 1,
-            "rgba": [1.0, 0.0, 0.0, 0.0]
-        },
         "cupboard_1_shelf_0_goal": {
             "target": "cupboard_1",
             "shelf": 0,
@@ -128,7 +123,6 @@
         ["on", "robot", "robot_task_init_region"]
     ],
     "goal_state": [
-        ["on", "cuboid_0", "cupboard_1_shelf_0_goal"],
-        ["on", "cuboid_0", "cupboard_0_shelf_1_goal"]
+        ["on", "cuboid_0", "cupboard_1_shelf_0_goal"]
     ]
 }

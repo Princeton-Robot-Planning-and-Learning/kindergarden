@@ -12,3 +12,10 @@ GIFs for the September 7, 2026 draft reviews. This branch contains review media 
 | tossing-farther.gif | Both throws from normal-reset o2 seed0 on469372f; original barrier and movable bin.0.5x playback. Extra close-up camera is visualization only. |
 
 These clips do not establish complete seed/count coverage. The associated draft PR bodies state validation limits. In particular, moving the tossing bin does not make tossing mandatory, and no complete ScoopPour controller success is claimed.
+
+## September 8 follow-up
+
+- `tossing-reach-drop-before-after.gif`: original o2 seed0 reach/drop controls on56369da versus farther box469372f. Old layout succeeds366+60settling; same426controls fail with farther box. Fixed-action comparison, not all-policy impossibility evidence.
+- `tossing-farther-no-toss-bypass.gif`: farther-bin o1 seed0 still solved by driving around barrier and placing. Success357+60settling, full cube contained; wide navigation view then closeup. This shows why distance alone does not require tossing.
+
+Both new clips show4x playback and exact step/goal labels. Public code review descriptions explain controller scope and limitations.

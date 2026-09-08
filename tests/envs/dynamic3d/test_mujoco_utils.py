@@ -101,8 +101,8 @@ def test_a_schedule_holds_each_row_for_one_millisecond():
 def test_a_schedule_shorter_or_longer_than_the_control_period_is_rejected(rows):
     """A schedule covers the whole period, so a partial one is a caller bug.
 
-    Accepting one would mean inventing a rule for the ticks it does not cover, and
-    every such rule silently reinterprets the caller's timing.
+    Accepting one would mean inventing a rule for the ticks it does not cover, and every
+    such rule silently reinterprets the caller's timing.
     """
     env = make_env()
     with pytest.raises(AssertionError, match="control schedule"):

@@ -24,3 +24,5 @@ Both new clips show4x playback and exact step/goal labels. Public code review de
 - `sort-after-rejects-table-placement.gif`: exact299legalactions on4e7a00f fixed bin-relativegoals; finalgoalfalse.5x playback. These are action-only episodes, not injected states. Same action sequence is verified; bitwise final simulator state comparison is not claimed.
 
 - `tossing-reach-drop-before-after-background.gif`: replaces the plain-scene comparison in#191 at the user's request. Full MimicLabs scene backgrounds (`scene_bg=True`), camera inside the room; exact final goal/containment results match the original plain-scene renders.4x playback.
+
+- `rearrange-five-single-object.gif` and `rearrange-five-two-object.gif`: alltenaffected#188instructionvariants, seed0, normal-reset action-only solutions. Eachretains60/60successafterrelease; samecontrols underoriginalgoals0/60, finalobservedphysicalstatesexactlyequal. Fiveinstructionexcerpts perclip,10x playback, fullscene backgrounds; finalplacement excerpts,notfullmovies. No bowlheld/lifted,no finalrobot-objectcontacts;maxfinalbowldisplacement0.29mm.

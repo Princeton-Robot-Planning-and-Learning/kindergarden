@@ -20,7 +20,16 @@ The robot can control:
 The variants require scooping and pouring different numbers of objects.
 
 - [`kinder/ScoopPour3D-o10-v0`](variants/ScoopPour3D/ScoopPour3D-o10.md) (o10)
+- [`kinder/ScoopPour3D-o20-v0`](variants/ScoopPour3D/ScoopPour3D-o20.md) (o20)
+- [`kinder/ScoopPour3D-o30-v0`](variants/ScoopPour3D/ScoopPour3D-o30.md) (o30)
+- [`kinder/ScoopPour3D-o40-v0`](variants/ScoopPour3D/ScoopPour3D-o40.md) (o40)
+- [`kinder/ScoopPour3D-o50-v0`](variants/ScoopPour3D/ScoopPour3D-o50.md) (o50)
 - [`kinder/ScoopPour3D-o100-v0`](variants/ScoopPour3D/ScoopPour3D-o100.md) (o100)
+
+The intermediate counts allow experiments to increase the number of cubes without
+jumping directly from 10 to 100. Physics cost depends on the coupled contacts and
+can grow faster than the object count. The 100-cube variant remains available;
+choose an action horizon and wall-clock budget appropriate to the selected count.
 
 ## Initial State Distribution
 ![initial state GIF](assets/initial_state_gifs/ScoopPour3D.gif)

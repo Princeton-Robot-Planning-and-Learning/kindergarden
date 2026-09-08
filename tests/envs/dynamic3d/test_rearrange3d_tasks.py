@@ -38,6 +38,7 @@ def test_rearrange_resting_goal(task_path: Path) -> None:
             state.set(obj, "x", state.get(bowl, "x") + x)
             state.set(obj, "y", state.get(bowl, "y") + y)
         inner.set_state(state)
+        assert env.action_space.shape is not None
         for _ in range(10):
             env.step(np.zeros(env.action_space.shape, dtype=np.float32))
         assert inner._check_goals()  # pylint: disable=protected-access

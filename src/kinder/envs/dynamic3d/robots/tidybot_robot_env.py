@@ -253,7 +253,7 @@ class TidyBotRobotEnv(RobotEnv):
             "tidybot.xml",
             str(Path(__file__).parents[1] / "models" / "assets"),
         )
-        super().reset(seed=seed, options={"xml": xml_string})
+        super().reset(seed=seed, options={**options, "xml": xml_string})
 
         # Setup references to robot state/actuator buffers
         self._setup_robot_references()

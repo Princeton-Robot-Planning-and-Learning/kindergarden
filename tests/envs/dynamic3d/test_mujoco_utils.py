@@ -1,5 +1,8 @@
 """Tests for MujocoEnv's per-substep control schedule."""
 
+from unittest.mock import patch
+
+import mujoco
 import numpy as np
 import pytest
 from gymnasium.wrappers import RenderCollection
@@ -159,3 +162,34 @@ def test_contact_trajectory_matches_explicit_forward_replay(integrator):
     finally:
         stepped.close()
         replayed.close()
+
+
+def test_deferred_reset_initializes_dynamics_after_placement():
+    """Pose edits during reset can precede the first full constraint solve."""
+    immediate, deferred = _SliderEnv(), _SliderEnv()
+    try:
+        immediate.reset(options={"xml": _XML})
+        native_forward = mujoco.mj_forward  # pylint: disable=no-member
+        with patch.object(mujoco, "mj_forward", wraps=native_forward) as forward:
+            deferred.reset(options={"xml": _XML, "defer_dynamics": True})
+            assert forward.call_count == 0
+            deferred.sim.data.mj_data.qpos[:] = 0.25
+            deferred.sim.forward()
+            assert forward.call_count == 0
+            np.testing.assert_allclose(deferred.sim.data.mj_data.xpos[1], [0.25, 0, 0])
+            deferred.sim.initialize_dynamics()
+            assert forward.call_count == 1
+        immediate.sim.data.mj_data.qpos[:] = 0.25
+        immediate.sim.forward()
+        for action in [np.array([0.7]), np.array([-0.3])]:
+            immediate.step(action)
+            deferred.step(action)
+            np.testing.assert_array_equal(
+                immediate.get_obs()["qpos"], deferred.get_obs()["qpos"]
+            )
+            np.testing.assert_array_equal(
+                immediate.get_obs()["qvel"], deferred.get_obs()["qvel"]
+            )
+    finally:
+        immediate.close()
+        deferred.close()

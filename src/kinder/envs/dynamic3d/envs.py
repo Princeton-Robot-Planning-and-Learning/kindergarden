@@ -854,6 +854,7 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
         # Reset the underlying TidyBot robot environment
         robot_options = options.copy() if options is not None else {}
         robot_options["xml"] = xml_string
+        robot_options["defer_dynamics"] = True
         self._robot_env.reset(options=robot_options)
 
         # Initialize object poses
@@ -861,6 +862,8 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
 
         # Initialize the robot pose
         self._initialize_robot_pose()
+
+        self._robot_env.sim.initialize_dynamics()
 
         # step several times to get the initial state
         action_shape = self.action_space.shape

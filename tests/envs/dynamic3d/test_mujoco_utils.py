@@ -123,3 +123,39 @@ def test_a_schedule_survives_a_gymnasium_wrapper():
         unwrapped.get_obs()["qpos"], wrapped.unwrapped.get_obs()["qpos"]
     )
     assert len(wrapped.render()) == 1
+
+
+@pytest.mark.parametrize("integrator", ["Euler", "RK4", "implicitfast"])
+def test_contact_trajectory_matches_explicit_forward_replay(integrator):
+    """Frictional contact and changing controls match the full forward replay."""
+    xml = f"""
+    <mujoco>
+      <option integrator="{integrator}"/>
+      <worldbody>
+        <geom type="plane" size="2 2 .1"/>
+        <body name="block" pos="0 0 .12">
+          <freejoint name="free"/>
+          <geom type="box" size=".1 .1 .1" mass="1"/>
+        </body>
+      </worldbody>
+      <actuator><motor joint="free" gear="1 0 0 0 0 0"/></actuator>
+    </mujoco>
+    """
+    stepped, replayed = _SliderEnv(), _SliderEnv()
+    try:
+        stepped.reset(options={"xml": xml})
+        replayed.reset(options={"xml": xml})
+        for force in [0.0, 2.0, -2.0, 5.0, 0.0]:
+            schedule = np.linspace(force, -force, SCHEDULE_ROWS)[:, None]
+            stepped.step(schedule)
+            replay_ticks(replayed, np.repeat(schedule, TICKS_PER_ROW, axis=0))
+            np.testing.assert_array_equal(
+                stepped.get_obs()["qpos"], replayed.get_obs()["qpos"]
+            )
+            np.testing.assert_array_equal(
+                stepped.get_obs()["qvel"], replayed.get_obs()["qvel"]
+            )
+        assert stepped.sim.data.mj_data.ncon > 0
+    finally:
+        stepped.close()
+        replayed.close()

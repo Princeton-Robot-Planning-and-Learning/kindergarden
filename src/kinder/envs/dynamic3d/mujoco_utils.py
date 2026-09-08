@@ -170,7 +170,6 @@ class MujocoEnv(gymnasium.Env[MjObs, Array]):
 
         for tick in range(num_sim_steps):
             self._update_ctrl(schedule[tick // ticks_per_row])
-            self.sim.forward()
             self.sim.step()
 
         # Post-action processing

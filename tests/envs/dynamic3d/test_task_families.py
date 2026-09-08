@@ -6,6 +6,7 @@ import pytest
 
 from kinder.envs.dynamic3d import envs as dynamic3d_envs
 from kinder.envs.dynamic3d.task_families import (
+    _TASKS_DIR,
     TASK_FAMILY_ENVS,
     ConstrainedCupboard3DEnv,
     Shelf3DEnv,
@@ -85,9 +86,9 @@ def test_available_instructions_lists_alternatives() -> None:
 
 def test_rejects_unregistered_count_and_explicit_task_path() -> None:
     """Bad arguments fail at construction rather than as a missing-file error."""
-    # Shelf3D registers 1, 2 and 8; 3 lies inside that range but has no task.
+    # Shelf3D registers 1, 2, 3, 4, 6 and 8; 5 lies inside that range but has no task.
     with pytest.raises(ValueError, match="registers counts"):
-        Shelf3DEnv(num_objects=3)
+        Shelf3DEnv(num_objects=5)
 
     with pytest.raises(ValueError, match="builds task_config_path"):
         Shelf3DEnv(num_objects=1, task_config_path="ignored.json")
@@ -114,3 +115,16 @@ def test_family_resets_at_each_count(
         finally:
             env.close()
             inner.close()
+
+
+def test_every_task_declares_a_goal() -> None:
+    """Every shipped task JSON has a non-empty goal_state.
+
+    The goal check treats a missing goal as never satisfied, so a task without one runs
+    to its step limit on every episode and can never be solved.
+    """
+    task_files = sorted(_TASKS_DIR.rglob("*.json"))
+    assert task_files
+    for path in task_files:
+        with open(path, encoding="utf-8") as task_file:
+            assert json.load(task_file).get("goal_state"), path

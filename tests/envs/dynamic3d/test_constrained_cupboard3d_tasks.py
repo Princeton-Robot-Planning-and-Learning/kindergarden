@@ -6,11 +6,15 @@ import pytest
 import kinder
 
 
-@pytest.mark.parametrize(("count", "expected_cupboards"), [(3, 6), (4, 6), (5, 11)])
-def test_intermediate_constrained_cupboard_task(
-    count: int, expected_cupboards: int
-) -> None:
-    """Each intermediate task registers, resets, and contains the declared rods."""
+@pytest.mark.parametrize(
+    ("count", "expected_cupboards"), [(1, 3), (2, 3), (3, 6), (4, 6), (5, 11), (6, 11)]
+)
+def test_constrained_cupboard_task(count: int, expected_cupboards: int) -> None:
+    """Each registered task resets, declares its rods, and has a satisfiable goal.
+
+    The goal check builds one state with every rod at the centre of its goal region,
+    so a goal that names two disjoint regions for the same rod fails here.
+    """
     kinder.register_all_environments()
     env = kinder.make(
         f"kinder/ConstrainedCupboard3D-o{count}-v0",

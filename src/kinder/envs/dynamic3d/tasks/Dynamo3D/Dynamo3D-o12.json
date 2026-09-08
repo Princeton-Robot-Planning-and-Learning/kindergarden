@@ -151,9 +151,9 @@
             "resolution": [640, 480]
         },
         "task_view": {
-            "position": [0.5, 0, 2.5],
-            "lookat": [0.5, 0, 0],
-            "fovy": 60,
+            "position": [1.0, 1.0, 4.5],
+            "lookat": [1.0, 1.0, 0],
+            "fovy": 70,
             "resolution": [640, 480]
         }
     },

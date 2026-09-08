@@ -4,7 +4,7 @@
         <inertial>
             <mass value="1" />
             <origin xyz="0 0 0" rpy="0 0 0" />
-            <inertia ixx="0.070968" ixy="-0.009135" ixz="-0.000056" iyy="0.048896" iyz="0.000007" izz="0.086415" />
+            <inertia ixx="0.0384428" ixy="9.06638e-06" ixz="3.16986e-05" iyy="0.0417037" iyz="-0.00168365" izz="0.00934002" />
         </inertial>
         <visual>
             <geometry>

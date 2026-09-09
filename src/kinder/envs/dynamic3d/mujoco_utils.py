@@ -112,6 +112,11 @@ class MujocoEnv(gymnasium.Env[MjObs, Array]):
         seed: int | None = None,
         options: dict[str, Any] | None = None,
     ) -> tuple[MjObs, dict[str, Any]]:
+        """Reset the model, optionally deferring dynamics until scene placement.
+
+        With ``options["defer_dynamics"]``, forward calls update positions and
+        velocities until ``sim.initialize_dynamics()`` completes initialization.
+        """
         # Reset the random seed.
         super().reset(seed=seed, options=options)
 
@@ -123,7 +128,9 @@ class MujocoEnv(gymnasium.Env[MjObs, Array]):
         self._close_sim()
 
         # Initialize the simulation with the provided XML string.
-        self._create_sim(xml_string)
+        self._create_sim(
+            xml_string, defer_dynamics=options.get("defer_dynamics", False)
+        )
 
         assert self.sim is not None, "Simulation must be initialized after _create_sim"
         self.sim.reset()
@@ -170,7 +177,6 @@ class MujocoEnv(gymnasium.Env[MjObs, Array]):
 
         for tick in range(num_sim_steps):
             self._update_ctrl(schedule[tick // ticks_per_row])
-            self.sim.forward()
             self.sim.step()
 
         # Post-action processing
@@ -323,17 +329,19 @@ class MujocoEnv(gymnasium.Env[MjObs, Array]):
         self.sim = None
         self.timestep = None
 
-    def _create_sim(self, xml_string: str) -> None:
+    def _create_sim(self, xml_string: str, *, defer_dynamics: bool = False) -> None:
         """Initialize the MuJoCo simulation with the provided XML string. Also resets
         the timestep counter.
 
         Args:
             xml_string: A string containing the MuJoCo XML model.
+            defer_dynamics: Update geometry without solving constraints during placement.
         """
         self.sim: MjSim = MjSim(  # type: ignore[no-redef]
             xml_string,
             self.camera_width,
             self.camera_height,
+            defer_dynamics=defer_dynamics,
         )
         self.timestep: int = 0  # type: ignore[no-redef]
 
@@ -722,14 +730,23 @@ class MjData:
 class MjSim:
     """A simplified MjSim class for MuJoCo simulation."""
 
-    def __init__(self, xml_string: str, camera_width: int, camera_height: int) -> None:
+    def __init__(
+        self,
+        xml_string: str,
+        camera_width: int,
+        camera_height: int,
+        *,
+        defer_dynamics: bool = False,
+    ) -> None:
         """
         Args:
             xml_string: A string containing the MuJoCo XML model.
             camera_width: Width of camera images.
             camera_height: Height of camera images.
+            defer_dynamics: Defer constraint solves until initialize_dynamics().
         """
 
+        self._defer_dynamics = defer_dynamics
         xml_string = self._set_simulation_timestep(xml_string)
 
         self.model: MjModel = MjModel(xml_string)
@@ -774,9 +791,23 @@ class MjSim:
 
     def forward(self) -> None:
         """Synchronize derived quantities."""
-        mujoco.mj_forward(  # pylint: disable=no-member
-            self.model.mj_model, self.data.mj_data
-        )
+        if self._defer_dynamics:
+            # Placement needs transforms and bias forces, but no constraint solve.
+            mujoco.mj_fwdPosition(  # pylint: disable=no-member
+                self.model.mj_model, self.data.mj_data
+            )
+            mujoco.mj_fwdVelocity(  # pylint: disable=no-member
+                self.model.mj_model, self.data.mj_data
+            )
+        else:
+            mujoco.mj_forward(  # pylint: disable=no-member
+                self.model.mj_model, self.data.mj_data
+            )
+
+    def initialize_dynamics(self) -> None:
+        """Initialize full dynamics after all scene poses have been assigned."""
+        self._defer_dynamics = False
+        self.forward()
 
     def step(self) -> None:
         """Step the simulation."""

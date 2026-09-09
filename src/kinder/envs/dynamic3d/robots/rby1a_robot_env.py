@@ -107,7 +107,7 @@ class RBY1ARobotEnv(RobotEnv):
             "rby1a_model_v1.2.xml",
             str(Path(__file__).parents[1] / "models" / "rby1a"),
         )
-        super().reset(seed=seed, options={"xml": xml_string})
+        super().reset(seed=seed, options={**options, "xml": xml_string})
 
         # Setup references to robot state/actuator buffers
         self._setup_robot_references()

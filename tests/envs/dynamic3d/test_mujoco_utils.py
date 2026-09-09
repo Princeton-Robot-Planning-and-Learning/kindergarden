@@ -1,5 +1,8 @@
 """Tests for MujocoEnv's per-substep control schedule."""
 
+from unittest.mock import patch
+
+import mujoco
 import numpy as np
 import pytest
 from gymnasium.wrappers import RenderCollection
@@ -98,8 +101,8 @@ def test_a_schedule_holds_each_row_for_one_millisecond():
 def test_a_schedule_shorter_or_longer_than_the_control_period_is_rejected(rows):
     """A schedule covers the whole period, so a partial one is a caller bug.
 
-    Accepting one would mean inventing a rule for the ticks it does not cover, and
-    every such rule silently reinterprets the caller's timing.
+    Accepting one would mean inventing a rule for the ticks it does not cover, and every
+    such rule silently reinterprets the caller's timing.
     """
     env = make_env()
     with pytest.raises(AssertionError, match="control schedule"):
@@ -123,3 +126,70 @@ def test_a_schedule_survives_a_gymnasium_wrapper():
         unwrapped.get_obs()["qpos"], wrapped.unwrapped.get_obs()["qpos"]
     )
     assert len(wrapped.render()) == 1
+
+
+@pytest.mark.parametrize("integrator", ["Euler", "RK4", "implicitfast"])
+def test_contact_trajectory_matches_explicit_forward_replay(integrator):
+    """Frictional contact and changing controls match the full forward replay."""
+    xml = f"""
+    <mujoco>
+      <option integrator="{integrator}"/>
+      <worldbody>
+        <geom type="plane" size="2 2 .1"/>
+        <body name="block" pos="0 0 .12">
+          <freejoint name="free"/>
+          <geom type="box" size=".1 .1 .1" mass="1"/>
+        </body>
+      </worldbody>
+      <actuator><motor joint="free" gear="1 0 0 0 0 0"/></actuator>
+    </mujoco>
+    """
+    stepped, replayed = _SliderEnv(), _SliderEnv()
+    try:
+        stepped.reset(options={"xml": xml})
+        replayed.reset(options={"xml": xml})
+        for force in [0.0, 2.0, -2.0, 5.0, 0.0]:
+            schedule = np.linspace(force, -force, SCHEDULE_ROWS)[:, None]
+            stepped.step(schedule)
+            replay_ticks(replayed, np.repeat(schedule, TICKS_PER_ROW, axis=0))
+            np.testing.assert_array_equal(
+                stepped.get_obs()["qpos"], replayed.get_obs()["qpos"]
+            )
+            np.testing.assert_array_equal(
+                stepped.get_obs()["qvel"], replayed.get_obs()["qvel"]
+            )
+        assert stepped.sim.data.mj_data.ncon > 0
+    finally:
+        stepped.close()
+        replayed.close()
+
+
+def test_deferred_reset_initializes_dynamics_after_placement():
+    """Pose edits during reset can precede the first full constraint solve."""
+    immediate, deferred = _SliderEnv(), _SliderEnv()
+    try:
+        immediate.reset(options={"xml": _XML})
+        native_forward = mujoco.mj_forward  # pylint: disable=no-member
+        with patch.object(mujoco, "mj_forward", wraps=native_forward) as forward:
+            deferred.reset(options={"xml": _XML, "defer_dynamics": True})
+            assert forward.call_count == 0
+            deferred.sim.data.mj_data.qpos[:] = 0.25
+            deferred.sim.forward()
+            assert forward.call_count == 0
+            np.testing.assert_allclose(deferred.sim.data.mj_data.xpos[1], [0.25, 0, 0])
+            deferred.sim.initialize_dynamics()
+            assert forward.call_count == 1
+        immediate.sim.data.mj_data.qpos[:] = 0.25
+        immediate.sim.forward()
+        for action in [np.array([0.7]), np.array([-0.3])]:
+            immediate.step(action)
+            deferred.step(action)
+            np.testing.assert_array_equal(
+                immediate.get_obs()["qpos"], deferred.get_obs()["qpos"]
+            )
+            np.testing.assert_array_equal(
+                immediate.get_obs()["qvel"], deferred.get_obs()["qvel"]
+            )
+    finally:
+        immediate.close()
+        deferred.close()

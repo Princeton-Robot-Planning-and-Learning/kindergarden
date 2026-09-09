@@ -6,6 +6,7 @@ import os
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from pathlib import Path
+from collections.abc import Mapping
 from typing import Any
 
 import cv2 as cv
@@ -774,6 +775,61 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
                     obj.set_pose(pos, quat)
 
         self._robot_env.sim.forward()
+
+    def reset_ground_objects_to_regions(
+        self, object_region_names: Mapping[str, str]
+    ) -> ObjectCentricState:
+        """Reposition selected movable objects in named ground regions.
+
+        This is the in-episode counterpart of initial ground placement: it uses the
+        task's declared regions, the environment RNG, and the same collision-free
+        placement sampler, while leaving the robot and unselected objects untouched.
+        It is intentionally expressed in terms of region names so a task-and-motion
+        planner can bind a symbolic destination and then delegate continuous pose
+        sampling to KinDER.
+        """
+        assert self._ground_fixture is not None, "Need to call reset() first"
+        assert self._robot_env is not None, "Robot environment not initialized"
+        assert self._robot_env.sim is not None, "Simulation not initialized"
+        if not object_region_names:
+            return self._get_current_state()
+
+        configs: dict[str, dict[str, dict[str, Any]]] = {}
+        samplers: dict[str, Any] = {}
+        for object_name, region_name in object_region_names.items():
+            if object_name not in self._objects_dict:
+                raise ValueError(f"Object {object_name!r} not found in environment")
+            if region_name not in self.task_config.get("regions", {}):
+                raise ValueError(f"Region {region_name!r} not found in task configuration")
+            region = self.task_config["regions"][region_name]
+            if region["target"] != "ground":
+                raise ValueError(
+                    f"Region {region_name!r} must target 'ground', got {region['target']!r}"
+                )
+            obj = self._objects_dict[object_name]
+            obj_type = obj.__class__.REGISTERED_NAME  # type: ignore[attr-defined]
+            configs.setdefault(obj_type, {})[object_name] = self.task_config["objects"][
+                obj_type
+            ].get(object_name, {})
+            samplers[object_name] = self._ground_fixture.sample_pose_in_region
+
+        poses = sample_collision_free_positions(
+            configs,
+            self.np_random,
+            entity_region_names=dict(object_region_names),
+            entity_pos_yaw_samplers=samplers,
+        )
+        for poses_by_name in poses.values():
+            for object_name, pose in poses_by_name.items():
+                obj = self._objects_dict[object_name]
+                obj.set_pose(
+                    pose["position"], convert_yaw_to_quaternion(pose["yaw"])
+                )
+                obj.set_velocity([0.0, 0.0, 0.0], [0.0, 0.0, 0.0])
+
+        self._robot_env.sim.forward()
+        self._current_state = self._get_object_centric_state()
+        return self._get_current_state()
 
     @abc.abstractmethod
     def _create_action_space(  # type: ignore

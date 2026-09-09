@@ -601,7 +601,7 @@ class MjData:
         body_id = self.model._body_name2id[name]
         return self.mj_data.xpos[body_id]
 
-    def get_body_xmat(self, name):
+    def get_body_xmat(self, name: str) -> NDArray[np.float64]:
         """Get rotation of a mujoco body as matrix using body name.
 
         Args:

@@ -603,3 +603,36 @@ def test_a_cube_beside_the_beam_is_not_in_the_goal_region():
     on_the_ground = world_point((seesaw.beam_length / 2) * 0.5, 0.0)
     on_the_ground[2] = np.float32(seesaw_pos[2] + 0.018)
     assert not region.check_in_region(on_the_ground)
+
+
+def test_balance_uses_world_beam_inclination():
+    """A tilted or inverted pivot must not make a level hinge count as balanced."""
+    env = _get_balance_env()
+    try:
+        env.reset(seed=0)
+        seesaw = env._objects_dict["seesaw_1"]  # pylint: disable=protected-access
+        assert isinstance(seesaw, GeneratedSeesaw)
+        assert seesaw.env is not None and seesaw.env.sim is not None
+        sim = seesaw.env.sim
+        base_addr = sim.model.get_joint_qpos_addr(seesaw.joint_name)
+        hinge_addr = sim.model.get_joint_qpos_addr("seesaw_1_hinge")
+        cases = [
+            ((0, 0, 0), 0, True),
+            ((0, 0, 90), 0, True),
+            ((0, 0, 90), 4, True),
+            ((0, 0, 90), 6, False),
+            ((30, 0, 0), 0, False),
+            ((0, 30, 0), 0, False),
+            ((180, 0, 0), 0, False),
+            ((0, 30, 0), -30, True),
+        ]
+        for base_angles, hinge_angle, expected in cases:
+            quat = Rotation.from_euler("xyz", base_angles, degrees=True).as_quat()
+            sim.data.mj_data.qpos[base_addr + 3 : base_addr + 7] = quat[[3, 0, 1, 2]]
+            sim.data.mj_data.qpos[hinge_addr] = np.radians(hinge_angle)
+            sim.forward()
+            assert seesaw.is_balanced(5.0) == expected, (base_angles, hinge_angle)
+            # Observation helpers continue to report relative hinge angle.
+            assert np.isclose(seesaw.get_beam_tilt_angle_degrees(), hinge_angle)
+    finally:
+        env.close()

@@ -649,7 +649,7 @@ class GeneratedSeesaw(MujocoObject):
         The hinge joint angle represents the rotation of the beam around the Y-axis.
         A positive angle means the right side (positive X) is tilted down.
         A negative angle means the left side (negative X) is tilted down.
-        An angle of 0 means the beam is level/balanced.
+        An angle of 0 means the beam is level relative to its pivot base.
 
         Returns:
             The beam tilt angle in radians.
@@ -691,7 +691,13 @@ class GeneratedSeesaw(MujocoObject):
         Raises:
             ValueError: If environment is not set.
         """
-        angle_degrees = abs(self.get_beam_tilt_angle_degrees())
+        if self.env is None:
+            raise ValueError("Environment must be set to check beam balance")
+        assert self.env.sim is not None, "Simulation not initialized"
+        # The pivot has a freejoint, so the hinge angle alone does not determine
+        # whether the beam's upward surface normal is aligned with world up.
+        rotation = self.env.sim.data.get_body_xmat(f"{self.name}_beam").reshape(3, 3)
+        angle_degrees = float(np.degrees(np.arccos(np.clip(rotation[2, 2], -1.0, 1.0))))
         return angle_degrees <= tolerance_degrees
 
     def is_object_on_beam(

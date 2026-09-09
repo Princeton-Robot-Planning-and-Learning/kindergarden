@@ -11,7 +11,7 @@
     "regions": {
         "bin_init_region": {
             "target": "ground",
-            "ranges": [[2.6, -0.0005, 2.601, 0.0005]],
+            "ranges": [[2.6, -2.3, 3.42, 2.3]],
             "yaw_ranges": [[0, 0]]
         },
         "blocks_init_region": {

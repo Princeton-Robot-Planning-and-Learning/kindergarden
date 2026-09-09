@@ -21,6 +21,9 @@ The variants require picking and placing different numbers of objects.
 
 - [`kinder/Shelf3D-o1-v0`](variants/Shelf3D/Shelf3D-o1.md) (o1)
 - [`kinder/Shelf3D-o2-v0`](variants/Shelf3D/Shelf3D-o2.md) (o2)
+- [`kinder/Shelf3D-o3-v0`](variants/Shelf3D/Shelf3D-o3.md) (o3)
+- [`kinder/Shelf3D-o4-v0`](variants/Shelf3D/Shelf3D-o4.md) (o4)
+- [`kinder/Shelf3D-o6-v0`](variants/Shelf3D/Shelf3D-o6.md) (o6)
 - [`kinder/Shelf3D-o8-v0`](variants/Shelf3D/Shelf3D-o8.md) (o8)
 
 ## Initial State Distribution

@@ -20,6 +20,7 @@ from kinder.envs.dynamic3d.base_env import (
     ObjectCentricDynamic3DRobotEnv,
 )
 from kinder.envs.dynamic3d.object_types import (
+    MujocoDrawerObjectType,
     MujocoFR3RobotObjectType,
     MujocoObjectTypeFeatures,
     MujocoRBY1ARobotObjectType,
@@ -933,10 +934,15 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
                 state.get(obj, "wz"),
             ]
             mujoco_object.set_velocity(linear_velocity, angular_velocity)
-        # NOTE: Fixtures are static (without joints), so we cannot set their state.
 
         assert self._robot_env is not None, "Robot environment not initialized"
         assert self._robot_env.sim is not None, "Simulation not initialized"
+        # Restore observed drawer slides; fixture bodies remain static.
+        for drawer in state.get_objects(MujocoDrawerObjectType):
+            self._robot_env.set_joint_pos_quat(
+                f"{drawer.name}_joint",
+                np.array([state.get(drawer, "pos")], dtype=np.float32),
+            )
         self._robot_env.sim.forward()
 
         # Update the cached current state

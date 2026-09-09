@@ -140,7 +140,7 @@ class Shelf3DEnv(TaskFamilyEnvMixin, TidyBot3DEnv):
     """
 
     family = "Shelf3D"
-    supported_counts = frozenset({1, 2, 8})
+    supported_counts = frozenset({1, 2, 3, 4, 6, 8})
 
 
 class Tossing3DEnv(TaskFamilyEnvMixin, TidyBot3DEnv):

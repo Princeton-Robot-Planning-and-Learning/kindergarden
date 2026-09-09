@@ -1,7 +1,7 @@
 {
     "description": "A 3D task where the robot must transfer a pile of objects from one bin to another.",
     "variant_description": "The variants require transferring different numbers of objects between bins.",
-    "variant_specific_description": "Transfer 10 cubes from a source bin to a target bin on the kitchen island.",
+    "variant_specific_description": "Transfer 30 cubes from a source bin to a target bin on the kitchen island.",
     "robots": {
         "tidybot": {
             "robot": {}
@@ -87,7 +87,27 @@
             "cube_6": {"size": 0.005, "rgba": [0.5, 0.1, 0.1, 1.0]},
             "cube_7": {"size": 0.005, "rgba": [0.5, 0.1, 0.1, 1.0]},
             "cube_8": {"size": 0.005, "rgba": [0.5, 0.1, 0.1, 1.0]},
-            "cube_9": {"size": 0.005, "rgba": [0.5, 0.1, 0.1, 1.0]}
+            "cube_9": {"size": 0.005, "rgba": [0.5, 0.1, 0.1, 1.0]},
+            "cube_10": {"size": 0.005, "rgba": [0.5, 0.1, 0.1, 1.0]},
+            "cube_11": {"size": 0.005, "rgba": [0.5, 0.1, 0.1, 1.0]},
+            "cube_12": {"size": 0.005, "rgba": [0.5, 0.1, 0.1, 1.0]},
+            "cube_13": {"size": 0.005, "rgba": [0.5, 0.1, 0.1, 1.0]},
+            "cube_14": {"size": 0.005, "rgba": [0.5, 0.1, 0.1, 1.0]},
+            "cube_15": {"size": 0.005, "rgba": [0.5, 0.1, 0.1, 1.0]},
+            "cube_16": {"size": 0.005, "rgba": [0.5, 0.1, 0.1, 1.0]},
+            "cube_17": {"size": 0.005, "rgba": [0.5, 0.1, 0.1, 1.0]},
+            "cube_18": {"size": 0.005, "rgba": [0.5, 0.1, 0.1, 1.0]},
+            "cube_19": {"size": 0.005, "rgba": [0.5, 0.1, 0.1, 1.0]},
+            "cube_20": {"size": 0.005, "rgba": [0.5, 0.1, 0.1, 1.0]},
+            "cube_21": {"size": 0.005, "rgba": [0.5, 0.1, 0.1, 1.0]},
+            "cube_22": {"size": 0.005, "rgba": [0.5, 0.1, 0.1, 1.0]},
+            "cube_23": {"size": 0.005, "rgba": [0.5, 0.1, 0.1, 1.0]},
+            "cube_24": {"size": 0.005, "rgba": [0.5, 0.1, 0.1, 1.0]},
+            "cube_25": {"size": 0.005, "rgba": [0.5, 0.1, 0.1, 1.0]},
+            "cube_26": {"size": 0.005, "rgba": [0.5, 0.1, 0.1, 1.0]},
+            "cube_27": {"size": 0.005, "rgba": [0.5, 0.1, 0.1, 1.0]},
+            "cube_28": {"size": 0.005, "rgba": [0.5, 0.1, 0.1, 1.0]},
+            "cube_29": {"size": 0.005, "rgba": [0.5, 0.1, 0.1, 1.0]}
         }
     },
     "cameras": {
@@ -112,6 +132,26 @@
         ["in", "cube_7", "blocks_init_region"],
         ["in", "cube_8", "blocks_init_region"],
         ["in", "cube_9", "blocks_init_region"],
+        ["in", "cube_10", "blocks_init_region"],
+        ["in", "cube_11", "blocks_init_region"],
+        ["in", "cube_12", "blocks_init_region"],
+        ["in", "cube_13", "blocks_init_region"],
+        ["in", "cube_14", "blocks_init_region"],
+        ["in", "cube_15", "blocks_init_region"],
+        ["in", "cube_16", "blocks_init_region"],
+        ["in", "cube_17", "blocks_init_region"],
+        ["in", "cube_18", "blocks_init_region"],
+        ["in", "cube_19", "blocks_init_region"],
+        ["in", "cube_20", "blocks_init_region"],
+        ["in", "cube_21", "blocks_init_region"],
+        ["in", "cube_22", "blocks_init_region"],
+        ["in", "cube_23", "blocks_init_region"],
+        ["in", "cube_24", "blocks_init_region"],
+        ["in", "cube_25", "blocks_init_region"],
+        ["in", "cube_26", "blocks_init_region"],
+        ["in", "cube_27", "blocks_init_region"],
+        ["in", "cube_28", "blocks_init_region"],
+        ["in", "cube_29", "blocks_init_region"],
         ["in", "scoop_0", "scoop_init_region"]
     ],
     "goal_state": [
@@ -124,6 +164,26 @@
         ["on", "cube_6", "target_bin_region"],
         ["on", "cube_7", "target_bin_region"],
         ["on", "cube_8", "target_bin_region"],
-        ["on", "cube_9", "target_bin_region"]
+        ["on", "cube_9", "target_bin_region"],
+        ["on", "cube_10", "target_bin_region"],
+        ["on", "cube_11", "target_bin_region"],
+        ["on", "cube_12", "target_bin_region"],
+        ["on", "cube_13", "target_bin_region"],
+        ["on", "cube_14", "target_bin_region"],
+        ["on", "cube_15", "target_bin_region"],
+        ["on", "cube_16", "target_bin_region"],
+        ["on", "cube_17", "target_bin_region"],
+        ["on", "cube_18", "target_bin_region"],
+        ["on", "cube_19", "target_bin_region"],
+        ["on", "cube_20", "target_bin_region"],
+        ["on", "cube_21", "target_bin_region"],
+        ["on", "cube_22", "target_bin_region"],
+        ["on", "cube_23", "target_bin_region"],
+        ["on", "cube_24", "target_bin_region"],
+        ["on", "cube_25", "target_bin_region"],
+        ["on", "cube_26", "target_bin_region"],
+        ["on", "cube_27", "target_bin_region"],
+        ["on", "cube_28", "target_bin_region"],
+        ["on", "cube_29", "target_bin_region"]
     ]
 }

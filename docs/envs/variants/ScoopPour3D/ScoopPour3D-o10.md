@@ -8,7 +8,7 @@ env = kinder.make("kinder/ScoopPour3D-o10-v0")
 ```
 
 ## Description
-Use a scoop to transfer 10 cubes from a source bin to a target bin on the kitchen island.
+Transfer 10 cubes from a source bin to a target bin on the kitchen island.
 
 ## Initial State Distribution
 ![initial state GIF](../../assets/initial_state_gifs/variants/ScoopPour3D-o10.gif)

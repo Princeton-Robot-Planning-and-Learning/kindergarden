@@ -154,7 +154,7 @@ class ScoopPour3DEnv(TaskFamilyEnvMixin, TidyBot3DEnv):
     """Select a ScoopPour3D task by its number of cubes to scoop."""
 
     family = "ScoopPour3D"
-    supported_counts = frozenset({10, 100})
+    supported_counts = frozenset({10, 20, 30, 40, 50, 100})
 
 
 class SweepSimple3DEnv(TaskFamilyEnvMixin, TidyBot3DEnv):

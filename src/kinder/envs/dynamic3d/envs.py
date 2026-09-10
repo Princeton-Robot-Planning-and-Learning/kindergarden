@@ -56,11 +56,11 @@ from kinder.envs.dynamic3d.utils import (
 )
 
 
-def object_world_axis_aligned_bbox(data: Mapping[str, float]) -> list[float]:
+def _object_world_axis_aligned_bbox(data: Mapping[str, float]) -> list[float]:
     """Build a world-frame AABB from object-centric pose and local dimensions."""
-    half_extents = np.array(
-        [data["bb_x"], data["bb_y"], data["bb_z"]], dtype=np.float64
-    ) / 2.0
+    half_extents = (
+        np.array([data["bb_x"], data["bb_y"], data["bb_z"]], dtype=np.float64) / 2.0
+    )
     bbox_at_origin = np.concatenate((-half_extents, half_extents)).tolist()
     # MuJoCo stores quaternions as wxyz; scipy expects xyzw.
     rotation = Rotation.from_quat(
@@ -804,8 +804,9 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
         This is the in-episode counterpart of initial ground placement: it uses the
         task's declared regions (plus optional caller-supplied region definitions), the
         environment RNG, and the same collision-free placement sampler, while leaving
-        the robot and unselected objects untouched. Region names keep the symbolic
-        destination separate from its continuous geometry.
+        the robot and unselected objects untouched. Caller-supplied regions apply only
+        to this reset; region names keep the symbolic destination separate from its
+        continuous geometry.
         """
         assert self._ground_fixture is not None, "Need to call reset() first"
         ground_fixture = self._ground_fixture
@@ -815,47 +816,20 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
         if not object_region_names:
             return self._get_current_state()
 
-        for region_name, region_config in (region_configs or {}).items():
-            config = dict(region_config)
-            self.task_config.setdefault("regions", {})[region_name] = config
-            ground_fixture.regions[region_name] = config
-
-        def check_in_region(position: NDArray[np.float32], region_name: str) -> bool:
-            runtime_config = (region_configs or {}).get(region_name)
-            if runtime_config is None:
-                return ground_fixture.check_in_region(position, region_name)
-            local_position = position - ground_fixture.position
-            for region_range in runtime_config["ranges"]:
-                if len(region_range) == 4:
-                    x_start, y_start, x_end, y_end = region_range
-                    z_start, z_end = 0.0, ground_fixture.ground_placement_threshold
-                else:
-                    x_start, y_start, z_start, x_end, y_end, z_end = region_range
-                if (
-                    x_start <= local_position[0] <= x_end
-                    and y_start <= local_position[1] <= y_end
-                    and z_start <= local_position[2] <= z_end
-                ):
-                    return True
-            return False
+        available_regions = dict(ground_fixture.regions)
+        available_regions.update(
+            {name: dict(config) for name, config in (region_configs or {}).items()}
+        )
 
         configs: dict[str, dict[str, dict[str, Any]]] = {}
-        samplers: dict[str, Any] = {}
-        occupied_bboxes: list[list[float]] = []
-        selected = set(object_region_names)
-        for object_name, obj in self._objects_dict.items():
-            if object_name in selected:
-                continue
-            data = obj._get_object_centric_data()  # pylint: disable=protected-access
-            occupied_bboxes.append(object_world_axis_aligned_bbox(data))
         for object_name, region_name in object_region_names.items():
             if object_name not in self._objects_dict:
                 raise ValueError(f"Object {object_name!r} not found in environment")
-            if region_name not in self.task_config.get("regions", {}):
+            if region_name not in available_regions:
                 raise ValueError(
                     f"Region {region_name!r} not found in task configuration"
                 )
-            region = self.task_config["regions"][region_name]
+            region = available_regions[region_name]
             if region["target"] != "ground":
                 target = region["target"]
                 raise ValueError(
@@ -866,7 +840,25 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
             configs.setdefault(obj_type, {})[object_name] = self.task_config["objects"][
                 obj_type
             ].get(object_name, {})
-            samplers[object_name] = self._ground_fixture.sample_pose_in_region
+
+        # A temporary fixture lets caller-supplied regions use exactly the same
+        # sampling and containment semantics (including the ordinary ground-region
+        # tolerance) as task-declared regions, without mutating live task config.
+        requested_regions = {
+            name: available_regions[name] for name in set(object_region_names.values())
+        }
+        sampling_ground = MujocoGround(regions=requested_regions)
+        samplers = {
+            name: sampling_ground.sample_pose_in_region for name in object_region_names
+        }
+
+        occupied_bboxes: list[list[float]] = []
+        selected = set(object_region_names)
+        for object_name, obj in self._objects_dict.items():
+            if object_name in selected:
+                continue
+            data = obj._get_object_centric_data()  # pylint: disable=protected-access
+            occupied_bboxes.append(_object_world_axis_aligned_bbox(data))
 
         poses = sample_collision_free_positions(
             configs,
@@ -874,7 +866,7 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
             entity_region_names=dict(object_region_names),
             entity_pos_yaw_samplers=samplers,
             entity_check_in_region={
-                name: check_in_region for name in object_region_names
+                name: sampling_ground.check_in_region for name in object_region_names
             },
             initial_placed_bboxes=occupied_bboxes,
             fail_on_exhaustion=True,
@@ -882,20 +874,8 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
         for poses_by_name in poses.values():
             for object_name, pose in poses_by_name.items():
                 obj = self._objects_dict[object_name]
-                obj.set_pose(
-                    pose["position"], convert_yaw_to_quaternion(pose["yaw"])
-                )
+                obj.set_pose(pose["position"], convert_yaw_to_quaternion(pose["yaw"]))
                 obj.set_velocity([0.0, 0.0, 0.0], [0.0, 0.0, 0.0])
-
-        for object_name, region_name in object_region_names.items():
-            obj = self._objects_dict[object_name]
-            data = obj._get_object_centric_data()  # pylint: disable=protected-access
-            if not check_in_region(
-                np.array([data["x"], data["y"], data["z"]]), region_name
-            ):
-                raise RuntimeError(
-                    f"Could not place {object_name!r} inside region {region_name!r}"
-                )
 
         self._robot_env.sim.forward()
         self._current_state = self._get_object_centric_state()

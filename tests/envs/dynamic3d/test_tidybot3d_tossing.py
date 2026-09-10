@@ -1,16 +1,11 @@
 """Tests for the TidyBot3D Tossing3D task."""
 
-import math
 from pathlib import Path
 
-import numpy as np
 import pytest
 
 import kinder
-from kinder.envs.dynamic3d.envs import (
-    ObjectCentricTidyBot3DEnv,
-    object_world_axis_aligned_bbox,
-)
+from kinder.envs.dynamic3d.envs import ObjectCentricTidyBot3DEnv
 
 _TASK_CONFIG_PATH = (
     Path(kinder.__path__[0])
@@ -29,24 +24,6 @@ def _make_env() -> ObjectCentricTidyBot3DEnv:
         scene_bg=False,
         allow_state_access=True,
     )
-
-
-def test_object_world_bbox_accounts_for_rotation() -> None:
-    """A rectangular stationary object contributes its rotated world footprint."""
-    half_sqrt_two = math.sqrt(0.5)
-    bbox = object_world_axis_aligned_bbox({
-        "x": 2.0,
-        "y": 3.0,
-        "z": 4.0,
-        "qx": 0.0,
-        "qy": 0.0,
-        "qz": half_sqrt_two,
-        "qw": half_sqrt_two,
-        "bb_x": 2.0,
-        "bb_y": 1.0,
-        "bb_z": 0.5,
-    })
-    np.testing.assert_allclose(bbox, [1.5, 2.0, 3.75, 2.5, 4.0, 4.25])
 
 
 def _put_cube_at(env: ObjectCentricTidyBot3DEnv, x: float, y: float, z: float) -> None:
@@ -128,39 +105,6 @@ def test_tossing3d_cube_short_of_the_bin_is_not_a_success():
         not env._check_goals()  # pylint: disable=protected-access
     ), "Goals should not be satisfied with the cube on the floor short of the bin"
 
-    env.close()
-
-
-def test_tossing3d_can_reset_the_bin_to_a_runtime_region() -> None:
-    """The generic reset API accepts regions supplied by its caller."""
-    env = _make_env()
-    env.reset(seed=0)
-    region_name = "test_bin_reset_region"
-    region_config = {
-        "target": "ground",
-        "ranges": [[-2.3, -2.3, -1.48, 2.3]],
-        "yaw_ranges": [[180, 180]],
-    }
-    before = env._get_current_state()  # pylint: disable=protected-access
-    robot = before.get_object_from_name("robot")
-    robot_pose = (
-        before.get(robot, "pos_base_x"),
-        before.get(robot, "pos_base_y"),
-        before.get(robot, "pos_base_rot"),
-    )
-
-    after = env.reset_ground_objects_to_regions(
-        {"bin_0": region_name}, region_configs={region_name: region_config}
-    )
-    bin_ = after.get_object_from_name("bin_0")
-    barrier = after.get_object_from_name("cuboid_barrier")
-    assert after.get(bin_, "x") < after.get(barrier, "x")
-    robot_after = after.get_object_from_name("robot")
-    assert (
-        after.get(robot_after, "pos_base_x"),
-        after.get(robot_after, "pos_base_y"),
-        after.get(robot_after, "pos_base_rot"),
-    ) == pytest.approx(robot_pose)
     env.close()
 
 

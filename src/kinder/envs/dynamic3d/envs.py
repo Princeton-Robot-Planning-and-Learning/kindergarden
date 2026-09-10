@@ -426,7 +426,9 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
         # Load scene XML using SceneLoader
         # Use _active_scene which is set by _apply_scene_bg() based on scene_bg param
         scene_config = self.task_config.get("_active_scene", {"type": "simple"})
-        xml_string = SceneLoader.load_scene(scene_config, model_base_path)
+        xml_string = SceneLoader.load_scene(
+            scene_config, model_base_path, self.task_config.get("room_layout")
+        )
 
         # Insert objects in scene
         root = ET.fromstring(xml_string)

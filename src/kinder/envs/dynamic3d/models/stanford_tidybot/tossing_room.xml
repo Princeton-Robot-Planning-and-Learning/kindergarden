@@ -1,0 +1,11 @@
+<!-- Task-owned lab2 room: identical collisions with or without background assets.
+     The front is extended to x=4.2 to clear the receiver spawn range.
+     Rear and chamfered corners retain lab2's geometry. -->
+<body name="tossing_room" floor_visual_size="4.5 3.5">
+  <geom name="wall_leftcorner_visual" pos="-1.25 2.25 1.5" quat="0.6532815 0.6532815 0.2705981 0.2705981" size="1.06 1.5 0.01" type="box" material="walls_mat" contype="1" conaffinity="1" group="1" solref="0.001 1" solimp="0.99 0.99 0.001" priority="1"/>
+  <geom name="wall_rightcorner_visual" pos="-1.25 -2.25 1.5" quat="0.6532815 0.6532815 -0.2705981 -0.2705981" size="1.06 1.5 0.01" type="box" material="walls_mat" contype="1" conaffinity="1" group="1" solref="0.001 1" solimp="0.99 0.99 0.001" priority="1"/>
+  <geom name="wall_left_visual" pos="1.85 3 1.5" quat="0.7071 0.7071 0 0" size="2.35 1.5 0.01" type="box" material="walls_mat" contype="1" conaffinity="1" group="1" solref="0.001 1" solimp="0.99 0.99 0.001" priority="1"/>
+  <geom name="wall_right_visual" pos="1.85 -3 1.5" quat="0.7071 -0.7071 0 0" size="2.35 1.5 0.01" type="box" material="walls_mat" contype="1" conaffinity="1" group="1" solref="0.001 1" solimp="0.99 0.99 0.001" priority="1"/>
+  <geom name="wall_rear_visual" pos="-2 0 1.5" quat="0.5 0.5 0.5 0.5" size="1.5 1.5 0.01" type="box" material="walls_mat" contype="1" conaffinity="1" group="1" solref="0.001 1" solimp="0.99 0.99 0.001" priority="1"/>
+  <geom name="wall_front_visual" pos="4.2 0 1.5" quat="0.5 0.5 -0.5 -0.5" size="3 1.5 0.01" type="box" material="walls_mat" contype="1" conaffinity="1" group="1" solref="0.001 1" solimp="0.99 0.99 0.001" priority="1"/>
+</body>

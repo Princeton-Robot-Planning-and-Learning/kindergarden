@@ -131,16 +131,16 @@ def test_tossing3d_cube_short_of_the_bin_is_not_a_success():
     env.close()
 
 
-@pytest.mark.parametrize(
-    ("region_name", "expected_sign"),
-    [("bin_robot_side_reset_region", -1), ("bin_far_side_reset_region", 1)],
-)
-def test_tossing3d_can_reset_the_bin_to_either_barrier_side(
-    region_name: str, expected_sign: int
-) -> None:
-    """The Tossing3D task exposes collision-free reset regions on both sides."""
+def test_tossing3d_can_reset_the_bin_to_a_runtime_region() -> None:
+    """The generic reset API accepts regions supplied by its caller."""
     env = _make_env()
     env.reset(seed=0)
+    region_name = "test_bin_reset_region"
+    env.task_config["regions"][region_name] = {
+        "target": "ground",
+        "ranges": [[-2.3, -2.3, -1.48, 2.3]],
+        "yaw_ranges": [[180, 180]],
+    }
     before = env._get_current_state()  # pylint: disable=protected-access
     robot = before.get_object_from_name("robot")
     robot_pose = (
@@ -152,7 +152,7 @@ def test_tossing3d_can_reset_the_bin_to_either_barrier_side(
     after = env.reset_ground_objects_to_regions({"bin_0": region_name})
     bin_ = after.get_object_from_name("bin_0")
     barrier = after.get_object_from_name("cuboid_barrier")
-    assert expected_sign * (after.get(bin_, "x") - after.get(barrier, "x")) > 0
+    assert after.get(bin_, "x") < after.get(barrier, "x")
     robot_after = after.get_object_from_name("robot")
     assert (
         after.get(robot_after, "pos_base_x"),

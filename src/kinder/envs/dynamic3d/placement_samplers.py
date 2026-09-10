@@ -38,11 +38,10 @@ def sample_collision_free_positions(
         entity_pos_yaw_samplers: Dictionary mapping entity names to functions
                                that sample positions and yaws within a region.
                                If None, no entities will be sampled.
-        entity_check_in_region: Dictionary mapping entity names to functions
-                              that check if a position is within a region. Used
-                              to ensure the bottom face of the bounding box is
-                              within the region. If None, no region checks will
-                              be performed.
+        entity_check_in_region: Dictionary mapping entity names to functions that
+            check whether a position lies within a region. When provided, all four
+            bottom corners of the sampled axis-aligned bounding box must lie within
+            the region. If None, no region checks are performed.
         initial_placed_bboxes: Bounding boxes that newly sampled entities must
                               avoid, without returning poses for those entities.
         fail_on_exhaustion: Raise instead of returning the legacy origin fallback
@@ -121,7 +120,8 @@ def sample_collision_free_position(
     box to the sampled position and rotates it according to the sampled yaw.
 
     If no collision-free position is found within the maximum number of attempts,
-    a fallback position is returned with a warning.
+    either raise ``RuntimeError`` or preserve the legacy behavior of returning a
+    fallback position with a warning, according to ``fail_on_exhaustion``.
 
     Args:
         bounding_box_at_origin: Initial bounding box as
@@ -130,8 +130,8 @@ def sample_collision_free_position(
         np_random: Random number generator
         region_name: Name of the region to sample from
         pos_yaw_sampler: Function that samples positions and yaws within a region
-        check_in_region_func: Optional function to check if bottom face corners of
-            the bounding box are within the region
+        check_in_region_func: Optional function used to require all four bottom
+            corners of the sampled axis-aligned bounding box to lie in the region.
         max_attempts: Maximum number of sampling attempts
         fail_on_exhaustion: Raise if no valid placement is found instead of using
             the legacy fallback pose
@@ -142,7 +142,8 @@ def sample_collision_free_position(
         [x_min, y_min, z_min, x_max, y_max, z_max]
 
     Raises:
-        None: Returns fallback position with warning if no collision-free position found
+        RuntimeError: If no collision-free position is found and
+            ``fail_on_exhaustion`` is true.
     """
     for _ in range(max_attempts):
         # Sample a candidate pose

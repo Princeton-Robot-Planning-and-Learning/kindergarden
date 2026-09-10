@@ -4,6 +4,7 @@ step, and reset."""
 from pathlib import Path
 
 import numpy as np
+import pytest
 from relational_structs import ObjectCentricState
 
 from kinder.envs.dynamic3d.envs import ObjectCentricTidyBot3DEnv
@@ -25,6 +26,44 @@ MIMICLABS_SCENES_DIR = (
 )
 
 _TEST_TASKS = Path(__file__).parent / "test_tasks"
+
+
+def test_tidybot3d_can_reset_an_object_to_a_runtime_region() -> None:
+    """The generic reset API accepts per-call ground regions."""
+    env = ObjectCentricTidyBot3DEnv(
+        num_objects=3,
+        task_config_path=str(_TEST_TASKS / "tidybot-ground-o3.json"),
+        allow_state_access=True,
+    )
+    env.reset(seed=0)
+    region_name = "test_reset_region"
+    region_config = {
+        "target": "ground",
+        "ranges": [[0.8, 0.8, 1.0, 1.0]],
+        "yaw_ranges": [[0, 0]],
+    }
+    before = env._get_current_state()  # pylint: disable=protected-access
+    robot = before.get_object_from_name("robot")
+    robot_pose = (
+        before.get(robot, "pos_base_x"),
+        before.get(robot, "pos_base_y"),
+        before.get(robot, "pos_base_rot"),
+    )
+
+    after = env.reset_ground_objects_to_regions(
+        {"cube1": region_name}, region_configs={region_name: region_config}
+    )
+    cube = after.get_object_from_name("cube1")
+    assert 0.75 <= after.get(cube, "x") <= 1.05
+    assert 0.75 <= after.get(cube, "y") <= 1.05
+    robot_after = after.get_object_from_name("robot")
+    assert (
+        after.get(robot_after, "pos_base_x"),
+        after.get(robot_after, "pos_base_y"),
+        after.get(robot_after, "pos_base_rot"),
+    ) == pytest.approx(robot_pose)
+    assert region_name not in env.task_config["regions"]
+    env.close()
 
 
 def test_tidybot3d_observation_space():

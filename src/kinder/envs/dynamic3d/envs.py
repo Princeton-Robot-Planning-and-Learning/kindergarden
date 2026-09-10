@@ -69,6 +69,9 @@ class TidyBot3DConfig(KinDEREnvConfig, metaclass=FinalConfigMeta):
 class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
     """TidyBot 3D environment with mobile manipulation tasks."""
 
+    #: Spawn attempts allowed when the task sets ``settle_drift_limit``.
+    max_reset_retries: int = 20
+
     metadata: dict[str, Any] = {"render_modes": ["rgb_array"]}
 
     def __init__(
@@ -216,6 +219,8 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
         self._objects_dict: dict[str, MujocoObject] = {}
         self._fixtures_dict: dict[str, MujocoFixture] = {}
         self._ground_fixture: MujocoGround | None = None
+        self._ground_object_xy: dict[str, tuple[float, float]] = {}
+        self._reset_retries = 0
 
         self._reward_calculator = create_reward_calculator(scene_type, num_objects)
 
@@ -620,6 +625,7 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
 
         # Collect all objects and their target regions
         init_predicates = self.task_config.get("initial_state", [])
+        self._ground_object_xy = {}
 
         # Separate objects by their target (ground or fixture)
         ground_objects: dict[str, dict[str, Any]] = {}
@@ -713,6 +719,7 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
                     obj = self._objects_dict[obj_name]
                     quat = convert_yaw_to_quaternion(yaw)
                     obj.set_pose(pos, quat)
+                    self._ground_object_xy[obj_name] = (float(pos[0]), float(pos[1]))
 
         # Place objects on fixtures
         fixture_entity_region_names: dict[str, str] = {}
@@ -810,10 +817,26 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
             x_limit = (-1.0, 1.0)
             y_limit = (-1.0, 1.0)
             yaw_limit = (-np.pi, np.pi)
-            # Sample random values within the limits
-            x = self.np_random.uniform(*x_limit)
-            y = self.np_random.uniform(*y_limit)
-            yaw = self.np_random.uniform(*yaw_limit)
+            # Only Dynamo3D tasks opt into the chair-sized clearance.
+            # Broader use requires clearance derived from robot/object footprints;
+            # a fixed chair radius overconstrains small cubes in other tasks.
+            clearance = self.task_config.get("robot_ground_clearance", 0.0)
+            # Sample random values within the limits, keeping the base clear of
+            # objects placed on the ground: a base spawned inside an object makes
+            # the physics explode at the first step.
+            for _ in range(100):
+                x = self.np_random.uniform(*x_limit)
+                y = self.np_random.uniform(*y_limit)
+                yaw = self.np_random.uniform(*yaw_limit)
+                if clearance == 0.0 or all(
+                    np.hypot(x - ox, y - oy) >= clearance
+                    for ox, oy in self._ground_object_xy.values()
+                ):
+                    break
+            else:
+                raise RuntimeError(
+                    "Could not place the robot clear of ground objects in 100 attempts"
+                )
         else:
             # Extract region name
             region_name = robot_predicates[0][2]
@@ -874,7 +897,33 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
         # Get object-centric observation
         self._current_state = self._get_object_centric_state()
 
+        # A task can require its ground objects to stay put during the settle
+        # steps: objects that spawn interpenetrating get launched by the physics,
+        # so such a spawn is discarded and the scene is re-sampled from a seed
+        # derived from this reset's RNG (deterministic for a given seed).
+        drift_limit = self.task_config.get("settle_drift_limit")
+        if drift_limit is not None and self._max_settle_drift() > drift_limit:
+            self._reset_retries += 1
+            assert self._reset_retries < self.max_reset_retries, (
+                f"ground objects still drift more than {drift_limit} m after "
+                f"{self.max_reset_retries} spawn attempts"
+            )
+            retry_seed = int(self.np_random.integers(2**31 - 1))
+            return self.reset(seed=retry_seed, options=options)
+        self._reset_retries = 0
+
         return self._get_current_state(), {}
+
+    def _max_settle_drift(self) -> float:
+        """Largest xy distance a ground object moved since it was placed."""
+        assert self._current_state is not None
+        drift = 0.0
+        for obj_name, (x0, y0) in self._ground_object_xy.items():
+            obj = self._objects_dict[obj_name].symbolic_object
+            x = float(self._current_state.get(obj, "x"))
+            y = float(self._current_state.get(obj, "y"))
+            drift = max(drift, float(np.hypot(x - x0, y - y0)))
+        return drift
 
     def reset_with_images(
         self,

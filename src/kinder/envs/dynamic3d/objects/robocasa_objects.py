@@ -264,6 +264,19 @@ class RoboCasaObject(MujocoObject):
         Returns:
             Bounding box as [x_min, y_min, z_min, x_max, y_max, z_max]
         """
+        # A task can state the placed model's footprint directly, as full
+        # [x, y, z] extents in metres, when the model's sites do not describe it.
+        footprint = object_config.get("footprint")
+        if footprint is not None:
+            half = [float(v) / 2 for v in footprint]  # type: ignore[union-attr]
+            return [
+                float(pos[0]) - half[0],
+                float(pos[1]) - half[1],
+                float(pos[2]) - half[2],
+                float(pos[0]) + half[0],
+                float(pos[1]) + half[1],
+                float(pos[2]) + half[2],
+            ]
         # Extract object type from config
         object_type_value = object_config.get("object_type", "")
         object_type = str(object_type_value) if object_type_value else ""

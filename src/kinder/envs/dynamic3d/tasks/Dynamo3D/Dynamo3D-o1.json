@@ -1,4 +1,6 @@
 {
+    "settle_drift_limit": 0.25,
+    "robot_ground_clearance": 0.9,
     "description": "A 3D navigation-among-movable-objects task where the robot must reach a goal region on the floor while several chair obstacles are placed in the workspace.",
     "variant_description": "The variants differ in the number of obstacle chairs placed in the workspace.",
     "variant_specific_description": "Navigate to a goal region on the floor while avoiding one chair obstacle.",
@@ -47,7 +49,7 @@
     "objects": {
         "robocasafrlapartmentchair01": {
             "obstacle_chair": {
-                "pos_z": 0.55,
+                "pos_z": 0.55, "footprint": [0.7, 0.8, 0.8],
                 "euler": [90, 0, 0]
             }
         }

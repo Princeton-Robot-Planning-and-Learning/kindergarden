@@ -115,6 +115,7 @@ def test_tossing3d_cube_short_of_the_bin_is_not_a_success():
 def test_tossing3d_can_reset_the_bin_to_either_barrier_side(
     region_name: str, expected_sign: int
 ) -> None:
+    """The Tossing3D task exposes collision-free reset regions on both sides."""
     env = _make_env()
     env.reset(seed=0)
     before = env._get_current_state()  # pylint: disable=protected-access

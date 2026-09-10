@@ -801,7 +801,7 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
         for object_name, obj in self._objects_dict.items():
             if object_name in selected:
                 continue
-            data = obj._get_object_centric_data()
+            data = obj._get_object_centric_data()  # pylint: disable=protected-access
             half_x = data["bb_x"] / 2
             half_y = data["bb_y"] / 2
             half_z = data["bb_z"] / 2
@@ -819,11 +819,14 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
             if object_name not in self._objects_dict:
                 raise ValueError(f"Object {object_name!r} not found in environment")
             if region_name not in self.task_config.get("regions", {}):
-                raise ValueError(f"Region {region_name!r} not found in task configuration")
+                raise ValueError(
+                    f"Region {region_name!r} not found in task configuration"
+                )
             region = self.task_config["regions"][region_name]
             if region["target"] != "ground":
+                target = region["target"]
                 raise ValueError(
-                    f"Region {region_name!r} must target 'ground', got {region['target']!r}"
+                    f"Region {region_name!r} must target 'ground', got {target!r}"
                 )
             obj = self._objects_dict[object_name]
             obj_type = obj.__class__.REGISTERED_NAME  # type: ignore[attr-defined]
@@ -853,7 +856,8 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
                 obj.set_velocity([0.0, 0.0, 0.0], [0.0, 0.0, 0.0])
 
         for object_name, region_name in object_region_names.items():
-            data = self._objects_dict[object_name]._get_object_centric_data()
+            obj = self._objects_dict[object_name]
+            data = obj._get_object_centric_data()  # pylint: disable=protected-access
             if not self._ground_fixture.check_in_region(
                 np.array([data["x"], data["y"], data["z"]]), region_name
             ):

@@ -818,8 +818,8 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
             y_limit = (-1.0, 1.0)
             yaw_limit = (-np.pi, np.pi)
             # Only Dynamo3D tasks opt into the chair-sized clearance.
-            # TODO: Derive clearance from robot/object footprints before enabling
-            # it for other tasks; a fixed chair radius overconstrains small cubes.
+            # Broader use requires clearance derived from robot/object footprints;
+            # a fixed chair radius overconstrains small cubes in other tasks.
             clearance = self.task_config.get("robot_ground_clearance", 0.0)
             # Sample random values within the limits, keeping the base clear of
             # objects placed on the ground: a base spawned inside an object makes

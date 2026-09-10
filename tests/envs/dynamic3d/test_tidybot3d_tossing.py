@@ -1,11 +1,16 @@
 """Tests for the TidyBot3D Tossing3D task."""
 
+import math
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 import kinder
-from kinder.envs.dynamic3d.envs import ObjectCentricTidyBot3DEnv
+from kinder.envs.dynamic3d.envs import (
+    ObjectCentricTidyBot3DEnv,
+    object_world_axis_aligned_bbox,
+)
 
 _TASK_CONFIG_PATH = (
     Path(kinder.__path__[0])
@@ -24,6 +29,24 @@ def _make_env() -> ObjectCentricTidyBot3DEnv:
         scene_bg=False,
         allow_state_access=True,
     )
+
+
+def test_object_world_bbox_accounts_for_rotation() -> None:
+    """A rectangular stationary object contributes its rotated world footprint."""
+    half_sqrt_two = math.sqrt(0.5)
+    bbox = object_world_axis_aligned_bbox({
+        "x": 2.0,
+        "y": 3.0,
+        "z": 4.0,
+        "qx": 0.0,
+        "qy": 0.0,
+        "qz": half_sqrt_two,
+        "qw": half_sqrt_two,
+        "bb_x": 2.0,
+        "bb_y": 1.0,
+        "bb_z": 0.5,
+    })
+    np.testing.assert_allclose(bbox, [1.5, 2.0, 3.75, 2.5, 4.0, 4.25])
 
 
 def _put_cube_at(env: ObjectCentricTidyBot3DEnv, x: float, y: float, z: float) -> None:

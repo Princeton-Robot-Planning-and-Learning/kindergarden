@@ -15,6 +15,7 @@ from gymnasium.spaces import Space
 from numpy.typing import NDArray
 from relational_structs import Array, Object, ObjectCentricState
 from relational_structs.utils import create_state_from_dict
+from scipy.spatial.transform import Rotation
 
 from kinder.core import ConstantObjectKinDEREnv, FinalConfigMeta, KinDEREnvConfig
 from kinder.envs.dynamic3d.base_env import (
@@ -51,7 +52,23 @@ from kinder.envs.dynamic3d.tidybot_rewards import create_reward_calculator
 from kinder.envs.dynamic3d.utils import (
     compute_camera_euler,
     convert_yaw_to_quaternion,
+    rotate_bounding_box_3d,
 )
+
+
+def object_world_axis_aligned_bbox(data: Mapping[str, float]) -> list[float]:
+    """Build a world-frame AABB from object-centric pose and local dimensions."""
+    half_extents = np.array(
+        [data["bb_x"], data["bb_y"], data["bb_z"]], dtype=np.float64
+    ) / 2.0
+    bbox_at_origin = np.concatenate((-half_extents, half_extents)).tolist()
+    # MuJoCo stores quaternions as wxyz; scipy expects xyzw.
+    rotation = Rotation.from_quat(
+        [data["qx"], data["qy"], data["qz"], data["qw"]]
+    ).as_matrix()
+    rotated = rotate_bounding_box_3d(bbox_at_origin, rotation)
+    position = np.array([data["x"], data["y"], data["z"]], dtype=np.float64)
+    return (np.asarray(rotated) + np.tile(position, 2)).tolist()
 
 
 @dataclass(frozen=True)
@@ -802,19 +819,7 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
             if object_name in selected:
                 continue
             data = obj._get_object_centric_data()  # pylint: disable=protected-access
-            half_x = data["bb_x"] / 2
-            half_y = data["bb_y"] / 2
-            half_z = data["bb_z"] / 2
-            occupied_bboxes.append(
-                [
-                    data["x"] - half_x,
-                    data["y"] - half_y,
-                    data["z"] - half_z,
-                    data["x"] + half_x,
-                    data["y"] + half_y,
-                    data["z"] + half_z,
-                ]
-            )
+            occupied_bboxes.append(object_world_axis_aligned_bbox(data))
         for object_name, region_name in object_region_names.items():
             if object_name not in self._objects_dict:
                 raise ValueError(f"Object {object_name!r} not found in environment")

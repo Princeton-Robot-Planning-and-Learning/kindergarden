@@ -29,7 +29,7 @@
         },
         "barrier_init_region": {
             "target": "ground",
-            "ranges": [[1.3, 0.0, 0.1, 1.301, 0.001, 0.1]],
+            "ranges": [[1.3, 0.0, 0.1, 1.3, 0.0, 0.1]],
             "yaw_ranges": [[0, 0]]
         },
         "robot_init_region": {

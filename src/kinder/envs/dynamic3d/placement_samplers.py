@@ -23,6 +23,8 @@ def sample_collision_free_positions(
     entity_region_names: dict[str, str] | None = None,
     entity_pos_yaw_samplers: dict[str, Any] | None = None,
     entity_check_in_region: dict[str, Any] | None = None,
+    initial_placed_bboxes: list[list[float]] | None = None,
+    fail_on_exhaustion: bool = False,
 ) -> dict[str, dict[str, dict[str, Any]]]:
     """Sample collision-free positions and yaws for multiple entities.
 
@@ -41,6 +43,10 @@ def sample_collision_free_positions(
                               to ensure the bottom face of the bounding box is
                               within the region. If None, no region checks will
                               be performed.
+        initial_placed_bboxes: Bounding boxes that newly sampled entities must
+                              avoid, without returning poses for those entities.
+        fail_on_exhaustion: Raise instead of returning the legacy origin fallback
+                            when no valid sample is found.
 
     Returns:
         Dictionary mapping entity types to dictionaries of entity poses
@@ -54,7 +60,7 @@ def sample_collision_free_positions(
         entity_check_in_region = {}
 
     entity_poses: dict[str, dict[str, dict[str, Any]]] = {}
-    placed_bboxes: list[list[float]] = []
+    placed_bboxes = list(initial_placed_bboxes or [])
 
     for entity_type, entity_configs in configs.items():
         entity_poses[entity_type] = {}
@@ -86,6 +92,7 @@ def sample_collision_free_positions(
                 region_name=entity_region_names[entity_name],
                 pos_yaw_sampler=entity_pos_yaw_samplers[entity_name],
                 check_in_region_func=entity_check_in_region.get(entity_name),
+                fail_on_exhaustion=fail_on_exhaustion,
             )
             placed_bboxes.append(list(bbox))
             entity_poses[entity_type][entity_name] = {
@@ -103,6 +110,7 @@ def sample_collision_free_position(
     pos_yaw_sampler: Any,
     check_in_region_func: Any = None,
     max_attempts: int = 100,
+    fail_on_exhaustion: bool = False,
 ) -> tuple[NDArray[np.float32], float, list[float]]:
     """Sample a collision-free position and yaw for an entity.
 
@@ -125,6 +133,8 @@ def sample_collision_free_position(
         check_in_region_func: Optional function to check if bottom face corners of
             the bounding box are within the region
         max_attempts: Maximum number of sampling attempts
+        fail_on_exhaustion: Raise if no valid placement is found instead of using
+            the legacy fallback pose
 
     Returns:
         Tuple of (position, yaw, bbox) where position is [x, y, z] array,
@@ -187,6 +197,11 @@ def sample_collision_free_position(
         # If no collision, compute final bbox and return
         if not collision:
             return candidate_pos, candidate_yaw, candidate_bbox
+
+    if fail_on_exhaustion:
+        raise RuntimeError(
+            f"Could not find collision-free position after {max_attempts} attempts"
+        )
 
     # If we couldn't find a collision-free position after max_attempts,
     # return a fallback position (this shouldn't happen often with reasonable

@@ -4,9 +4,9 @@ import abc
 import json
 import os
 import xml.etree.ElementTree as ET
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from collections.abc import Mapping
 from typing import Any
 
 import cv2 as cv
@@ -796,6 +796,25 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
 
         configs: dict[str, dict[str, dict[str, Any]]] = {}
         samplers: dict[str, Any] = {}
+        occupied_bboxes: list[list[float]] = []
+        selected = set(object_region_names)
+        for object_name, obj in self._objects_dict.items():
+            if object_name in selected:
+                continue
+            data = obj._get_object_centric_data()
+            half_x = data["bb_x"] / 2
+            half_y = data["bb_y"] / 2
+            half_z = data["bb_z"] / 2
+            occupied_bboxes.append(
+                [
+                    data["x"] - half_x,
+                    data["y"] - half_y,
+                    data["z"] - half_z,
+                    data["x"] + half_x,
+                    data["y"] + half_y,
+                    data["z"] + half_z,
+                ]
+            )
         for object_name, region_name in object_region_names.items():
             if object_name not in self._objects_dict:
                 raise ValueError(f"Object {object_name!r} not found in environment")
@@ -818,6 +837,12 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
             self.np_random,
             entity_region_names=dict(object_region_names),
             entity_pos_yaw_samplers=samplers,
+            entity_check_in_region={
+                name: self._ground_fixture.check_in_region
+                for name in object_region_names
+            },
+            initial_placed_bboxes=occupied_bboxes,
+            fail_on_exhaustion=True,
         )
         for poses_by_name in poses.values():
             for object_name, pose in poses_by_name.items():
@@ -826,6 +851,15 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
                     pose["position"], convert_yaw_to_quaternion(pose["yaw"])
                 )
                 obj.set_velocity([0.0, 0.0, 0.0], [0.0, 0.0, 0.0])
+
+        for object_name, region_name in object_region_names.items():
+            data = self._objects_dict[object_name]._get_object_centric_data()
+            if not self._ground_fixture.check_in_region(
+                np.array([data["x"], data["y"], data["z"]]), region_name
+            ):
+                raise RuntimeError(
+                    f"Could not place {object_name!r} inside region {region_name!r}"
+                )
 
         self._robot_env.sim.forward()
         self._current_state = self._get_object_centric_state()

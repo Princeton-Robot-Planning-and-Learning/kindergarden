@@ -69,10 +69,6 @@ class TidyBot3DConfig(KinDEREnvConfig, metaclass=FinalConfigMeta):
 class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
     """TidyBot 3D environment with mobile manipulation tasks."""
 
-    #: Minimum distance (m) between the sampled robot base and any ground object
-    #: when the task gives the robot no init region: half the base diagonal
-    #: (0.30) plus half the diagonal of a 0.7 x 0.8 m armchair (0.53), rounded up.
-    robot_ground_clearance: float = 0.9
     #: Spawn attempts allowed when the task sets ``settle_drift_limit``.
     max_reset_retries: int = 20
 
@@ -821,6 +817,10 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
             x_limit = (-1.0, 1.0)
             y_limit = (-1.0, 1.0)
             yaw_limit = (-np.pi, np.pi)
+            # Only Dynamo3D tasks opt into the chair-sized clearance.
+            # TODO: Derive clearance from robot/object footprints before enabling
+            # it for other tasks; a fixed chair radius overconstrains small cubes.
+            clearance = self.task_config.get("robot_ground_clearance", 0.0)
             # Sample random values within the limits, keeping the base clear of
             # objects placed on the ground: a base spawned inside an object makes
             # the physics explode at the first step.
@@ -828,8 +828,8 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
                 x = self.np_random.uniform(*x_limit)
                 y = self.np_random.uniform(*y_limit)
                 yaw = self.np_random.uniform(*yaw_limit)
-                if all(
-                    np.hypot(x - ox, y - oy) >= self.robot_ground_clearance
+                if clearance == 0.0 or all(
+                    np.hypot(x - ox, y - oy) >= clearance
                     for ox, oy in self._ground_object_xy.values()
                 ):
                     break

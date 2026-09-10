@@ -4,6 +4,7 @@ import abc
 import json
 import os
 import xml.etree.ElementTree as ET
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -14,6 +15,7 @@ from gymnasium.spaces import Space
 from numpy.typing import NDArray
 from relational_structs import Array, Object, ObjectCentricState
 from relational_structs.utils import create_state_from_dict
+from scipy.spatial.transform import Rotation
 
 from kinder.core import ConstantObjectKinDEREnv, FinalConfigMeta, KinDEREnvConfig
 from kinder.envs.dynamic3d.base_env import (
@@ -50,7 +52,23 @@ from kinder.envs.dynamic3d.tidybot_rewards import create_reward_calculator
 from kinder.envs.dynamic3d.utils import (
     compute_camera_euler,
     convert_yaw_to_quaternion,
+    rotate_bounding_box_3d,
 )
+
+
+def _object_world_axis_aligned_bbox(data: Mapping[str, float]) -> list[float]:
+    """Build a world-frame AABB from object-centric pose and local dimensions."""
+    half_extents = (
+        np.array([data["bb_x"], data["bb_y"], data["bb_z"]], dtype=np.float64) / 2.0
+    )
+    bbox_at_origin = np.concatenate((-half_extents, half_extents)).tolist()
+    # MuJoCo stores quaternions as wxyz; scipy expects xyzw.
+    rotation = Rotation.from_quat(
+        [data["qx"], data["qy"], data["qz"], data["qw"]]
+    ).as_matrix()
+    rotated = rotate_bounding_box_3d(bbox_at_origin, rotation)
+    position = np.array([data["x"], data["y"], data["z"]], dtype=np.float64)
+    return (np.asarray(rotated) + np.tile(position, 2)).tolist()
 
 
 @dataclass(frozen=True)
@@ -774,6 +792,94 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
                     obj.set_pose(pos, quat)
 
         self._robot_env.sim.forward()
+
+    def reset_ground_objects_to_regions(
+        self,
+        object_region_names: Mapping[str, str],
+        *,
+        region_configs: Mapping[str, Mapping[str, Any]] | None = None,
+    ) -> ObjectCentricState:
+        """Reposition selected movable objects in named ground regions.
+
+        This is the in-episode counterpart of initial ground placement: it uses the
+        task's declared regions (plus optional caller-supplied region definitions), the
+        environment RNG, and the same collision-free placement sampler, while leaving
+        the robot and unselected objects untouched. Caller-supplied regions apply only
+        to this reset; region names keep the symbolic destination separate from its
+        continuous geometry.
+        """
+        assert self._ground_fixture is not None, "Need to call reset() first"
+        ground_fixture = self._ground_fixture
+        assert ground_fixture.regions is not None, "Ground regions must be defined"
+        assert self._robot_env is not None, "Robot environment not initialized"
+        assert self._robot_env.sim is not None, "Simulation not initialized"
+        if not object_region_names:
+            return self._get_current_state()
+
+        available_regions = dict(ground_fixture.regions)
+        available_regions.update(
+            {name: dict(config) for name, config in (region_configs or {}).items()}
+        )
+
+        configs: dict[str, dict[str, dict[str, Any]]] = {}
+        for object_name, region_name in object_region_names.items():
+            if object_name not in self._objects_dict:
+                raise ValueError(f"Object {object_name!r} not found in environment")
+            if region_name not in available_regions:
+                raise ValueError(
+                    f"Region {region_name!r} not found in task configuration"
+                )
+            region = available_regions[region_name]
+            if region["target"] != "ground":
+                target = region["target"]
+                raise ValueError(
+                    f"Region {region_name!r} must target 'ground', got {target!r}"
+                )
+            obj = self._objects_dict[object_name]
+            obj_type = obj.__class__.REGISTERED_NAME  # type: ignore[attr-defined]
+            configs.setdefault(obj_type, {})[object_name] = self.task_config["objects"][
+                obj_type
+            ].get(object_name, {})
+
+        # A temporary fixture lets caller-supplied regions use exactly the same
+        # sampling and containment semantics (including the ordinary ground-region
+        # tolerance) as task-declared regions, without mutating live task config.
+        requested_regions = {
+            name: available_regions[name] for name in set(object_region_names.values())
+        }
+        sampling_ground = MujocoGround(regions=requested_regions)
+        samplers = {
+            name: sampling_ground.sample_pose_in_region for name in object_region_names
+        }
+
+        occupied_bboxes: list[list[float]] = []
+        selected = set(object_region_names)
+        for object_name, obj in self._objects_dict.items():
+            if object_name in selected:
+                continue
+            data = obj._get_object_centric_data()  # pylint: disable=protected-access
+            occupied_bboxes.append(_object_world_axis_aligned_bbox(data))
+
+        poses = sample_collision_free_positions(
+            configs,
+            self.np_random,
+            entity_region_names=dict(object_region_names),
+            entity_pos_yaw_samplers=samplers,
+            entity_check_in_region={
+                name: sampling_ground.check_in_region for name in object_region_names
+            },
+            initial_placed_bboxes=occupied_bboxes,
+            fail_on_exhaustion=True,
+        )
+        for poses_by_name in poses.values():
+            for object_name, pose in poses_by_name.items():
+                obj = self._objects_dict[object_name]
+                obj.set_pose(pose["position"], convert_yaw_to_quaternion(pose["yaw"]))
+                obj.set_velocity([0.0, 0.0, 0.0], [0.0, 0.0, 0.0])
+
+        self._robot_env.sim.forward()
+        self._current_state = self._get_object_centric_state()
+        return self._get_current_state()
 
     @abc.abstractmethod
     def _create_action_space(  # type: ignore

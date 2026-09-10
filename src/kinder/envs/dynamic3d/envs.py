@@ -794,22 +794,50 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
         self._robot_env.sim.forward()
 
     def reset_ground_objects_to_regions(
-        self, object_region_names: Mapping[str, str]
+        self,
+        object_region_names: Mapping[str, str],
+        *,
+        region_configs: Mapping[str, Mapping[str, Any]] | None = None,
     ) -> ObjectCentricState:
         """Reposition selected movable objects in named ground regions.
 
         This is the in-episode counterpart of initial ground placement: it uses the
-        task's declared regions, the environment RNG, and the same collision-free
-        placement sampler, while leaving the robot and unselected objects untouched.
-        It is intentionally expressed in terms of region names so a task-and-motion
-        planner can bind a symbolic destination and then delegate continuous pose
-        sampling to KinDER.
+        task's declared regions (plus optional caller-supplied region definitions), the
+        environment RNG, and the same collision-free placement sampler, while leaving
+        the robot and unselected objects untouched. Region names keep the symbolic
+        destination separate from its continuous geometry.
         """
         assert self._ground_fixture is not None, "Need to call reset() first"
+        ground_fixture = self._ground_fixture
+        assert ground_fixture.regions is not None, "Ground regions must be defined"
         assert self._robot_env is not None, "Robot environment not initialized"
         assert self._robot_env.sim is not None, "Simulation not initialized"
         if not object_region_names:
             return self._get_current_state()
+
+        for region_name, region_config in (region_configs or {}).items():
+            config = dict(region_config)
+            self.task_config.setdefault("regions", {})[region_name] = config
+            ground_fixture.regions[region_name] = config
+
+        def check_in_region(position: NDArray[np.float32], region_name: str) -> bool:
+            runtime_config = (region_configs or {}).get(region_name)
+            if runtime_config is None:
+                return ground_fixture.check_in_region(position, region_name)
+            local_position = position - ground_fixture.position
+            for region_range in runtime_config["ranges"]:
+                if len(region_range) == 4:
+                    x_start, y_start, x_end, y_end = region_range
+                    z_start, z_end = 0.0, ground_fixture.ground_placement_threshold
+                else:
+                    x_start, y_start, z_start, x_end, y_end, z_end = region_range
+                if (
+                    x_start <= local_position[0] <= x_end
+                    and y_start <= local_position[1] <= y_end
+                    and z_start <= local_position[2] <= z_end
+                ):
+                    return True
+            return False
 
         configs: dict[str, dict[str, dict[str, Any]]] = {}
         samplers: dict[str, Any] = {}
@@ -846,8 +874,7 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
             entity_region_names=dict(object_region_names),
             entity_pos_yaw_samplers=samplers,
             entity_check_in_region={
-                name: self._ground_fixture.check_in_region
-                for name in object_region_names
+                name: check_in_region for name in object_region_names
             },
             initial_placed_bboxes=occupied_bboxes,
             fail_on_exhaustion=True,
@@ -863,7 +890,7 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
         for object_name, region_name in object_region_names.items():
             obj = self._objects_dict[object_name]
             data = obj._get_object_centric_data()  # pylint: disable=protected-access
-            if not self._ground_fixture.check_in_region(
+            if not check_in_region(
                 np.array([data["x"], data["y"], data["z"]]), region_name
             ):
                 raise RuntimeError(

@@ -136,7 +136,7 @@ def test_tossing3d_can_reset_the_bin_to_a_runtime_region() -> None:
     env = _make_env()
     env.reset(seed=0)
     region_name = "test_bin_reset_region"
-    env.task_config["regions"][region_name] = {
+    region_config = {
         "target": "ground",
         "ranges": [[-2.3, -2.3, -1.48, 2.3]],
         "yaw_ranges": [[180, 180]],
@@ -149,7 +149,9 @@ def test_tossing3d_can_reset_the_bin_to_a_runtime_region() -> None:
         before.get(robot, "pos_base_rot"),
     )
 
-    after = env.reset_ground_objects_to_regions({"bin_0": region_name})
+    after = env.reset_ground_objects_to_regions(
+        {"bin_0": region_name}, region_configs={region_name: region_config}
+    )
     bin_ = after.get_object_from_name("bin_0")
     barrier = after.get_object_from_name("cuboid_barrier")
     assert after.get(bin_, "x") < after.get(barrier, "x")

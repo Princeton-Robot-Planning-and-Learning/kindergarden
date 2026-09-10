@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 
 import kinder
+from kinder.envs.dynamic3d.envs import TidyBot3DEnv
 from kinder.envs.dynamic3d.objects.fixtures import FixedCuboid
 from kinder.envs.dynamic3d.scene_loader import SceneLoader
 
@@ -81,8 +82,6 @@ def test_fixed_barrier_preserves_original_box_geometry() -> None:
 @pytest.mark.parametrize("num_objects", [1, 2])
 def test_state_restoration_across_resets(num_objects: int) -> None:
     """The anchored barrier must agree between independently reset models."""
-    from kinder.envs.dynamic3d.envs import TidyBot3DEnv
-
     env = TidyBot3DEnv(
         num_objects=num_objects,
         task_config_path=f"tasks/Tossing3D/Tossing3D-o{num_objects}.json",

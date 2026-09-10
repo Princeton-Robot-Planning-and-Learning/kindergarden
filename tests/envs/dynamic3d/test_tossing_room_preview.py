@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 import kinder
-from kinder.envs.dynamic3d.envs import TidyBot3DEnv
+from kinder.envs.dynamic3d.envs import ObjectCentricTidyBot3DEnv, TidyBot3DEnv
 from kinder.envs.dynamic3d.objects.fixtures import FixedCuboid
 from kinder.envs.dynamic3d.scene_loader import SceneLoader
 
@@ -95,6 +95,7 @@ def test_state_restoration_across_resets(num_objects: int) -> None:
         env.set_state(saved)
         np.testing.assert_array_equal(env.get_state(), saved)
         inner = env._object_centric_env  # pylint: disable=protected-access
+        assert isinstance(inner, ObjectCentricTidyBot3DEnv)
         sim = inner._robot_env.sim  # pylint: disable=protected-access
         assert sim is not None
         barrier_id = sim.model.mj_model.body("cuboid_barrier").id

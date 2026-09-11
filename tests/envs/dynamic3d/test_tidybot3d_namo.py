@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+import mujoco
 import numpy as np
 import pytest
 from gymnasium.wrappers import RecordVideo
@@ -321,3 +322,153 @@ def test_namo_with_mimiclabs_scene():
             break
 
     env.close()
+
+
+# The Dynamo3D room: every variant must be solvable with or without the background.
+DYNAMO_VARIANTS = ("o1", "o3", "o12")
+ROBOT_HALF_DIAGONAL = 0.35  # TidyBot base, generous
+SCENE_BG_OPTIONS = (False, True) if MIMICLABS_SCENES_DIR.exists() else (False,)
+
+
+def _make_dynamo_env(variant: str, scene_bg: bool) -> ObjectCentricTidyBot3DEnv:
+    return ObjectCentricTidyBot3DEnv(
+        scene_type="namo",
+        num_objects=int(variant[1:]),
+        task_config_path=str(TASKS_DIR / "Dynamo3D" / f"Dynamo3D-{variant}.json"),
+        scene_bg=scene_bg,
+    )
+
+
+def _colliding_walls(env: ObjectCentricTidyBot3DEnv) -> dict[str, tuple]:
+    """Name -> (pos, size, quat) of every colliding wall box in the compiled model."""
+    # pylint: disable=no-member
+    assert env._robot_env is not None  # pylint: disable=protected-access
+    model = env._robot_env.sim.model.mj_model  # pylint: disable=protected-access
+    walls = {}
+    for geom_id in range(model.ngeom):
+        name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_GEOM, geom_id) or ""
+        if (
+            not name.startswith("wall_")
+            or model.geom_type[geom_id] != mujoco.mjtGeom.mjGEOM_BOX
+        ):
+            continue
+        if model.geom_contype[geom_id] == 0 and model.geom_conaffinity[geom_id] == 0:
+            continue
+        walls[name] = (
+            tuple(np.round(model.geom_pos[geom_id], 4)),
+            tuple(np.round(model.geom_size[geom_id], 4)),
+            tuple(np.round(model.geom_quat[geom_id], 4)),
+        )
+    return walls
+
+
+def _wall_segments(walls: dict[str, tuple]) -> list[tuple[np.ndarray, np.ndarray]]:
+    """Each wall box as the xy segment along its long axis."""
+    segments = []
+    for pos, size, quat in walls.values():
+        rotation = np.zeros(9)
+        mujoco.mju_quat2Mat(rotation, np.array(quat))  # pylint: disable=no-member
+        along = rotation.reshape(3, 3)[:2, 0] * size[0]
+        center = np.array(pos[:2])
+        segments.append((center - along, center + along))
+    return segments
+
+
+def _wall_clearance(walls: dict[str, tuple], x: float, y: float) -> float:
+    """Distance from (x, y) to the nearest wall, negative when outside the room."""
+    point = np.array([x, y])
+    clearance = np.inf
+    crossings = 0
+    ray = np.array([1.0, 0.37])  # off-axis so no wall end lies on the ray
+    for start, end in _wall_segments(walls):
+        direction = end - start
+        t = np.clip((point - start) @ direction / (direction @ direction), 0.0, 1.0)
+        clearance = min(
+            clearance, float(np.linalg.norm(point - (start + t * direction)))
+        )
+        # Ray-crossing parity decides whether the point is enclosed by the walls.
+        denominator = np.cross(ray, direction)
+        if abs(denominator) < 1e-9:
+            continue
+        offset = start - point
+        ray_t = np.cross(offset, direction) / denominator
+        wall_t = np.cross(offset, ray) / denominator
+        if ray_t > 0 and 0 <= wall_t <= 1:
+            crossings += 1
+    return clearance if crossings % 2 == 1 else -clearance
+
+
+def _footprint_half_diagonal(task_config: dict, object_name: str) -> float:
+    for objects in task_config["objects"].values():
+        if object_name in objects:
+            length, width = objects[object_name]["footprint"][:2]
+            return float(np.hypot(length, width) / 2)
+    raise KeyError(object_name)
+
+
+@pytest.mark.parametrize("variant", DYNAMO_VARIANTS)
+def test_dynamo_room_walls_are_identical_across_backgrounds(variant: str) -> None:
+    """The plain scene and the lab background collide with the same room."""
+    signatures = []
+    for scene_bg in SCENE_BG_OPTIONS:
+        env = _make_dynamo_env(variant, scene_bg)
+        env.reset(seed=0)
+        walls = _colliding_walls(env)
+        env.close()
+        assert len(walls) == 7, sorted(walls)
+        signatures.append(walls)
+    assert all(walls == signatures[0] for walls in signatures)
+
+
+@pytest.mark.parametrize("variant", DYNAMO_VARIANTS)
+def test_dynamo_regions_lie_inside_the_room(variant: str) -> None:
+    """Goal box, chair spawn regions and the robot spawn box clear every wall."""
+    env = _make_dynamo_env(variant, scene_bg=False)
+    env.reset(seed=0)
+    walls = _colliding_walls(env)
+    regions = env.task_config["regions"]
+    margins = {"ground_goal_region": ROBOT_HALF_DIAGONAL}
+    for predicate in env.task_config["initial_state"]:
+        if predicate[0] == "on" and predicate[1] != env.robot_name:
+            margins[predicate[2]] = _footprint_half_diagonal(
+                env.task_config, predicate[1]
+            )
+    assert set(margins) == set(regions)
+    boxes = {name: regions[name]["ranges"][0] for name in regions}
+    boxes["robot spawn box"] = [-1.0, -1.0, 1.0, 1.0]
+    margins["robot spawn box"] = ROBOT_HALF_DIAGONAL
+    for name, (x_min, y_min, x_max, y_max) in boxes.items():
+        for x, y in ((x_min, y_min), (x_min, y_max), (x_max, y_min), (x_max, y_max)):
+            clearance = _wall_clearance(walls, x, y)
+            assert (
+                clearance >= margins[name]
+            ), f"{name} corner ({x}, {y}) clears walls by {clearance:.2f} m"
+    env.close()
+
+
+@pytest.mark.parametrize("scene_bg", SCENE_BG_OPTIONS)
+@pytest.mark.parametrize("variant", DYNAMO_VARIANTS)
+def test_dynamo_goal_is_reachable(variant: str, scene_bg: bool) -> None:
+    """Driving the base straight at the goal box satisfies the goal in every variant.
+
+    Chairs in the way are shoved aside by the base, so a straight line is enough; what
+    this checks is that no wall stands between the spawn box and the goal.
+    """
+    env = _make_dynamo_env(variant, scene_bg)
+    env.reset(seed=0)
+    x_min, y_min, x_max, y_max = env.task_config["regions"]["ground_goal_region"][
+        "ranges"
+    ][0]
+    goal_x, goal_y = (x_min + x_max) / 2, (y_min + y_max) / 2
+    robot_env = env._robot_env  # pylint: disable=protected-access
+    assert robot_env is not None
+    goal_achieved = False
+    for _ in range(400):
+        base_x, base_y = robot_env.qpos["base"][:2]
+        step = np.clip([goal_x - base_x, goal_y - base_y], -0.05, 0.05)
+        action = np.array([step[0], step[1], 0.0] + [0.0] * 8)
+        _, _, goal_achieved, _, _ = env.step(action)
+        if goal_achieved:
+            break
+    env.close()
+    assert goal_achieved, f"{variant} goal not reached with scene_bg={scene_bg}"

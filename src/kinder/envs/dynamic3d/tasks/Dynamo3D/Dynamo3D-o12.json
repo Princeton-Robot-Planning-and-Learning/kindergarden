@@ -1,4 +1,5 @@
 {
+    "room_layout": "dynamo_room.xml",
     "settle_drift_limit": 0.25,
     "robot_ground_clearance": 0.9,
     "description": "A 3D navigation-among-movable-objects task where the robot must reach a goal region on the floor while several chair obstacles are placed in the workspace.",

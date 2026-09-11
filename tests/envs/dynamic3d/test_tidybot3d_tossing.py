@@ -233,8 +233,8 @@ def test_custom_horizon_preserves_tossing_velocity_controls() -> None:
     try:
         assert env.action_space.shape == (18,)
         actual_config = (
-            env._object_centric_env.config
-        )  # pylint: disable=protected-access
+            env._object_centric_env.config  # pylint: disable=protected-access
+        )
         assert actual_config.horizon == 2000
         assert not config.use_arm_velocities
     finally:

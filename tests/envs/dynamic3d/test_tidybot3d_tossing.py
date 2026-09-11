@@ -2,10 +2,14 @@
 
 from pathlib import Path
 
+import gymnasium as gym
+import numpy as np
 import pytest
 
 import kinder
-from kinder.envs.dynamic3d.envs import ObjectCentricTidyBot3DEnv
+from kinder.envs.dynamic3d.envs import ObjectCentricTidyBot3DEnv, TidyBot3DConfig
+from kinder.envs.dynamic3d.robots.tidybot_robot_env import TidyBot3DRobotActionSpace
+from kinder.envs.dynamic3d.task_families import Tossing3DEnv
 
 _TASK_CONFIG_PATH = (
     Path(kinder.__path__[0])
@@ -185,5 +189,53 @@ def test_tossing_goal_follows_displaced_bin(count: int):
             state.set(cube, "x", original_x)
         env.set_state(state)
         assert not env._check_goals()  # pylint: disable=protected-access
+    finally:
+        env.close()
+
+
+def test_tossing_velocity_action_space() -> None:
+    """Velocity targets are accepted while position/gripper bounds still apply."""
+    space = TidyBot3DRobotActionSpace(use_arm_velocities=True)
+    action = np.zeros(18, dtype=space.dtype)
+    action[11:] = np.arange(7) * 10
+    assert space.contains(action)
+    action[3] = 0.101
+    assert not space.contains(action)
+    action[3] = 0
+    action[10] = 1.01
+    assert not space.contains(action)
+    assert not space.contains(np.zeros(11, dtype=space.dtype))
+    assert not space.contains(np.zeros((100, 18), dtype=space.dtype))
+    assert TidyBot3DRobotActionSpace().shape == (11,)
+
+
+def test_registered_and_direct_tossing_have_velocity_controls() -> None:
+    """Both public constructors declare actions that can be executed directly."""
+    kinder.register_all_environments()
+    for env in (gym.make("kinder/Tossing3D-o1-v0"), Tossing3DEnv(num_objects=1)):
+        try:
+            env.reset(seed=0)
+            assert env.action_space.shape == (18,)
+            action = np.zeros(18, dtype=env.action_space.dtype)
+            action[11] = 0.1
+            assert env.action_space.contains(action)
+            env.step(action)
+        finally:
+            env.close()
+    config = gym.spec("kinder/Shelf3D-o1-v0").kwargs.get("config")
+    assert config is None or not config.use_arm_velocities
+
+
+def test_custom_horizon_preserves_tossing_velocity_controls() -> None:
+    """Changing episode duration must not silently change the public action shape."""
+    config = TidyBot3DConfig(horizon=2000)
+    env = Tossing3DEnv(num_objects=1, config=config)
+    try:
+        assert env.action_space.shape == (18,)
+        actual_config = (
+            env._object_centric_env.config
+        )  # pylint: disable=protected-access
+        assert actual_config.horizon == 2000
+        assert not config.use_arm_velocities
     finally:
         env.close()

@@ -22,7 +22,6 @@ class TidyBot3DRobotActionSpace(RobotActionSpace):
         )
         high = np.array([0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 1.0])
         if use_arm_velocities:
-            # Velocity targets have no separate cap in the existing torque controller.
             low = np.concatenate((low, np.full(7, -np.inf)))
             high = np.concatenate((high, np.full(7, np.inf)))
         super().__init__(low, high)
@@ -31,14 +30,8 @@ class TidyBot3DRobotActionSpace(RobotActionSpace):
         """Create a human-readable markdown description of this space."""
         if self.shape == (18,):
             return (
-                "Actions at 10 Hz by default: base position/yaw deltas (3), "
-                "arm joint position deltas (7), gripper position (1; 0=open, "
-                "1=closed), and arm joint velocity targets (7, radians/second). "
-                "Position deltas are bounded by +/-0.1 and the gripper by [0, 1]. "
-                "Velocity targets are unbounded; resulting motor torques are limited. "
-                "Velocity targets are absolute even when positions use deltas. "
-                "Substep control schedules are a separate low-level interface "
-                "and are not elements of this 18D action space."
+                "Actions: base pos and yaw (3), arm joints (7), gripper pos (1), "
+                "and arm joint velocity targets (7, rad/s)."
             )
         return """Actions: base pos and yaw (3), arm joints (7), gripper pos (1)"""
 

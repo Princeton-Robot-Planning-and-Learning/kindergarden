@@ -1,0 +1,1 @@
+Tossing3D review media for Kinder #200. These are separate constructive-controller rollouts using ordinary bounded 18D actions at 10 Hz, not SeSamE rollouts. Clips show both throws at two receiver corners, with the scene background, at half speed.

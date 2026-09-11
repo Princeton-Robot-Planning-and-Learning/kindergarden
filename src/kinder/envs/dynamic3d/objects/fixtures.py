@@ -18,6 +18,64 @@ from kinder.envs.dynamic3d.objects.base import (
     Region,
     register_fixture,
 )
+from kinder.envs.dynamic3d.objects.primitive_objects import Cuboid
+
+
+@register_fixture
+class FixedCuboid(MujocoFixture):
+    """A static cuboid obstacle reusing the movable cuboid's geometry."""
+
+    def __init__(
+        self,
+        name: str,
+        fixture_config: dict[str, str | float],
+        position: list[float] | NDArray[np.float32],
+        yaw: float,
+        regions: dict | None = None,
+        env: MujocoEnv | None = None,
+    ) -> None:
+        super().__init__(name, fixture_config, position, yaw, regions, env)
+        if regions:
+            raise ValueError("FixedCuboid obstacles do not define placement regions")
+        self.primitive = Cuboid(name, options=fixture_config)
+        self.xml_element = self._create_xml_element()
+
+    def _create_xml_element(self) -> ET.Element:
+        body = self.primitive.xml_element
+        joint = body.find("freejoint")
+        assert joint is not None
+        body.remove(joint)
+        body.set("pos", " ".join(map(str, self.position)))
+        body.set("quat", " ".join(map(str, self.get_orientation())))
+        for geom in body.iter("geom"):
+            for key in ("solref", "solimp"):
+                if key in self.fixture_config:
+                    values = cast(list[float], self.fixture_config[key])
+                    geom.set(key, " ".join(map(str, values)))
+                    geom.set("priority", "1")
+        return body
+
+    @staticmethod
+    def get_bounding_box_from_config(
+        pos: NDArray[np.float32], fixture_config: dict[str, str | float]
+    ) -> list[float]:
+        """Return the same geometry bounds as Cuboid."""
+        return Cuboid.get_bounding_box_from_config(pos, fixture_config)
+
+    def sample_pose_in_region(
+        self, region_name: str, np_random: np.random.Generator
+    ) -> tuple[float, float, float, float]:
+        """This obstacle has no placement regions."""
+        raise ValueError(f"FixedCuboid has no region {region_name}")
+
+    def check_in_region(
+        self,
+        position: NDArray[np.float32],
+        region_name: str,
+        env: MujocoEnv | None = None,
+    ) -> bool:
+        """This obstacle has no placement regions."""
+        raise ValueError(f"FixedCuboid has no region {region_name}")
 
 
 @register_fixture

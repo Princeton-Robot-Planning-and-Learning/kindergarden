@@ -10,7 +10,11 @@ class SceneLoader:
     """Factory class for loading different scene types."""
 
     @staticmethod
-    def load_scene(scene_config: dict[str, Any], model_base_path: Path) -> str:
+    def load_scene(
+        scene_config: dict[str, Any],
+        model_base_path: Path,
+        room_layout: str | None = None,
+    ) -> str:
         """Load scene XML based on configuration.
 
         Args:
@@ -19,6 +23,7 @@ class SceneLoader:
                 - xml_path: (optional) path to scene XML file
                 - lab: (optional, for mimiclabs) lab number (2-8)
             model_base_path: Base path to models directory
+            room_layout: Optional task-owned room geometry, shared by backgrounds.
 
         Returns:
             XML string of the loaded scene
@@ -26,10 +31,40 @@ class SceneLoader:
         scene_type = scene_config.get("type", "simple")
 
         if scene_type == "mimiclabs":
-            return MimicLabsSceneLoader.load(scene_config)
-        if scene_type == "simple":
-            return SimpleSceneLoader.load(scene_config, model_base_path)
-        raise ValueError(f"Unknown scene type: {scene_type}")
+            xml = MimicLabsSceneLoader.load(scene_config)
+        elif scene_type == "simple":
+            xml = SimpleSceneLoader.load(scene_config, model_base_path)
+        else:
+            raise ValueError(f"Unknown scene type: {scene_type}")
+        if room_layout is None:
+            return xml
+        return SceneLoader._apply_room_layout(xml, model_base_path / room_layout)
+
+    @staticmethod
+    def _apply_room_layout(xml: str, layout_path: Path) -> str:
+        """Replace matching visual walls with one explicit physical room layout."""
+        root = ET.fromstring(xml)
+        room = ET.parse(layout_path).getroot()
+        assert room.tag == "body"
+        floor_visual_size = room.attrib.pop("floor_visual_size", None)
+        wall_names = {geom.get("name") for geom in room.iter("geom")}
+        worldbody = root.find("worldbody")
+        assert worldbody is not None
+        for parent in worldbody.iter():
+            for geom in list(parent.findall("geom")):
+                if geom.get("name") in wall_names:
+                    parent.remove(geom)
+                elif floor_visual_size is not None and geom.get("type") == "plane":
+                    # Plane X/Y sizes affect rendering, not its infinite collision.
+                    size = geom.get("size", "0 0 0.1").split()
+                    geom.set("size", f"{floor_visual_size} {size[2]}")
+        materials = {mat.get("name") for mat in root.findall("asset/material")}
+        for geom in room.iter("geom"):
+            if geom.get("material") not in materials:
+                geom.attrib.pop("material", None)
+                geom.set("rgba", "1 1 1 1")
+        worldbody.append(room)
+        return ET.tostring(root, encoding="unicode")
 
 
 class SimpleSceneLoader:

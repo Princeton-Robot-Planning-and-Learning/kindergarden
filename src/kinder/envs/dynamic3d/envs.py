@@ -64,6 +64,7 @@ class TidyBot3DConfig(KinDEREnvConfig, metaclass=FinalConfigMeta):
     camera_height: int = 480
     show_viewer: bool = False
     act_delta: bool = True
+    use_arm_velocities: bool = False
 
 
 class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
@@ -1355,7 +1356,7 @@ class ObjectCentricTidyBot3DEnv(ObjectCentricRobotEnv):
         self, config: TidyBot3DConfig
     ) -> Space[Array]:
         """Create action space for TidyBot's control interface."""
-        return TidyBot3DRobotActionSpace()
+        return TidyBot3DRobotActionSpace(config.use_arm_velocities)
 
     def _get_object_centric_robot_data(self) -> dict[Object, dict[str, float]]:
         assert self.robot_type == "tidybot"

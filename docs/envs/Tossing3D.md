@@ -32,7 +32,7 @@ The variants require tossing different numbers of objects into the bin.
 *(Differs per variant, see individual variant pages)*
 
 ## Action Space
-Actions: base pos and yaw (3), arm joints (7), gripper pos (1)
+Actions: base pos and yaw (3), arm joints (7), gripper pos (1), and arm joint velocity targets (7, rad/s).
 
 ## Rewards
 The primary reward is for successfully placing objects at their target locations.

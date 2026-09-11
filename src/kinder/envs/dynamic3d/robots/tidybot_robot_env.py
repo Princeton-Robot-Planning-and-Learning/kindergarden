@@ -15,16 +15,24 @@ from kinder.envs.dynamic3d.robots.base import IndexedView, RobotEnv
 class TidyBot3DRobotActionSpace(RobotActionSpace):
     """An action in a MuJoCo environment; used to set sim.data.ctrl in MuJoCo."""
 
-    def __init__(self) -> None:
+    def __init__(self, use_arm_velocities: bool = False) -> None:
         # TidyBot actions: base pos and yaw (3), arm joints (7), gripper pos (1)
         low = np.array(
             [-0.1, -0.1, -0.1, -0.1, -0.1, -0.1, -0.1, -0.1, -0.1, -0.1, 0.0]
         )
         high = np.array([0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 1.0])
+        if use_arm_velocities:
+            low = np.concatenate((low, np.full(7, -np.inf)))
+            high = np.concatenate((high, np.full(7, np.inf)))
         super().__init__(low, high)
 
     def create_markdown_description(self) -> str:
         """Create a human-readable markdown description of this space."""
+        if self.shape == (18,):
+            return (
+                "Actions: base pos and yaw (3), arm joints (7), gripper pos (1), "
+                "and arm joint velocity targets (7, rad/s)."
+            )
         return """Actions: base pos and yaw (3), arm joints (7), gripper pos (1)"""
 
 

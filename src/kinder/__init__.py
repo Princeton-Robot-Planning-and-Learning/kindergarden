@@ -527,13 +527,18 @@ def _register_dynamic3d() -> None:
                         ) from e
                     task_cfg = "-".join(config_name.split("-")[1:])
                     variant_id = f"kinder/{folder_name}-{task_cfg}-v0"
+                    entry_point = f"kinder.envs.dynamic3d.envs:{robot}Env"
+                    task_kwargs: dict[str, Any] = {
+                        "task_config_path": str(task_config),
+                        "scene_render_camera": "task_view",
+                    }
+                    if folder_name == "Tossing3D":
+                        entry_point = "kinder.envs.dynamic3d.task_families:Tossing3DEnv"
+                        task_kwargs = {"num_objects": int(task_cfg.removeprefix("o"))}
                     _register(
                         id=variant_id,
-                        entry_point=f"kinder.envs.dynamic3d.envs:{robot}Env",
-                        kwargs={
-                            "task_config_path": str(task_config),
-                            "scene_render_camera": "task_view",
-                        },
+                        entry_point=entry_point,
+                        kwargs=task_kwargs,
                     )
                     if folder_name not in env_class_variants:
                         env_class_variants[folder_name] = {}

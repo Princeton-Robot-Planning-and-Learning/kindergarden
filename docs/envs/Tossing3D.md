@@ -32,7 +32,7 @@ The variants require tossing different numbers of objects into the bin.
 *(Differs per variant, see individual variant pages)*
 
 ## Action Space
-Actions: base pos and yaw (3), arm joints (7), gripper pos (1)
+The 18D action at the default 10 Hz contains base position/yaw deltas (3), arm joint position deltas (7), gripper position (1; 0=open, 1=closed), and absolute arm joint velocity targets (7, rad/s). Position deltas remain bounded by ±0.1 and the gripper by [0, 1]. Velocity targets have no separate command bound; the existing controller limits motor torques. A velocity target is not a guaranteed physical joint speed. Substep schedules remain a separate low-level interface, outside this 18D Box.
 
 ## Rewards
 The primary reward is for successfully placing objects at their target locations.

@@ -28,7 +28,7 @@ in a different object rather than adding more of one, so for those a plain
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from kinder.envs.dynamic3d.envs import TidyBot3DEnv
+from kinder.envs.dynamic3d.envs import TidyBot3DConfig, TidyBot3DEnv
 
 _TASKS_DIR = Path(__file__).parent / "tasks"
 
@@ -145,6 +145,14 @@ class Shelf3DEnv(TaskFamilyEnvMixin, TidyBot3DEnv):
 
 class Tossing3DEnv(TaskFamilyEnvMixin, TidyBot3DEnv):
     """Select a Tossing3D task by its number of cubes to toss."""
+
+    def __init__(
+        self,
+        num_objects: int | None = None,
+        config: TidyBot3DConfig = TidyBot3DConfig(use_arm_velocities=True),
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(num_objects=num_objects, config=config, **kwargs)
 
     family = "Tossing3D"
     supported_counts = frozenset({1, 2})

@@ -1,0 +1,13 @@
+<!-- Task-owned lab2 room for Dynamo3D, colliding identically with or without background assets.
+     The front wall sits at x=5 and the left wall at y=5 so that every chair region and the
+     goal box fit inside with margin; the rear wall and the chamfered corners keep the lab2
+     layout, and a short notch joins the left chamfer to the extended left wall. -->
+<body name="dynamo_room" floor_visual_size="5 5">
+  <geom name="wall_leftcorner_visual" pos="-1.25 2.25 1.5" quat="0.6532815 0.6532815 0.2705981 0.2705981" size="1.06 1.5 0.01" type="box" material="walls_mat" contype="1" conaffinity="1" group="1" solref="0.001 1" solimp="0.99 0.99 0.001" priority="1"/>
+  <geom name="wall_rightcorner_visual" pos="-1.25 -2.25 1.5" quat="0.6532815 0.6532815 -0.2705981 -0.2705981" size="1.06 1.5 0.01" type="box" material="walls_mat" contype="1" conaffinity="1" group="1" solref="0.001 1" solimp="0.99 0.99 0.001" priority="1"/>
+  <geom name="wall_leftnotch_visual" pos="-0.5 4 1.5" quat="0.5 0.5 -0.5 -0.5" size="1 1.5 0.01" type="box" material="walls_mat" contype="1" conaffinity="1" group="1" solref="0.001 1" solimp="0.99 0.99 0.001" priority="1"/>
+  <geom name="wall_left_visual" pos="2.25 5 1.5" quat="0.7071 0.7071 0 0" size="2.75 1.5 0.01" type="box" material="walls_mat" contype="1" conaffinity="1" group="1" solref="0.001 1" solimp="0.99 0.99 0.001" priority="1"/>
+  <geom name="wall_right_visual" pos="2.25 -3 1.5" quat="0.7071 -0.7071 0 0" size="2.75 1.5 0.01" type="box" material="walls_mat" contype="1" conaffinity="1" group="1" solref="0.001 1" solimp="0.99 0.99 0.001" priority="1"/>
+  <geom name="wall_rear_visual" pos="-2 0 1.5" quat="0.5 0.5 0.5 0.5" size="1.5 1.5 0.01" type="box" material="walls_mat" contype="1" conaffinity="1" group="1" solref="0.001 1" solimp="0.99 0.99 0.001" priority="1"/>
+  <geom name="wall_front_visual" pos="5 1 1.5" quat="0.5 0.5 -0.5 -0.5" size="4 1.5 0.01" type="box" material="walls_mat" contype="1" conaffinity="1" group="1" solref="0.001 1" solimp="0.99 0.99 0.001" priority="1"/>
+</body>

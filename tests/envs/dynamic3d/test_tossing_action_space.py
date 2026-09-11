@@ -4,6 +4,7 @@ import gymnasium as gym
 import numpy as np
 
 import kinder
+from kinder.envs.dynamic3d.envs import TidyBot3DConfig
 from kinder.envs.dynamic3d.robots.tidybot_robot_env import TidyBot3DRobotActionSpace
 from kinder.envs.dynamic3d.task_families import Tossing3DEnv
 
@@ -39,3 +40,18 @@ def test_registered_and_direct_tossing_have_velocity_controls() -> None:
             env.close()
     config = gym.spec("kinder/Shelf3D-o1-v0").kwargs.get("config")
     assert config is None or not config.use_arm_velocities
+
+
+def test_custom_horizon_preserves_tossing_velocity_controls() -> None:
+    """Changing episode duration must not silently change the public action shape."""
+    config = TidyBot3DConfig(horizon=2000)
+    env = Tossing3DEnv(num_objects=1, config=config)
+    try:
+        assert env.action_space.shape == (18,)
+        actual_config = (
+            env._object_centric_env.config
+        )  # pylint: disable=protected-access
+        assert actual_config.horizon == 2000
+        assert not config.use_arm_velocities
+    finally:
+        env.close()

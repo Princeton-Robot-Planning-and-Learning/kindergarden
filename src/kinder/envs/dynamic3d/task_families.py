@@ -25,6 +25,7 @@ in a different object rather than adding more of one, so for those a plain
 ``gymnasium.make("kinder/<Family>-<variant>-v0")`` is the whole story.
 """
 
+from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
@@ -149,10 +150,15 @@ class Tossing3DEnv(TaskFamilyEnvMixin, TidyBot3DEnv):
     def __init__(
         self,
         num_objects: int | None = None,
-        config: TidyBot3DConfig = TidyBot3DConfig(use_arm_velocities=True),
+        config: TidyBot3DConfig = TidyBot3DConfig(),
         **kwargs: Any,
     ) -> None:
-        super().__init__(num_objects=num_objects, config=config, **kwargs)
+        # The named Tossing family always exposes its velocity-target controls.
+        super().__init__(
+            num_objects=num_objects,
+            config=replace(config, use_arm_velocities=True),
+            **kwargs,
+        )
 
     family = "Tossing3D"
     supported_counts = frozenset({1, 2})

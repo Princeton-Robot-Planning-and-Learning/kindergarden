@@ -48,6 +48,49 @@ DETERMINISTIC_REPLAY_BLACKLIST = {
     # Obstruction2D: Keep only o4 (last variant)
     "Obstruction2D-o0": "Keeping only last variant (o4) per environment group",
     "Obstruction2D-o3": "Keeping only last variant (o4) per environment group",
+    # Recorded 2026-02-05/06 under the pre-"kinder" prpl-mono/prbench codebase,
+    # predating this repo's initial commit (2026-03-10, f8a88d6). Env/scene
+    # definitions (e.g. kitchen drawer tracking, physics/asset tuning) have
+    # changed since, so initial-state replay no longer matches exactly even
+    # though the (now-fixed) env_id correctly identifies the recorded task.
+    "BalanceBeam3D-o3/123/1770335695.p": (
+        "Predates repo's initial commit; recorded under old codebase, "
+        "physics/asset drift since then."
+    ),
+    "ConstrainedCupboard3D-o2/123/1770416276.p": (
+        "Predates repo's initial commit; recorded under old codebase, "
+        "physics/asset drift since then."
+    ),
+    "Dynamo3D-o1/123/1770328534.p": (
+        "Predates repo's initial commit; recorded under old codebase, "
+        "physics/asset drift since then."
+    ),
+    "Rearrange3D-o1-put_the_boxed_drink_behind_the_bowl/123/1770330088.p": (
+        "Predates repo's initial commit; recorded under old codebase. "
+        "Kitchen scene gained drawer-tracking objects since then, changing "
+        "the observation dimension."
+    ),
+    "ScoopPour3D-o10/123/1770436209.p": (
+        "Predates repo's initial commit; recorded under old codebase. "
+        "Kitchen scene gained drawer-tracking objects since then, changing "
+        "the observation dimension."
+    ),
+    "SortClutteredBlocks3D-o20-sort_the_cluttered_blocks_into_bins/123/1770421361.p": (
+        "Predates repo's initial commit; recorded under old codebase, "
+        "physics/asset drift since then."
+    ),
+    "SortClutteredBlocks3D-o4-sort_the_cluttered_blocks_into_bins/123/1770422366.p": (
+        "Predates repo's initial commit; recorded under old codebase, "
+        "physics/asset drift since then."
+    ),
+    (
+        "SweepSimple3D-o10-sweep_the_blocks_to_the_left_side_of_the_kitchen_island"
+        "/123/1770402583.p"
+    ): (
+        "Predates repo's initial commit; recorded under old codebase. "
+        "Kitchen scene gained drawer-tracking objects since then, changing "
+        "the observation dimension."
+    ),
 }
 
 

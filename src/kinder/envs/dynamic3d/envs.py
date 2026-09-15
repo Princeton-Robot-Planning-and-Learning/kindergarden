@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 import cv2 as cv
+import mujoco
 import numpy as np
 from gymnasium.spaces import Space
 from numpy.typing import NDArray
@@ -74,6 +75,59 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
     max_reset_retries: int = 20
 
     metadata: dict[str, Any] = {"render_modes": ["rgb_array"]}
+
+    def get_gripper_object_contacts(
+        self, object_name: str, *, state: ObjectCentricState | None = None
+    ) -> list[dict[str, Any]]:
+        """Return MuJoCo contacts between the gripper fingers and an object."""
+        assert self._robot_env is not None, "Robot environment not initialized"
+        assert self._robot_env.sim is not None, "Simulation not initialized"
+        original = self._get_state() if state is not None else None
+        if state is not None:
+            self._set_state(state)
+        try:
+            sim = self._robot_env.sim
+            model = sim.model.mj_model
+            data = sim.data.mj_data
+
+            def descendants(root_name: str) -> set[int]:
+                root = sim.model._body_name2id[root_name]  # pylint: disable=protected-access
+                result = {root}
+                changed = True
+                while changed:
+                    changed = False
+                    for body_id, parent_id in enumerate(model.body_parentid):
+                        if int(parent_id) in result and body_id not in result:
+                            result.add(body_id)
+                            changed = True
+                return result
+
+            object_bodies = descendants(object_name)
+            gripper_bodies = descendants(f"{self.robot_name}_base")
+            contacts: list[dict[str, Any]] = []
+            for contact_index in range(data.ncon):
+                contact = data.contact[contact_index]
+                body1 = int(model.geom_bodyid[contact.geom1])
+                body2 = int(model.geom_bodyid[contact.geom2])
+                if not (
+                    (body1 in gripper_bodies and body2 in object_bodies)
+                    or (body2 in gripper_bodies and body1 in object_bodies)
+                ):
+                    continue
+                contacts.append({
+                    "geom1": mujoco.mj_id2name(
+                        model, mujoco.mjtObj.mjOBJ_GEOM, int(contact.geom1)
+                    ),
+                    "geom2": mujoco.mj_id2name(
+                        model, mujoco.mjtObj.mjOBJ_GEOM, int(contact.geom2)
+                    ),
+                    "distance": float(contact.dist),
+                    "position": [float(value) for value in contact.pos],
+                })
+            return contacts
+        finally:
+            if original is not None:
+                self._set_state(original)
 
     def __init__(
         self,

@@ -3,16 +3,18 @@
 from pathlib import Path
 
 import gymnasium as gym
+import kinder
+import mujoco
 import numpy as np
 import pytest
-
-import kinder
 from kinder.envs.dynamic3d.envs import (
     ObjectCentricTidyBot3DEnv,
     TidyBot3DConfig,
 )
+from kinder.envs.dynamic3d.object_types import MujocoStaticColliderType
 from kinder.envs.dynamic3d.robots.tidybot_robot_env import TidyBot3DRobotActionSpace
 from kinder.envs.dynamic3d.task_families import Tossing3DEnv
+from scipy.spatial.transform import Rotation
 
 _TASK_CONFIG_PATH = (
     Path(kinder.__path__[0])
@@ -41,6 +43,38 @@ def _put_cube_at(env: ObjectCentricTidyBot3DEnv, x: float, y: float, z: float) -
     modified_state.set(cube, "y", y)
     modified_state.set(cube, "z", z)
     env.set_state(modified_state)
+
+
+def test_static_collision_boxes_match_compiled_mujoco_geometry():
+    """Room walls and fixed barrier retain exact dimensions and world orientation."""
+    env = _make_env()
+    try:
+        state, _ = env.reset(seed=125)
+        sim = env._robot_env.sim
+        model, data = sim.model.mj_model, sim.data.mj_data
+        colliders = state.get_objects(MujocoStaticColliderType)
+        assert len(colliders) >= 7
+        names = set()
+        for obj in colliders:
+            geom = int(obj.name.rsplit(":", 1)[1])
+            names.add(mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_GEOM, geom))
+            np.testing.assert_allclose(
+                [state.get(obj, k) for k in ("x", "y", "z")], data.geom_xpos[geom]
+            )
+            np.testing.assert_allclose(
+                [state.get(obj, k) for k in ("bb_x", "bb_y", "bb_z")],
+                2 * model.geom_size[geom],
+            )
+            rotation = Rotation.from_quat(
+                [state.get(obj, k) for k in ("qx", "qy", "qz", "qw")]
+            )
+            np.testing.assert_allclose(
+                rotation.as_matrix(), data.geom_xmat[geom].reshape(3, 3), atol=1e-6
+            )
+        assert "wall_rightcorner_visual" in names
+        assert any(obj.name.startswith("collider:cuboid_barrier:") for obj in colliders)
+    finally:
+        env.close()
 
 
 def test_tossing3d_cube_in_bin_is_a_success():

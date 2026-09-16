@@ -27,6 +27,7 @@ from kinder.envs.dynamic3d.object_types import (
     MujocoFR3RobotObjectType,
     MujocoObjectTypeFeatures,
     MujocoRBY1ARobotObjectType,
+    MujocoStaticColliderType,
     MujocoTidyBotRobotObjectType,
 )
 from kinder.envs.dynamic3d.objects import (
@@ -1205,7 +1206,49 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
         # Add robot into object-centric state.
         robot_state_dict = self._get_object_centric_robot_data()
         state_dict.update(robot_state_dict)
+        state_dict.update(self._get_static_collision_boxes())
         return create_state_from_dict(state_dict, MujocoObjectTypeFeatures)
+
+    def _get_static_collision_boxes(self) -> dict[Object, dict[str, float]]:
+        """Expose fixed MuJoCo boxes to planners, including room and fixture geometry.
+
+        Use compiled world poses, not visual meshes or task-specific wall constants.
+        Articulated bodies are excluded; their geometry is represented by the robot
+        and movable objects. Floor planes are not navigation obstacles.
+        """
+        assert self._robot_env is not None and self._robot_env.sim is not None
+        sim = self._robot_env.sim
+        model, data = sim.model.mj_model, sim.data.mj_data
+        result = {}
+        for geom in range(model.ngeom):
+            if model.geom_type[geom] != mujoco.mjtGeom.mjGEOM_BOX:
+                continue
+            if not (model.geom_contype[geom] or model.geom_conaffinity[geom]):
+                continue
+            body = int(model.geom_bodyid[geom])
+            ancestor = body
+            while ancestor and model.body_jntnum[ancestor] == 0:
+                ancestor = int(model.body_parentid[ancestor])
+            if ancestor:
+                continue
+            position = data.geom_xpos[geom]
+            rotation = data.geom_xmat[geom].reshape(3, 3)
+            half_extents = model.geom_size[geom]
+            if position[2] + np.abs(rotation[2]) @ half_extents <= 0.01:
+                continue
+            quaternion = Rotation.from_matrix(rotation).as_quat()
+            body_name = (
+                mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_BODY, body) or "world"
+            )
+            name = f"collider:{body_name}:{geom}"
+            result[Object(name, MujocoStaticColliderType)] = dict(
+                zip(
+                    ("x", "y", "z", "qx", "qy", "qz", "qw", "bb_x", "bb_y", "bb_z"),
+                    map(float, (*position, *quaternion, *(2 * half_extents))),
+                    strict=True,
+                )
+            )
+        return result
 
     def step_with_images(
         self, action: Array

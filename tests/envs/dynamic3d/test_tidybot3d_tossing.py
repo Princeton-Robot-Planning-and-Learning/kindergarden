@@ -7,7 +7,10 @@ import numpy as np
 import pytest
 
 import kinder
-from kinder.envs.dynamic3d.envs import ObjectCentricTidyBot3DEnv, TidyBot3DConfig
+from kinder.envs.dynamic3d.envs import (
+    ObjectCentricTidyBot3DEnv,
+    TidyBot3DConfig,
+)
 from kinder.envs.dynamic3d.robots.tidybot_robot_env import TidyBot3DRobotActionSpace
 from kinder.envs.dynamic3d.task_families import Tossing3DEnv
 

@@ -925,13 +925,24 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
             data = obj._get_object_centric_data()  # pylint: disable=protected-access
             occupied_bboxes.append(_object_world_axis_aligned_bbox(data))
 
+        room_planes = self._placement_room_halfspaces()
+
+        def check_placement(point: NDArray[np.float32], region_name: str) -> bool:
+            return sampling_ground.check_in_region(point, region_name) and all(
+                float(normal @ point[:2]) >= offset + 0.005
+                for normal, offset in room_planes
+            )
+
+        for collider in self._get_static_collision_boxes().values():
+            occupied_bboxes.append(_object_world_axis_aligned_bbox(collider))
+
         poses = sample_collision_free_positions(
             configs,
             self.np_random,
             entity_region_names=dict(object_region_names),
             entity_pos_yaw_samplers=samplers,
             entity_check_in_region={
-                name: sampling_ground.check_in_region for name in object_region_names
+                name: check_placement for name in object_region_names
             },
             initial_placed_bboxes=occupied_bboxes,
             fail_on_exhaustion=True,
@@ -945,6 +956,49 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
         self._robot_env.sim.forward()
         self._current_state = self._get_object_centric_state()
         return self._get_current_state()
+
+    def _placement_room_halfspaces(self) -> list[tuple[NDArray[np.float64], float]]:
+        """Interior faces of an explicitly declared convex, vertical-box room.
+
+        The task opts into this contract by naming its enclosing wall body. Wall
+        locations and thicknesses come from the compiled model, never copied bounds.
+        Every sampled object footprint corner must satisfy every inward halfspace.
+        """
+        body_name = self.task_config.get("convex_placement_room_body")
+        if body_name is None:
+            return []
+        assert self._robot_env is not None and self._robot_env.sim is not None
+        sim = self._robot_env.sim
+        model, data = sim.model.mj_model, sim.data.mj_data
+        body = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, body_name)
+        if body < 0:
+            raise ValueError(f"Unknown placement room body: {body_name}")
+        geoms = [
+            g
+            for g in range(model.ngeom)
+            if model.geom_bodyid[g] == body
+            and (model.geom_contype[g] or model.geom_conaffinity[g])
+        ]
+        if len(geoms) < 3:
+            raise ValueError("Placement room needs at least three enclosing walls")
+        interior = np.mean([data.geom_xpos[g, :2] for g in geoms], axis=0)
+        planes = []
+        for geom in geoms:
+            if model.geom_type[geom] != mujoco.mjtGeom.mjGEOM_BOX:
+                raise ValueError("Placement room walls must be boxes")
+            rotation = data.geom_xmat[geom].reshape(3, 3)
+            axis = int(np.argmin(model.geom_size[geom]))
+            if abs(rotation[2, axis]) > 1e-6:
+                raise ValueError("Placement room walls must be vertical")
+            normal = rotation[:2, axis].copy()
+            center = data.geom_xpos[geom, :2]
+            if normal @ (interior - center) < 0:
+                normal *= -1
+            offset = float(normal @ center + model.geom_size[geom, axis])
+            if normal @ interior <= offset:
+                raise ValueError("Placement room has no valid interior reference")
+            planes.append((normal, offset))
+        return planes
 
     @abc.abstractmethod
     def _create_action_space(  # type: ignore

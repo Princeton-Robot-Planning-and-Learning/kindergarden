@@ -35,6 +35,54 @@ def _make_env(count: int = 1) -> ObjectCentricTidyBot3DEnv:
     )
 
 
+@pytest.mark.parametrize(
+    "bounds,yaw", [([-2.3, -2.3, -1.48, 2.3], 180), ([1.48, -2.3, 2.3, 2.3], 0)]
+)
+def test_reset_bin_stays_inside_room_for_both_destinations(bounds, yaw):
+    """Exercise the actual requested regions, including their outside-room parts."""
+    env = _make_env()
+    try:
+        env.reset(seed=125)
+        region = {"target": "ground", "ranges": [bounds], "yaw_ranges": [[yaw, yaw]]}
+        for seed in range(100):
+            env.np_random = np.random.default_rng(seed)
+            state = env.reset_ground_objects_to_regions(
+                {"bin_0": "destination"}, region_configs={"destination": region}
+            )
+            bin_obj = state.get_object_from_name("bin_0")
+            x, y = [state.get(bin_obj, key) for key in ("x", "y")]
+            # Independent analytic checks for all four corners of the 30 cm bin.
+            # The enclosing walls have 1 cm half-thickness plus 5 mm clearance.
+            for dx in (-0.15, 0.15):
+                for dy in (-0.15, 0.15):
+                    cx, cy = x + dx, y + dy
+                    assert -1.985 <= cx <= 4.185
+                    assert abs(cy) <= 2.985
+                    assert cx - abs(cy) >= -3.5 + 0.015 * np.sqrt(2) - 1e-5
+    finally:
+        env.close()
+
+
+def test_outside_room_reset_fails_without_moving_bin():
+    env = _make_env()
+    try:
+        before, _ = env.reset(seed=125)
+        region = {
+            "target": "ground",
+            "ranges": [[-4, -4, -3, -3]],
+            "yaw_ranges": [[0, 0]],
+        }
+        with pytest.raises(RuntimeError):
+            env.reset_ground_objects_to_regions(
+                {"bin_0": "outside"}, region_configs={"outside": region}
+            )
+        after = env._get_current_state()
+        obj = before.get_object_from_name("bin_0")
+        np.testing.assert_array_equal(before[obj], after[obj])
+    finally:
+        env.close()
+
+
 def _put_cube_at(env: ObjectCentricTidyBot3DEnv, x: float, y: float, z: float) -> None:
     """Teleport cube_0 to the given world position."""
     modified_state = env._get_current_state()  # pylint: disable=protected-access

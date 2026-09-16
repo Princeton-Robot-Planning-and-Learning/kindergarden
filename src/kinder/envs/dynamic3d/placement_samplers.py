@@ -4,6 +4,7 @@ from typing import Any, Union
 
 import numpy as np
 from numpy.typing import NDArray
+from shapely import Polygon, box, constrained_delaunay_triangles, union_all
 
 from kinder.envs.dynamic3d import utils
 from kinder.envs.dynamic3d.objects import (
@@ -15,6 +16,100 @@ from kinder.envs.dynamic3d.objects import (
 
 # Default yaw range in degrees (full rotation)
 DEFAULT_YAW_RANGE = (0.0, 360.0)
+
+
+def sample_feasible_ground_positions(
+    configs: dict[str, dict[str, dict[str, Any]]],
+    rng: np.random.Generator,
+    region_names: dict[str, str],
+    regions: dict[str, Any],
+    room_planes: list[tuple[NDArray[np.float64], float]],
+    obstacles: list[list[float]],
+) -> dict[str, dict[str, dict[str, Any]]]:
+    """Sample directly from footprint-safe ground polygons, without retry limits.
+
+    Fixed-yaw footprints use their rotated AABB. Variable-yaw regions use the
+    rotation envelope, so every sampled orientation fits. This is conservative,
+    consistent with the existing AABB collision model. Objects rest on the ground.
+    All poses are prepared before the caller changes the simulator.
+    """
+    occupied = list(obstacles)
+    result: dict[str, dict[str, dict[str, Any]]] = {}
+    clearance = 0.005
+    for kind, objects in configs.items():
+        result[kind] = {}
+        for name, config in objects.items():
+            bounds = get_object_class(kind).get_bounding_box_from_config(
+                np.zeros(3, dtype=np.float32), config
+            )
+            region = regions[region_names[name]]
+            candidates = []
+            for index, extent in enumerate(region["ranges"]):
+                if len(extent) != 4:
+                    raise ValueError("Feasible ground sampling requires 2D regions")
+                low, high = region.get(
+                    "yaw_ranges", [DEFAULT_YAW_RANGE] * len(region["ranges"])
+                )[index]
+                yaw = np.deg2rad(rng.uniform(low, high))
+                half = (np.array(bounds[3:5]) - bounds[:2]) / 2
+                if low == high:
+                    c, s = abs(np.cos(yaw)), abs(np.sin(yaw))
+                    half = np.array(
+                        [c * half[0] + s * half[1], s * half[0] + c * half[1]]
+                    )
+                else:
+                    half = np.full(2, np.linalg.norm(half))
+                x0, y0, x1, y1 = extent
+                x0, y0 = np.array([x0, y0]) + half + clearance
+                x1, y1 = np.array([x1, y1]) - half - clearance
+                if x1 <= x0 or y1 <= y0:
+                    continue
+                vertices = [
+                    np.array(p) for p in ((x0, y0), (x1, y0), (x1, y1), (x0, y1))
+                ]
+                for normal, offset in room_planes:
+                    threshold = offset + np.abs(normal) @ half + clearance
+                    clipped = []
+                    for a, b in zip(vertices, vertices[1:] + vertices[:1]):
+                        da, db = normal @ a - threshold, normal @ b - threshold
+                        if da >= 0:
+                            clipped.append(a)
+                        if (da >= 0) != (db >= 0):
+                            clipped.append(a + da / (da - db) * (b - a))
+                    vertices = clipped
+                    if len(vertices) < 3:
+                        break
+                if len(vertices) < 3:
+                    continue
+                height = bounds[5] - bounds[2]
+                blocked = [
+                    box(
+                        o[0] - half[0] - clearance,
+                        o[1] - half[1] - clearance,
+                        o[3] + half[0] + clearance,
+                        o[4] + half[1] + clearance,
+                    )
+                    for o in occupied
+                    if o[5] > 0 and o[2] < height
+                ]
+                feasible = Polygon(vertices).difference(union_all(blocked))
+                for triangle in constrained_delaunay_triangles(feasible).geoms:
+                    if triangle.area > 0:
+                        candidates.append((triangle, yaw, half))
+            if not candidates:
+                raise RuntimeError(f"No feasible ground placement region for {name!r}")
+            areas = np.array([triangle.area for triangle, _, _ in candidates])
+            triangle, yaw, half = candidates[
+                int(rng.choice(len(candidates), p=areas / areas.sum()))
+            ]
+            a, b, c = np.array(triangle.exterior.coords)[:3]
+            u, v = rng.random(2)
+            root = np.sqrt(u)
+            xy = (1 - root) * a + root * (1 - v) * b + root * v * c
+            position = np.array([*xy, -bounds[2]], dtype=np.float64)
+            occupied.append([*(xy - half), 0.0, *(xy + half), bounds[5] - bounds[2]])
+            result[kind][name] = {"position": position, "yaw": float(yaw)}
+    return result
 
 
 def sample_collision_free_positions(

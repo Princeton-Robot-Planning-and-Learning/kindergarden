@@ -40,6 +40,7 @@ from kinder.envs.dynamic3d.objects import (
 from kinder.envs.dynamic3d.objects.generated_objects import GeneratedSeesaw
 from kinder.envs.dynamic3d.placement_samplers import (
     sample_collision_free_positions,
+    sample_feasible_ground_positions,
 )
 from kinder.envs.dynamic3d.robots import (
     FR3RobotActionSpace,
@@ -927,26 +928,31 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
 
         room_planes = self._placement_room_halfspaces()
 
-        def check_placement(point: NDArray[np.float32], region_name: str) -> bool:
-            return sampling_ground.check_in_region(point, region_name) and all(
-                float(normal @ point[:2]) >= offset + 0.005
-                for normal, offset in room_planes
-            )
-
         for collider in self._get_static_collision_boxes().values():
             occupied_bboxes.append(_object_world_axis_aligned_bbox(collider))
 
-        poses = sample_collision_free_positions(
-            configs,
-            self.np_random,
-            entity_region_names=dict(object_region_names),
-            entity_pos_yaw_samplers=samplers,
-            entity_check_in_region={
-                name: check_placement for name in object_region_names
-            },
-            initial_placed_bboxes=occupied_bboxes,
-            fail_on_exhaustion=True,
-        )
+        if room_planes:
+            poses = sample_feasible_ground_positions(
+                configs,
+                self.np_random,
+                dict(object_region_names),
+                requested_regions,
+                room_planes,
+                occupied_bboxes,
+            )
+        else:
+            poses = sample_collision_free_positions(
+                configs,
+                self.np_random,
+                entity_region_names=dict(object_region_names),
+                entity_pos_yaw_samplers=samplers,
+                entity_check_in_region={
+                    name: sampling_ground.check_in_region
+                    for name in object_region_names
+                },
+                initial_placed_bboxes=occupied_bboxes,
+                fail_on_exhaustion=True,
+            )
         for poses_by_name in poses.values():
             for object_name, pose in poses_by_name.items():
                 obj = self._objects_dict[object_name]

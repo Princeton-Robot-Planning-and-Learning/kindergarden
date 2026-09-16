@@ -6,8 +6,46 @@ import pytest
 from kinder.envs.dynamic3d.objects import MujocoGround, Table
 from kinder.envs.dynamic3d.placement_samplers import (
     sample_collision_free_position,
+    sample_feasible_ground_positions,
 )
 from kinder.envs.dynamic3d.utils import bboxes_overlap
+
+
+def test_direct_sampler_handles_tiny_feasible_sliver_without_retries():
+    configs = {"cube": {"cube_0": {"size": 0.025}}}
+    regions = {"region": {"ranges": [[0, 0, 1, 1]], "yaw_ranges": [[0, 0]]}}
+    for seed in range(100):
+        poses = sample_feasible_ground_positions(
+            configs,
+            np.random.default_rng(seed),
+            {"cube_0": "region"},
+            regions,
+            [(np.array([1.0, 0.0]), 0.93999)],
+            [],
+        )
+        x, y, z = poses["cube"]["cube_0"]["position"]
+        assert 0.96999 <= x <= 0.97
+        assert 0.03 <= y <= 0.97
+        assert z == pytest.approx(0.025)
+
+
+def test_direct_sampler_subtracts_obstacles_and_places_multiple_objects():
+    configs = {"cube": {"cube_0": {"size": 0.025}, "cube_1": {"size": 0.025}}}
+    regions = {"region": {"ranges": [[0, 0, 1, 1]], "yaw_ranges": [[0, 0]]}}
+    for seed in range(100):
+        poses = sample_feasible_ground_positions(
+            configs,
+            np.random.default_rng(seed),
+            {name: "region" for name in configs["cube"]},
+            regions,
+            [],
+            [[0.3, 0.3, 0, 0.7, 0.7, 1]],
+        )["cube"]
+        for pose in poses.values():
+            x, y, _ = pose["position"]
+            assert x <= 0.27 or x >= 0.73 or y <= 0.27 or y >= 0.73
+        a, b = [pose["position"] for pose in poses.values()]
+        assert max(abs(a[:2] - b[:2])) >= 0.055 - 1e-9
 
 
 def create_mock_sampler(x_range=(-2.0, 2.0), y_range=(0.5, 2.5)):

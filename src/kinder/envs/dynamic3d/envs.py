@@ -930,6 +930,7 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
 
         for collider in self._get_static_collision_boxes().values():
             occupied_bboxes.append(_object_world_axis_aligned_bbox(collider))
+        occupied_bboxes.extend(self._get_static_mesh_placement_bounds())
 
         if room_planes:
             poses = sample_feasible_ground_positions(
@@ -1268,6 +1269,35 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
         state_dict.update(robot_state_dict)
         state_dict.update(self._get_static_collision_boxes())
         return create_state_from_dict(state_dict, MujocoObjectTypeFeatures)
+
+    def _get_static_mesh_placement_bounds(self) -> list[list[float]]:
+        """Reserve fixed furniture meshes, even when decorative/non-colliding.
+
+        Use compiled mesh vertices and world transforms rather than hard-coded
+        scene coordinates. Bounding boxes conservatively exclude furniture voids;
+        this is placement exclusion, not a change to simulator collision physics.
+        """
+        assert self._robot_env is not None and self._robot_env.sim is not None
+        sim = self._robot_env.sim
+        model, data = sim.model.mj_model, sim.data.mj_data
+        bounds = []
+        for geom in range(model.ngeom):
+            if model.geom_type[geom] != mujoco.mjtGeom.mjGEOM_MESH:
+                continue
+            ancestor = int(model.geom_bodyid[geom])
+            while ancestor and model.body_jntnum[ancestor] == 0:
+                ancestor = int(model.body_parentid[ancestor])
+            if ancestor:
+                continue
+            mesh = model.geom_dataid[geom]
+            start, count = model.mesh_vertadr[mesh], model.mesh_vertnum[mesh]
+            vertices = (
+                model.mesh_vert[start : start + count]
+                @ data.geom_xmat[geom].reshape(3, 3).T
+                + data.geom_xpos[geom]
+            )
+            bounds.append([*vertices.min(axis=0), *vertices.max(axis=0)])
+        return bounds
 
     def _get_static_collision_boxes(self) -> dict[Object, dict[str, float]]:
         """Expose fixed MuJoCo boxes to planners, including room and fixture geometry.

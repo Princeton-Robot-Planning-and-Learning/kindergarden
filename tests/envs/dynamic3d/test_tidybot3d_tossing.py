@@ -83,6 +83,44 @@ def test_outside_room_reset_fails_without_moving_bin():
         env.close()
 
 
+def test_resets_avoid_background_furniture():
+    """Even non-colliding decorative furniture must not contain reset objects."""
+    env = ObjectCentricTidyBot3DEnv(
+        num_objects=1,
+        task_config_path=str(_TASK_CONFIG_PATH),
+        scene_bg=True,
+        allow_state_access=True,
+    )
+    try:
+        env.reset(seed=125)
+        sim = env._robot_env.sim
+        model, data = sim.model.mj_model, sim.data.mj_data
+        geom = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, "living_room")
+        mesh = model.geom_dataid[geom]
+        start, count = model.mesh_vertadr[mesh], model.mesh_vertnum[mesh]
+        vertices = (
+            model.mesh_vert[start : start + count]
+            @ data.geom_xmat[geom].reshape(3, 3).T
+            + data.geom_xpos[geom]
+        )
+        low, high = vertices.min(axis=0), vertices.max(axis=0)
+        region = {"target": "ground", "ranges": [[-1.98, -2, 0, 2]]}
+        for seed in range(200):
+            env.np_random = np.random.default_rng(seed)
+            state = env.reset_ground_objects_to_regions(
+                {"cube_0": "test", "bin_0": "test"}, region_configs={"test": region}
+            )
+            for name, radius in (
+                ("cube_0", np.sqrt(2) * 0.025),
+                ("bin_0", np.sqrt(2) * 0.15),
+            ):
+                obj = state.get_object_from_name(name)
+                xy = np.array([state.get(obj, key) for key in ("x", "y")])
+                assert np.any(xy + radius < low[:2]) or np.any(xy - radius > high[:2])
+    finally:
+        env.close()
+
+
 def _put_cube_at(env: ObjectCentricTidyBot3DEnv, x: float, y: float, z: float) -> None:
     """Teleport cube_0 to the given world position."""
     modified_state = env._get_current_state()  # pylint: disable=protected-access

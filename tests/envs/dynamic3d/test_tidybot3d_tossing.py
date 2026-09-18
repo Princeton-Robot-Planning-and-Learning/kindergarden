@@ -3,16 +3,18 @@
 from pathlib import Path
 
 import gymnasium as gym
+import kinder
+import mujoco
 import numpy as np
 import pytest
-
-import kinder
 from kinder.envs.dynamic3d.envs import (
     ObjectCentricTidyBot3DEnv,
     TidyBot3DConfig,
 )
+from kinder.envs.dynamic3d.object_types import MujocoStaticColliderType
 from kinder.envs.dynamic3d.robots.tidybot_robot_env import TidyBot3DRobotActionSpace
 from kinder.envs.dynamic3d.task_families import Tossing3DEnv
+from scipy.spatial.transform import Rotation
 
 _TASK_CONFIG_PATH = (
     Path(kinder.__path__[0])
@@ -33,6 +35,92 @@ def _make_env(count: int = 1) -> ObjectCentricTidyBot3DEnv:
     )
 
 
+@pytest.mark.parametrize(
+    "bounds,yaw", [([-2.3, -2.3, -1.48, 2.3], 180), ([1.48, -2.3, 2.3, 2.3], 0)]
+)
+def test_reset_bin_stays_inside_room_for_both_destinations(bounds, yaw):
+    """Exercise the actual requested regions, including their outside-room parts."""
+    env = _make_env()
+    try:
+        env.reset(seed=125)
+        region = {"target": "ground", "ranges": [bounds], "yaw_ranges": [[yaw, yaw]]}
+        for seed in range(100):
+            env.np_random = np.random.default_rng(seed)
+            state = env.reset_ground_objects_to_regions(
+                {"bin_0": "destination"}, region_configs={"destination": region}
+            )
+            bin_obj = state.get_object_from_name("bin_0")
+            x, y = [state.get(bin_obj, key) for key in ("x", "y")]
+            # Independent analytic checks for all four corners of the 30 cm bin.
+            # The enclosing walls have 1 cm half-thickness plus 5 mm clearance.
+            for dx in (-0.15, 0.15):
+                for dy in (-0.15, 0.15):
+                    cx, cy = x + dx, y + dy
+                    assert -1.985 <= cx <= 4.185
+                    assert abs(cy) <= 2.985
+                    assert cx - abs(cy) >= -3.5 + 0.015 * np.sqrt(2) - 1e-5
+    finally:
+        env.close()
+
+
+def test_outside_room_reset_fails_without_moving_bin():
+    env = _make_env()
+    try:
+        before, _ = env.reset(seed=125)
+        region = {
+            "target": "ground",
+            "ranges": [[-4, -4, -3, -3]],
+            "yaw_ranges": [[0, 0]],
+        }
+        with pytest.raises(RuntimeError):
+            env.reset_ground_objects_to_regions(
+                {"bin_0": "outside"}, region_configs={"outside": region}
+            )
+        after = env._get_current_state()
+        obj = before.get_object_from_name("bin_0")
+        np.testing.assert_array_equal(before[obj], after[obj])
+    finally:
+        env.close()
+
+
+def test_resets_avoid_background_furniture():
+    """Even non-colliding decorative furniture must not contain reset objects."""
+    env = ObjectCentricTidyBot3DEnv(
+        num_objects=1,
+        task_config_path=str(_TASK_CONFIG_PATH),
+        scene_bg=True,
+        allow_state_access=True,
+    )
+    try:
+        env.reset(seed=125)
+        sim = env._robot_env.sim
+        model, data = sim.model.mj_model, sim.data.mj_data
+        geom = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, "living_room")
+        mesh = model.geom_dataid[geom]
+        start, count = model.mesh_vertadr[mesh], model.mesh_vertnum[mesh]
+        vertices = (
+            model.mesh_vert[start : start + count]
+            @ data.geom_xmat[geom].reshape(3, 3).T
+            + data.geom_xpos[geom]
+        )
+        low, high = vertices.min(axis=0), vertices.max(axis=0)
+        region = {"target": "ground", "ranges": [[-1.98, -2, 0, 2]]}
+        for seed in range(200):
+            env.np_random = np.random.default_rng(seed)
+            state = env.reset_ground_objects_to_regions(
+                {"cube_0": "test", "bin_0": "test"}, region_configs={"test": region}
+            )
+            for name, radius in (
+                ("cube_0", np.sqrt(2) * 0.025),
+                ("bin_0", np.sqrt(2) * 0.15),
+            ):
+                obj = state.get_object_from_name(name)
+                xy = np.array([state.get(obj, key) for key in ("x", "y")])
+                assert np.any(xy + radius < low[:2]) or np.any(xy - radius > high[:2])
+    finally:
+        env.close()
+
+
 def _put_cube_at(env: ObjectCentricTidyBot3DEnv, x: float, y: float, z: float) -> None:
     """Teleport cube_0 to the given world position."""
     modified_state = env._get_current_state()  # pylint: disable=protected-access
@@ -41,6 +129,38 @@ def _put_cube_at(env: ObjectCentricTidyBot3DEnv, x: float, y: float, z: float) -
     modified_state.set(cube, "y", y)
     modified_state.set(cube, "z", z)
     env.set_state(modified_state)
+
+
+def test_static_collision_boxes_match_compiled_mujoco_geometry():
+    """Room walls and fixed barrier retain exact dimensions and world orientation."""
+    env = _make_env()
+    try:
+        state, _ = env.reset(seed=125)
+        sim = env._robot_env.sim
+        model, data = sim.model.mj_model, sim.data.mj_data
+        colliders = state.get_objects(MujocoStaticColliderType)
+        assert len(colliders) >= 7
+        names = set()
+        for obj in colliders:
+            geom = int(obj.name.rsplit(":", 1)[1])
+            names.add(mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_GEOM, geom))
+            np.testing.assert_allclose(
+                [state.get(obj, k) for k in ("x", "y", "z")], data.geom_xpos[geom]
+            )
+            np.testing.assert_allclose(
+                [state.get(obj, k) for k in ("bb_x", "bb_y", "bb_z")],
+                2 * model.geom_size[geom],
+            )
+            rotation = Rotation.from_quat(
+                [state.get(obj, k) for k in ("qx", "qy", "qz", "qw")]
+            )
+            np.testing.assert_allclose(
+                rotation.as_matrix(), data.geom_xmat[geom].reshape(3, 3), atol=1e-6
+            )
+        assert "wall_rightcorner_visual" in names
+        assert any(obj.name.startswith("collider:cuboid_barrier:") for obj in colliders)
+    finally:
+        env.close()
 
 
 def test_tossing3d_cube_in_bin_is_a_success():

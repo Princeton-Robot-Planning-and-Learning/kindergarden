@@ -18,6 +18,14 @@ MujocoObjectTypeFeatures[MujocoObjectType] = [
     "qz",
 ]
 
+MujocoStaticColliderType = Type("mujoco_static_collider", parent=MujocoObjectType)
+MujocoObjectTypeFeatures[MujocoStaticColliderType] = [
+    *MujocoObjectTypeFeatures[MujocoObjectType],
+    "bb_x",
+    "bb_y",
+    "bb_z",
+]
+
 MujocoMovableObjectType = Type("mujoco_movable_object", parent=MujocoObjectType)
 MujocoObjectTypeFeatures[MujocoMovableObjectType] = [
     # Position.

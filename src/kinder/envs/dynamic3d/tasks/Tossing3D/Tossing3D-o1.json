@@ -9,6 +9,7 @@
     },
     "scene": "lab2",
     "room_layout": "tossing_room.xml",
+    "convex_placement_room_body": "tossing_room",
     "regions": {
         "bin_init_region": {
             "target": "ground",

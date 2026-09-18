@@ -27,6 +27,7 @@ from kinder.envs.dynamic3d.object_types import (
     MujocoFR3RobotObjectType,
     MujocoObjectTypeFeatures,
     MujocoRBY1ARobotObjectType,
+    MujocoStaticColliderType,
     MujocoTidyBotRobotObjectType,
 )
 from kinder.envs.dynamic3d.objects import (
@@ -39,6 +40,7 @@ from kinder.envs.dynamic3d.objects import (
 from kinder.envs.dynamic3d.objects.generated_objects import GeneratedSeesaw
 from kinder.envs.dynamic3d.placement_samplers import (
     sample_collision_free_positions,
+    sample_feasible_ground_positions,
 )
 from kinder.envs.dynamic3d.robots import (
     FR3RobotActionSpace,
@@ -924,17 +926,34 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
             data = obj._get_object_centric_data()  # pylint: disable=protected-access
             occupied_bboxes.append(_object_world_axis_aligned_bbox(data))
 
-        poses = sample_collision_free_positions(
-            configs,
-            self.np_random,
-            entity_region_names=dict(object_region_names),
-            entity_pos_yaw_samplers=samplers,
-            entity_check_in_region={
-                name: sampling_ground.check_in_region for name in object_region_names
-            },
-            initial_placed_bboxes=occupied_bboxes,
-            fail_on_exhaustion=True,
-        )
+        room_planes = self._placement_room_halfspaces()
+
+        for collider in self._get_static_collision_boxes().values():
+            occupied_bboxes.append(_object_world_axis_aligned_bbox(collider))
+        occupied_bboxes.extend(self._get_static_mesh_placement_bounds())
+
+        if room_planes:
+            poses = sample_feasible_ground_positions(
+                configs,
+                self.np_random,
+                dict(object_region_names),
+                requested_regions,
+                room_planes,
+                occupied_bboxes,
+            )
+        else:
+            poses = sample_collision_free_positions(
+                configs,
+                self.np_random,
+                entity_region_names=dict(object_region_names),
+                entity_pos_yaw_samplers=samplers,
+                entity_check_in_region={
+                    name: sampling_ground.check_in_region
+                    for name in object_region_names
+                },
+                initial_placed_bboxes=occupied_bboxes,
+                fail_on_exhaustion=True,
+            )
         for poses_by_name in poses.values():
             for object_name, pose in poses_by_name.items():
                 obj = self._objects_dict[object_name]
@@ -944,6 +963,49 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
         self._robot_env.sim.forward()
         self._current_state = self._get_object_centric_state()
         return self._get_current_state()
+
+    def _placement_room_halfspaces(self) -> list[tuple[NDArray[np.float64], float]]:
+        """Interior faces of an explicitly declared convex, vertical-box room.
+
+        The task opts into this contract by naming its enclosing wall body. Wall
+        locations and thicknesses come from the compiled model, never copied bounds.
+        Every sampled object footprint corner must satisfy every inward halfspace.
+        """
+        body_name = self.task_config.get("convex_placement_room_body")
+        if body_name is None:
+            return []
+        assert self._robot_env is not None and self._robot_env.sim is not None
+        sim = self._robot_env.sim
+        model, data = sim.model.mj_model, sim.data.mj_data
+        body = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, body_name)
+        if body < 0:
+            raise ValueError(f"Unknown placement room body: {body_name}")
+        geoms = [
+            g
+            for g in range(model.ngeom)
+            if model.geom_bodyid[g] == body
+            and (model.geom_contype[g] or model.geom_conaffinity[g])
+        ]
+        if len(geoms) < 3:
+            raise ValueError("Placement room needs at least three enclosing walls")
+        interior = np.mean([data.geom_xpos[g, :2] for g in geoms], axis=0)
+        planes = []
+        for geom in geoms:
+            if model.geom_type[geom] != mujoco.mjtGeom.mjGEOM_BOX:
+                raise ValueError("Placement room walls must be boxes")
+            rotation = data.geom_xmat[geom].reshape(3, 3)
+            axis = int(np.argmin(model.geom_size[geom]))
+            if abs(rotation[2, axis]) > 1e-6:
+                raise ValueError("Placement room walls must be vertical")
+            normal = rotation[:2, axis].copy()
+            center = data.geom_xpos[geom, :2]
+            if normal @ (interior - center) < 0:
+                normal *= -1
+            offset = float(normal @ center + model.geom_size[geom, axis])
+            if normal @ interior <= offset:
+                raise ValueError("Placement room has no valid interior reference")
+            planes.append((normal, offset))
+        return planes
 
     @abc.abstractmethod
     def _create_action_space(  # type: ignore
@@ -1205,7 +1267,78 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
         # Add robot into object-centric state.
         robot_state_dict = self._get_object_centric_robot_data()
         state_dict.update(robot_state_dict)
+        state_dict.update(self._get_static_collision_boxes())
         return create_state_from_dict(state_dict, MujocoObjectTypeFeatures)
+
+    def _get_static_mesh_placement_bounds(self) -> list[list[float]]:
+        """Reserve fixed furniture meshes, even when decorative/non-colliding.
+
+        Use compiled mesh vertices and world transforms rather than hard-coded
+        scene coordinates. Bounding boxes conservatively exclude furniture voids;
+        this is placement exclusion, not a change to simulator collision physics.
+        """
+        assert self._robot_env is not None and self._robot_env.sim is not None
+        sim = self._robot_env.sim
+        model, data = sim.model.mj_model, sim.data.mj_data
+        bounds = []
+        for geom in range(model.ngeom):
+            if model.geom_type[geom] != mujoco.mjtGeom.mjGEOM_MESH:
+                continue
+            ancestor = int(model.geom_bodyid[geom])
+            while ancestor and model.body_jntnum[ancestor] == 0:
+                ancestor = int(model.body_parentid[ancestor])
+            if ancestor:
+                continue
+            mesh = model.geom_dataid[geom]
+            start, count = model.mesh_vertadr[mesh], model.mesh_vertnum[mesh]
+            vertices = (
+                model.mesh_vert[start : start + count]
+                @ data.geom_xmat[geom].reshape(3, 3).T
+                + data.geom_xpos[geom]
+            )
+            bounds.append([*vertices.min(axis=0), *vertices.max(axis=0)])
+        return bounds
+
+    def _get_static_collision_boxes(self) -> dict[Object, dict[str, float]]:
+        """Expose fixed MuJoCo boxes to planners, including room and fixture geometry.
+
+        Use compiled world poses, not visual meshes or task-specific wall constants.
+        Articulated bodies are excluded; their geometry is represented by the robot
+        and movable objects. Floor planes are not navigation obstacles.
+        """
+        assert self._robot_env is not None and self._robot_env.sim is not None
+        sim = self._robot_env.sim
+        model, data = sim.model.mj_model, sim.data.mj_data
+        result = {}
+        for geom in range(model.ngeom):
+            if model.geom_type[geom] != mujoco.mjtGeom.mjGEOM_BOX:
+                continue
+            if not (model.geom_contype[geom] or model.geom_conaffinity[geom]):
+                continue
+            body = int(model.geom_bodyid[geom])
+            ancestor = body
+            while ancestor and model.body_jntnum[ancestor] == 0:
+                ancestor = int(model.body_parentid[ancestor])
+            if ancestor:
+                continue
+            position = data.geom_xpos[geom]
+            rotation = data.geom_xmat[geom].reshape(3, 3)
+            half_extents = model.geom_size[geom]
+            if position[2] + np.abs(rotation[2]) @ half_extents <= 0.01:
+                continue
+            quaternion = Rotation.from_matrix(rotation).as_quat()
+            body_name = (
+                mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_BODY, body) or "world"
+            )
+            name = f"collider:{body_name}:{geom}"
+            result[Object(name, MujocoStaticColliderType)] = dict(
+                zip(
+                    ("x", "y", "z", "qx", "qy", "qz", "qw", "bb_x", "bb_y", "bb_z"),
+                    map(float, (*position, *quaternion, *(2 * half_extents))),
+                    strict=True,
+                )
+            )
+        return result
 
     def step_with_images(
         self, action: Array

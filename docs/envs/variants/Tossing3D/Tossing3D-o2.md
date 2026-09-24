@@ -8,7 +8,7 @@ env = kinder.make("kinder/Tossing3D-o2-v0")
 ```
 
 ## Description
-Toss two cubes into the bin from beyond the robot's reachable distance.
+Get two cubes into the bin.
 
 ## Initial State Distribution
 ![initial state GIF](../../assets/initial_state_gifs/variants/Tossing3D-o2.gif)
@@ -80,34 +80,25 @@ The entries of an array in this Box space correspond to the following object fea
 | 52 | cuboid_barrier | qx |
 | 53 | cuboid_barrier | qy |
 | 54 | cuboid_barrier | qz |
-| 55 | cuboid_barrier | vx |
-| 56 | cuboid_barrier | vy |
-| 57 | cuboid_barrier | vz |
-| 58 | cuboid_barrier | wx |
-| 59 | cuboid_barrier | wy |
-| 60 | cuboid_barrier | wz |
-| 61 | cuboid_barrier | bb_x |
-| 62 | cuboid_barrier | bb_y |
-| 63 | cuboid_barrier | bb_z |
-| 64 | robot | pos_base_x |
-| 65 | robot | pos_base_y |
-| 66 | robot | pos_base_rot |
-| 67 | robot | pos_arm_joint1 |
-| 68 | robot | pos_arm_joint2 |
-| 69 | robot | pos_arm_joint3 |
-| 70 | robot | pos_arm_joint4 |
-| 71 | robot | pos_arm_joint5 |
-| 72 | robot | pos_arm_joint6 |
-| 73 | robot | pos_arm_joint7 |
-| 74 | robot | pos_gripper |
-| 75 | robot | vel_base_x |
-| 76 | robot | vel_base_y |
-| 77 | robot | vel_base_rot |
-| 78 | robot | vel_arm_joint1 |
-| 79 | robot | vel_arm_joint2 |
-| 80 | robot | vel_arm_joint3 |
-| 81 | robot | vel_arm_joint4 |
-| 82 | robot | vel_arm_joint5 |
-| 83 | robot | vel_arm_joint6 |
-| 84 | robot | vel_arm_joint7 |
-| 85 | robot | vel_gripper |
+| 55 | robot | pos_base_x |
+| 56 | robot | pos_base_y |
+| 57 | robot | pos_base_rot |
+| 58 | robot | pos_arm_joint1 |
+| 59 | robot | pos_arm_joint2 |
+| 60 | robot | pos_arm_joint3 |
+| 61 | robot | pos_arm_joint4 |
+| 62 | robot | pos_arm_joint5 |
+| 63 | robot | pos_arm_joint6 |
+| 64 | robot | pos_arm_joint7 |
+| 65 | robot | pos_gripper |
+| 66 | robot | vel_base_x |
+| 67 | robot | vel_base_y |
+| 68 | robot | vel_base_rot |
+| 69 | robot | vel_arm_joint1 |
+| 70 | robot | vel_arm_joint2 |
+| 71 | robot | vel_arm_joint3 |
+| 72 | robot | vel_arm_joint4 |
+| 73 | robot | vel_arm_joint5 |
+| 74 | robot | vel_arm_joint6 |
+| 75 | robot | vel_arm_joint7 |
+| 76 | robot | vel_gripper |

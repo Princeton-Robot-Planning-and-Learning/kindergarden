@@ -1,8 +1,11 @@
 """Tests for primitive object classes (Cube, Cuboid, etc.)."""
 
+import xml.etree.ElementTree as ET
+
 import numpy as np
 import pytest
 
+from kinder.envs.dynamic3d.mujoco_utils import MjModel
 from kinder.envs.dynamic3d.objects.base import MujocoObject
 from kinder.envs.dynamic3d.objects.generated_objects import GeneratedBowl
 from kinder.envs.dynamic3d.objects.primitive_objects import Bin, Cube, Cuboid
@@ -323,6 +326,47 @@ def test_bin_xml_element_creation():
     # All should be box type
     for geom in geoms:
         assert geom.get("type") == "box"
+
+
+def test_bin_default_contact_uses_mujoco_defaults():
+    """Without contact options, bin geoms set no solref, solimp or priority."""
+    bin_obj = Bin("test_bin")
+
+    for geom in bin_obj.xml_element.findall("geom"):
+        assert geom.get("solref") is None
+        assert geom.get("solimp") is None
+        assert geom.get("priority") is None
+
+
+def test_bin_contact_options_apply_to_every_geom():
+    """Contact options stiffen all five bin geoms and win the contact mix."""
+    bin_obj = Bin(
+        "test_bin",
+        options={"solref": [0.001, 1], "solimp": [0.99, 0.99, 0.001]},
+    )
+
+    geoms = bin_obj.xml_element.findall("geom")
+    assert len(geoms) == 5
+    for geom in geoms:
+        assert geom.get("solref") == "0.001 1"
+        assert geom.get("solimp") == "0.99 0.99 0.001"
+        assert geom.get("priority") == "1"
+
+
+def test_bin_contact_options_compile_into_the_model():
+    """The compiled MuJoCo model carries the bin's contact parameters."""
+    bin_obj = Bin(
+        "test_bin",
+        options={"solref": [0.001, 1], "solimp": [0.99, 0.99, 0.001]},
+    )
+    root = ET.Element("mujoco")
+    ET.SubElement(root, "worldbody").append(bin_obj.xml_element)
+    model = MjModel(ET.tostring(root, encoding="unicode")).mj_model
+
+    assert model.ngeom == 5
+    np.testing.assert_allclose(model.geom_solref, [[0.001, 1.0]] * 5)
+    np.testing.assert_allclose(model.geom_solimp[:, :3], [[0.99, 0.99, 0.001]] * 5)
+    np.testing.assert_array_equal(model.geom_priority, [1] * 5)
 
 
 def test_bin_str_repr():

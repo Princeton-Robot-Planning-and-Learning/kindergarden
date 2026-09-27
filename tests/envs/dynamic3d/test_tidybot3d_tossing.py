@@ -362,3 +362,53 @@ def test_custom_horizon_preserves_tossing_velocity_controls() -> None:
         assert not config.use_arm_velocities
     finally:
         env.close()
+
+
+def test_bin_spawn_range_is_the_graded_union_of_original_and_far_receivers() -> None:
+    """The receiver spawn range spans from the physical minimum next to the barrier
+    out to the far wall: the original pre-#191 near support (west edge 1.48) united
+    with #191's far extension (east edge 3.42), so evaluation samples a graded
+    distance ramp rather than a far-only band. 1.48 is not arbitrary -- it is
+    exactly the closest legal bin centre, derived from this task's own constants:
+    barrier x + barrier x half-size + bin half-footprint."""
+    import json
+
+    for count in (1, 2):
+        config_path = _TASK_CONFIG_PATH.with_name(f"Tossing3D-o{count}.json")
+        config = json.loads(config_path.read_text())
+        ranges = config["regions"]["bin_init_region"]["ranges"]
+        # Aligned across object counts, as #191 deliberately kept them.
+        assert ranges == [[1.48, -2.3, 3.42, 2.3]]
+        barrier_x = config["regions"]["barrier_init_region"]["ranges"][0][0]
+        barrier_x_half = config["fixtures"]["fixedcuboid"]["cuboid_barrier"]["size"][0]
+        bin_half_footprint = config["objects"]["bin"]["bin_0"]["length"] / 2
+        assert ranges[0][0] == pytest.approx(
+            barrier_x + barrier_x_half + bin_half_footprint
+        )
+
+
+def test_near_barrier_bin_spawn_is_constructible(tmp_path) -> None:
+    """A bin placed at the spawn range's new west edge, right behind the barrier,
+    must compile and reset cleanly -- the graded range is usable, not just
+    declared."""
+    import json
+
+    config = json.loads(_TASK_CONFIG_PATH.read_text())
+    config["regions"]["bin_init_region"]["ranges"] = [[1.48, -0.4, 1.48, -0.4]]
+    near_path = tmp_path / "Tossing3D-o1-near-barrier.json"
+    near_path.write_text(json.dumps(config))
+    env = ObjectCentricTidyBot3DEnv(
+        num_objects=1,
+        task_config_path=str(near_path),
+        scene_bg=False,
+        allow_state_access=True,
+    )
+    try:
+        env.reset(seed=125)
+        state = env._get_current_state()  # pylint: disable=protected-access
+        bin_obj = state.get_object_from_name("bin_0")
+        assert np.isclose(state.get(bin_obj, "x"), 1.48, atol=1e-6)
+        assert np.isclose(state.get(bin_obj, "y"), -0.4, atol=1e-6)
+        assert not env._check_goals()  # pylint: disable=protected-access
+    finally:
+        env.close()

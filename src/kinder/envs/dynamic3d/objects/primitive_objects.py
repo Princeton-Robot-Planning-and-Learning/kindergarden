@@ -252,6 +252,8 @@ class Bin(MujocoObject):
                 - wall_thickness: Thickness of walls (default: 0.005)
                 - rgba: Color of the bin (either string or [r, g, b, a] values)
                 - mass: Mass of the bin
+                - solref: Optional MuJoCo contact solref applied to every bin geom
+                - solimp: Optional MuJoCo contact solimp applied to every bin geom
             env: Reference to the environment (needed for position get/set operations)
         """
         # Initialize base class
@@ -281,6 +283,11 @@ class Bin(MujocoObject):
 
         # Handle mass parameter with default
         self.mass = self.options.get("mass", 0.1)
+
+        # MuJoCo's default contact is soft enough that a fast-falling object can
+        # sink past the floor panel's mid-plane, flipping the contact normal.
+        self.solref: list[float] | None = self.options.get("solref")
+        self.solimp: list[float] | None = self.options.get("solimp")
 
         # Create the XML element
         self.xml_element = self._create_xml_element()
@@ -392,6 +399,16 @@ class Bin(MujocoObject):
             rgba=self.rgba,
             mass=str(component_mass),
         )
+
+        # Priority makes these parameters govern the contact instead of being
+        # averaged with the other geom's defaults.
+        if self.solref is not None or self.solimp is not None:
+            for geom in body.iter("geom"):
+                if self.solref is not None:
+                    geom.set("solref", " ".join(str(x) for x in self.solref))
+                if self.solimp is not None:
+                    geom.set("solimp", " ".join(str(x) for x in self.solimp))
+                geom.set("priority", "1")
 
         return body
 

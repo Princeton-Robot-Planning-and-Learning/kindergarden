@@ -23,7 +23,6 @@ from kinder.envs.dynamic2d.object_types import (
 from kinder.envs.dynamic2d.utils import (
     DYNAMIC_COLLISION_TYPE,
     NON_GRASPABLE_COLLISION_TYPE,
-    ROBOT_COLLISION_TYPE,
     STATIC_COLLISION_TYPE,
     KinRobotActionSpace,
     create_walls_from_world_boundaries,
@@ -451,11 +450,11 @@ class ObjectCentricDynScoopPour2DEnv(
                     shape2 = pymunk.Poly(body, vs_l2)
                     shape1.friction = 1.0
                     shape1.density = 1.0
-                    shape1.collision_type = ROBOT_COLLISION_TYPE
+                    shape1.collision_type = DYNAMIC_COLLISION_TYPE
                     shape1.mass = mass / 2
                     shape2.friction = 1.0
                     shape2.density = 1.0
-                    shape2.collision_type = ROBOT_COLLISION_TYPE
+                    shape2.collision_type = DYNAMIC_COLLISION_TYPE
                     shape2.mass = mass / 2
                     self.pymunk_space.add(body, shape1, shape2)
                     body.angle = theta

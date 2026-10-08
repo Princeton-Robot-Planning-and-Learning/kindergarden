@@ -58,7 +58,7 @@ class DamageTracker:
         self.active.clear()
         self.exempt = set(self.cubes)
 
-    def mat_poses(self, data):
+    def mat_poses(self, data: Any) -> list[tuple[Any, float]]:
         result = []
         for body in self.bins:
             rotation = data.xmat[body].reshape(3, 3)
@@ -68,7 +68,7 @@ class DamageTracker:
 
     def update(self, data) -> list[dict[str, Any]]:
         mats = self.mat_poses(data)
-        contacts = {}
+        contacts: dict[int, Any] = {}
         for contact in data.contact[: data.ncon]:
             if contact.dist > 0:
                 continue

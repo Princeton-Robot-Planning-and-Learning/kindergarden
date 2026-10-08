@@ -538,7 +538,10 @@ def _register_dynamic3d() -> None:
                     if folder_name == "Tossing3D":
                         _register(
                             id=f"kinder/FragileTossing3D-{task_cfg}-v0",
-                            entry_point="kinder.envs.dynamic3d.fragile_tossing:FragileTossing3DEnv",
+                            entry_point=(
+                                "kinder.envs.dynamic3d.fragile_tossing:"
+                                "FragileTossing3DEnv"
+                            ),
                             kwargs={
                                 "num_objects": int(task_cfg.removeprefix("o")),
                                 "scene_render_camera": "task_view",

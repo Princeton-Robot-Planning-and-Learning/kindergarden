@@ -5,15 +5,22 @@ Only this variant adds damage events. Success and contact physics are unchanged.
 
 import math
 import xml.etree.ElementTree as ET
+from dataclasses import replace
 from typing import Any
 
 import mujoco
-
-from kinder.envs.dynamic3d.envs import ObjectCentricTidyBot3DEnv, TidyBot3DEnv
+from kinder.envs.dynamic3d.envs import (
+    ObjectCentricTidyBot3DEnv,
+    TidyBot3DConfig,
+    TidyBot3DEnv,
+)
 from kinder.envs.dynamic3d.task_families import Tossing3DEnv
 
+# MuJoCo exposes these enum classes through its native extension.
+# pylint: disable=no-member
 
-def inside_mat(point, center, yaw: float, side: float) -> bool:
+
+def inside_mat(point: Any, center: Any, yaw: float, side: float) -> bool:
     """Test a world contact point against the bin's floor-aligned square."""
     dx, dy = point[0] - center[0], point[1] - center[1]
     c, s = math.cos(yaw), math.sin(yaw)
@@ -27,7 +34,7 @@ class DamageTracker:
     charge. Human placement remains exempt until the cube is lifted clear.
     """
 
-    def __init__(self, model, *, mat_size: float, damage_cost: float):
+    def __init__(self, model: Any, *, mat_size: float, damage_cost: float) -> None:
         if not math.isfinite(mat_size) or mat_size <= 0:
             raise ValueError("mat_size must be finite and positive")
         if not math.isfinite(damage_cost) or damage_cost < 0:
@@ -53,12 +60,13 @@ class DamageTracker:
         self.exempt: set[int] = set()
         self.sequence = 0
 
-    def exempt_placement(self):
+    def exempt_placement(self) -> None:
         """Placement itself and ensuing settling are not robot damage."""
         self.active.clear()
         self.exempt = set(self.cubes)
 
     def mat_poses(self, data: Any) -> list[tuple[Any, float]]:
+        """Return current bin floor positions and yaw angles."""
         result = []
         for body in self.bins:
             rotation = data.xmat[body].reshape(3, 3)
@@ -66,7 +74,8 @@ class DamageTracker:
             result.append((data.xpos[body, :2], yaw))
         return result
 
-    def update(self, data) -> list[dict[str, Any]]:
+    def update(self, data: Any) -> list[dict[str, Any]]:
+        """Return newly charged bare-ground contacts at the current physics tick."""
         mats = self.mat_poses(data)
         contacts: dict[int, Any] = {}
         for contact in data.contact[: data.ncon]:
@@ -110,13 +119,13 @@ class DamageTracker:
         for body in sorted(active - self.active):
             self.sequence += 1
             events.append(
-                dict(
-                    event_id=self.sequence,
-                    cube=self.cubes[body],
-                    position=contacts[body].tolist(),
-                    simulation_time=float(data.time),
-                    cost=self.damage_cost,
-                )
+                {
+                    "event_id": self.sequence,
+                    "cube": self.cubes[body],
+                    "position": contacts[body].tolist(),
+                    "simulation_time": float(data.time),
+                    "cost": self.damage_cost,
+                }
             )
         self.active = active
         return events
@@ -125,17 +134,23 @@ class DamageTracker:
 class ObjectCentricFragileTossing3DEnv(ObjectCentricTidyBot3DEnv):
     """Same task and controls with damage info and non-colliding mat visuals."""
 
-    def __init__(self, *args, mat_size=4.0, damage_cost=10.0, **kwargs):
+    def __init__(
+        self,
+        *args: Any,
+        mat_size: float = 4.0,
+        damage_cost: float = 10.0,
+        **kwargs: Any,
+    ) -> None:
         if not math.isfinite(mat_size) or mat_size <= 0:
             raise ValueError("mat_size must be finite and positive")
         if not math.isfinite(damage_cost) or damage_cost < 0:
             raise ValueError("damage_cost must be finite and nonnegative")
         self.mat_size, self.damage_cost = mat_size, damage_cost
-        self.damage_tracker = None
-        self.last_damage_events = []
+        self.damage_tracker: DamageTracker | None = None
+        self.last_damage_events: list[dict[str, Any]] = []
         super().__init__(*args, **kwargs)
 
-    def _create_scene_xml(self):
+    def _create_scene_xml(self) -> str:
         root = ET.fromstring(super()._create_scene_xml())
         world = root.find("worldbody")
         assert world is not None
@@ -162,10 +177,11 @@ class ObjectCentricFragileTossing3DEnv(ObjectCentricTidyBot3DEnv):
             )
         return ET.tostring(root, encoding="unicode")
 
-    def reset(self, **kwargs):
+    def reset(self, **kwargs: Any) -> Any:
         self.damage_tracker = None
         observation, info = super().reset(**kwargs)
         sim = self._robot_env.sim
+        assert sim is not None
         self.damage_tracker = DamageTracker(
             sim.model.mj_model, mat_size=self.mat_size, damage_cost=self.damage_cost
         )
@@ -174,10 +190,11 @@ class ObjectCentricFragileTossing3DEnv(ObjectCentricTidyBot3DEnv):
         self._update_mats()
         return observation, {**info, **self.damage_info()}
 
-    def _update_mats(self):
+    def _update_mats(self) -> None:
         if self.damage_tracker is None:
             return
         sim = self._robot_env.sim
+        assert sim is not None
         model, data = sim.model.mj_model, sim.data.mj_data
         for body, (center, yaw) in zip(
             self.damage_tracker.bins, self.damage_tracker.mat_poses(data)
@@ -187,32 +204,37 @@ class ObjectCentricFragileTossing3DEnv(ObjectCentricTidyBot3DEnv):
             data.mocap_pos[mocap] = [*center, 0.001]
             data.mocap_quat[mocap] = [math.cos(yaw / 2), 0, 0, math.sin(yaw / 2)]
 
-    def damage_info(self):
-        return dict(
-            damage_events=list(self.last_damage_events),
-            damage_cost=sum(e["cost"] for e in self.last_damage_events),
-            fragile_object=dict(
-                mat_size=self.mat_size, damage_cost_per_impact=self.damage_cost
-            ),
-        )
+    def damage_info(self) -> dict[str, Any]:
+        """Expose current step events separately from task reward."""
+        return {
+            "damage_events": list(self.last_damage_events),
+            "damage_cost": sum(e["cost"] for e in self.last_damage_events),
+            "fragile_object": {
+                "mat_size": self.mat_size,
+                "damage_cost_per_impact": self.damage_cost,
+            },
+        }
 
-    def step(self, action):
+    def step(self, action: Any) -> Any:
         sim = self._robot_env.sim
+        assert sim is not None
+        tracker = self.damage_tracker
+        assert tracker is not None
         original = sim.step
         self.last_damage_events = []
 
-        def tracked_step():
+        def tracked_step() -> None:
             original()
-            self.last_damage_events.extend(self.damage_tracker.update(sim.data.mj_data))
+            self.last_damage_events.extend(tracker.update(sim.data.mj_data))
             self._update_mats()
 
         # Scoped to robot execution: initial settling and human placement do not
         # run the observer. Restore even if controller execution is interrupted.
-        sim.step = tracked_step
+        sim.step = tracked_step  # type: ignore[method-assign]
         try:
             observation, reward, terminated, truncated, info = super().step(action)
         finally:
-            sim.step = original
+            sim.step = original  # type: ignore[method-assign]
         return (
             observation,
             reward,
@@ -221,7 +243,7 @@ class ObjectCentricFragileTossing3DEnv(ObjectCentricTidyBot3DEnv):
             {**info, **self.damage_info()},
         )
 
-    def reset_ground_objects_to_regions(self, *args, **kwargs):
+    def reset_ground_objects_to_regions(self, *args: Any, **kwargs: Any) -> Any:
         state = super().reset_ground_objects_to_regions(*args, **kwargs)
         if self.damage_tracker is not None:
             self.damage_tracker.exempt_placement()
@@ -229,25 +251,31 @@ class ObjectCentricFragileTossing3DEnv(ObjectCentricTidyBot3DEnv):
         self._update_mats()
         return state
 
-    def _set_state(self, state):
+    def _set_state(self, state: Any) -> None:
         super()._set_state(state)
         if self.damage_tracker is not None:
             self.damage_tracker.exempt_placement()
         self.last_damage_events = []
         self._update_mats()
 
-    def render(self):
+    def render(self) -> Any:
         self._update_mats()
-        self._robot_env.sim.forward()
+        sim = self._robot_env.sim
+        assert sim is not None
+        sim.forward()
         return super().render()
 
 
 class FragileTossing3DEnv(TidyBot3DEnv):
     """Configurable fragile variant, also accepting custom Tossing task layouts."""
 
-    def __init__(self, *args, num_objects=1, task_config_path=None, **kwargs):
-        from dataclasses import replace
-        from kinder.envs.dynamic3d.envs import TidyBot3DConfig
+    def __init__(
+        self,
+        *args: Any,
+        num_objects: int = 1,
+        task_config_path: str | None = None,
+        **kwargs: Any,
+    ) -> None:
 
         kwargs["config"] = replace(
             kwargs.pop("config", TidyBot3DConfig()), use_arm_velocities=True
@@ -260,10 +288,12 @@ class FragileTossing3DEnv(TidyBot3DEnv):
             **kwargs,
         )
 
-    def _create_object_centric_env(self, *args, **kwargs):
+    def _create_object_centric_env(
+        self, *args: Any, **kwargs: Any
+    ) -> ObjectCentricFragileTossing3DEnv:
         return ObjectCentricFragileTossing3DEnv(*args, **kwargs)
 
-    def _create_env_markdown_description(self):
+    def _create_env_markdown_description(self) -> str:
         return (
             super()._create_env_markdown_description()
             + "\nThe cube is fragile. Bare-ground impacts outside the bin-attached "

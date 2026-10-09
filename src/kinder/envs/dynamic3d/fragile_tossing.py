@@ -1,6 +1,7 @@
 """Tossing with a fragile cube and a visual, bin-attached protective mat.
 
-Only this variant adds damage events. Success and contact physics are unchanged.
+Only this variant adds damage events and a heavy bin. Mat contact physics and
+task success are unchanged.
 """
 
 import math
@@ -139,12 +140,16 @@ class ObjectCentricFragileTossing3DEnv(ObjectCentricTidyBot3DEnv):
         *args: Any,
         mat_size: float = 4.0,
         damage_cost: float = 10.0,
+        bin_mass: float = 100.0,
         **kwargs: Any,
     ) -> None:
         if not math.isfinite(mat_size) or mat_size <= 0:
             raise ValueError("mat_size must be finite and positive")
         if not math.isfinite(damage_cost) or damage_cost < 0:
             raise ValueError("damage_cost must be finite and nonnegative")
+        if not math.isfinite(bin_mass) or bin_mass <= 0:
+            raise ValueError("bin_mass must be finite and positive")
+        self.bin_mass = bin_mass
         self.mat_size, self.damage_cost = mat_size, damage_cost
         self.damage_tracker: DamageTracker | None = None
         self.last_damage_events: list[dict[str, Any]] = []
@@ -160,6 +165,17 @@ class ObjectCentricFragileTossing3DEnv(ObjectCentricTidyBot3DEnv):
             if (b.get("name") or "").startswith("bin_")
         ]
         for name in bins:
+            # Primitive bins specify panel masses. Scale them together so MuJoCo
+            # recomputes consistent inertia without changing collision geometry.
+            # Retain the free joint: human resets must still move bin and mat.
+            bin_body = world.find(f".//body[@name='{name}']")
+            assert bin_body is not None
+            panels = bin_body.findall("geom")
+            total = sum(float(panel.attrib["mass"]) for panel in panels)
+            for panel in panels:
+                panel.set(
+                    "mass", str(float(panel.attrib["mass"]) * self.bin_mass / total)
+                )
             body = ET.SubElement(
                 world, "body", name=f"protective_mat_{name}", mocap="true"
             )

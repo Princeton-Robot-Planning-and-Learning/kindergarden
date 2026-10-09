@@ -139,3 +139,16 @@ def test_heavy_bin_resists_push_and_remains_resettable(monkeypatch):
         assert data.xpos[body, :2] == pytest.approx([2, -1])
     assert displacements[0] > 0.1
     assert displacements[1] < 0.001
+
+
+@pytest.mark.parametrize("offset,damaged", [(0.4, False), (0.6, True)])
+def test_one_meter_mat_drop_boundary(offset, damaged):
+    """Protect a landing 40cm from the center, charge one 60cm away."""
+    model, data = make_sim()
+    tracker = DamageTracker(model, mat_size=1, damage_cost=10)
+    data.qpos[:3] = [offset, 0, 1]
+    events = []
+    for _ in range(600):
+        mujoco.mj_step(model, data)
+        events.extend(tracker.update(data))
+    assert bool(events) == damaged

@@ -82,9 +82,60 @@ def test_small_robot_lift_ends_placement_exemption():
     model, data = make_sim()
     tracker = DamageTracker(model, mat_size=4, damage_cost=10)
     tracker.exempt_placement()
-    data.qpos[:3] = [3, 0, .06]
+    data.qpos[:3] = [3, 0, 0.06]
     events = []
     for _ in range(300):
         mujoco.mj_step(model, data)
         events.extend(tracker.update(data))
     assert events
+
+
+def test_heavy_bin_resists_push_and_remains_resettable(monkeypatch):
+    """Only variant bins gain inertia; resets can still reposition free bodies."""
+    import xml.etree.ElementTree as ET
+
+    import numpy as np
+
+    from kinder.envs.dynamic3d.fragile_tossing import (
+        ObjectCentricFragileTossing3DEnv,
+        ObjectCentricTidyBot3DEnv,
+    )
+
+    xml = """<mujoco><worldbody>
+    <geom name="floor" type="plane" size="10 10 .1"/>
+    <body name="bin_0" pos="0 0 .1"><freejoint/>
+      <geom type="box" size=".15 .15 .1" mass=".1"/>
+    </body>
+    <body name="cube_0" pos="2 0 1"><freejoint/>
+      <geom type="box" size=".025 .025 .025" mass=".1"/>
+    </body></worldbody></mujoco>"""
+    monkeypatch.setattr(ObjectCentricTidyBot3DEnv, "_create_scene_xml", lambda _: xml)
+    env = object.__new__(ObjectCentricFragileTossing3DEnv)
+    env.mat_size = 4
+    env.bin_mass = 100
+    modified = env._create_scene_xml()
+    model = mujoco.MjModel.from_xml_string(modified)
+    baseline = mujoco.MjModel.from_xml_string(xml)
+    body = model.body("bin_0").id
+    assert model.body_mass[body] == pytest.approx(100)
+    assert model.body_mass[model.body("cube_0").id] == pytest.approx(0.1)
+    assert model.body_inertia[body] == pytest.approx(baseline.body_inertia[body] * 1000)
+    assert ET.fromstring(modified).find(".//body[@name='bin_0']/freejoint") is not None
+    mat = model.geom("protective_mat_visual_bin_0").id
+    assert model.geom_contype[mat] == model.geom_conaffinity[mat] == 0
+    displacements = []
+    for current in (baseline, model):
+        data = mujoco.MjData(current)
+        for _ in range(500):
+            mujoco.mj_step(current, data)
+        start = data.qpos[:2].copy()
+        for _ in range(100):
+            data.xfrc_applied[body, 0] = 50
+            mujoco.mj_step(current, data)
+        displacements.append(np.linalg.norm(data.qpos[:2] - start))
+        data.qpos[:2] = [2, -1]
+        data.qvel[:] = 0
+        mujoco.mj_forward(current, data)
+        assert data.xpos[body, :2] == pytest.approx([2, -1])
+    assert displacements[0] > 0.1
+    assert displacements[1] < 0.001

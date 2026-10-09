@@ -138,7 +138,7 @@ class ObjectCentricFragileTossing3DEnv(ObjectCentricTidyBot3DEnv):
     def __init__(
         self,
         *args: Any,
-        mat_size: float = 4.0,
+        mat_size: float = 1.0,
         damage_cost: float = 10.0,
         bin_mass: float = 100.0,
         **kwargs: Any,

@@ -303,7 +303,7 @@ def _mirror_leg(joints: tuple[float, ...]) -> tuple[float, ...]:
 
 # Seated and lying postures for the limbs that are not being repositioned.
 _WHEELCHAIR_TORSO_POSE = Pose.from_rpy((0.0, -0.15, 0.75), (-0.2, 0.0, 0.0))
-_WHEELCHAIR_RESTING_ARM = (0.0, 0.3, 0.2, -1.1, 0.0, 0.0)
+_WHEELCHAIR_RESTING_ARM = (0.0, 0.45, 0.2, -1.1, 0.0, 0.0)
 _WHEELCHAIR_RESTING_JOINTS = {
     "left_arm_init_joint_positions": _mirror_arm(_WHEELCHAIR_RESTING_ARM),
     "right_arm_init_joint_positions": _WHEELCHAIR_RESTING_ARM,

@@ -105,9 +105,9 @@ class Limb3DEnvConfig(KinDEREnvConfig):
 
     def __post_init__(self) -> None:
         substeps = self.dt / PYBULLET_TIMESTEP
-        assert (
-            abs(substeps - round(substeps)) < 1e-9
-        ), f"dt={self.dt} is not a whole multiple of PYBULLET_TIMESTEP"
+        assert abs(substeps - round(substeps)) < 1e-9, (
+            f"dt={self.dt} is not a whole multiple of PYBULLET_TIMESTEP"
+        )
         object.__setattr__(self, "render_fps", round(1.0 / self.dt))
 
     @property
@@ -137,11 +137,9 @@ class ObjectCentricLimb3DRobotEnv(
     A robot arm is rigidly attached to a passive human limb and repositions it by
     applying joint torques.
 
-    Collision response is disabled for the robot and for the limb, and gravity is off by
-    default, so nothing in the scene pushes back: the limb passes through the bed rather
-    than resting on it. Overlap is still measured, by distance queries that ignore the
-    collision filters, and reported as a cost by limb_penetration() and
-    get_collision_clearance().
+    The limb makes physical contact with furniture and the mobile base. Robot-arm
+    contact is disabled so the welded grasp does not fight its own collision response.
+    Distance queries also report overlap independently of the collision filters.
     """
 
     def __init__(self, *args, use_gui: bool = False, **kwargs) -> None:
@@ -175,7 +173,12 @@ class ObjectCentricLimb3DRobotEnv(
         )
 
         # Limbs already overlap the torso at rest, so record that as the baseline.
-        self._limb_rest_clearance: dict[int, float] = self._measure_limb_clearance()
+        furniture = set(self.scene.get_scene_collision_ids())
+        self._limb_rest_clearance: dict[int, float] = {
+            body: clearance
+            for body, clearance in self._measure_limb_clearance().items()
+            if body not in furniture and body != self.robot.base.robot_id
+        }
 
         # Move the arm so that it grasps the limb, then weld the two together.
         self._move_robot_to_grasp_limb()
@@ -231,7 +234,10 @@ class ObjectCentricLimb3DRobotEnv(
         """Distance from the limb to each obstacle in its current configuration."""
         return {
             body_id: self._closest_distance(self.limb.robot_id, body_id)
-            for body_id in self.scene.get_limb_obstacle_ids()
+            for body_id in [
+                *self.scene.get_limb_obstacle_ids(),
+                self.robot.base.robot_id,
+            ]
         }
 
     def _closest_distance(self, body_id: int, other_id: int) -> float:
@@ -303,7 +309,7 @@ class ObjectCentricLimb3DRobotEnv(
         )
 
     def _prepare_torque_control(self) -> None:
-        """Enable contact between the limb and furniture, also the friction."""
+        """Enable torque control and limb contact with furniture and the mobile base."""
         for body in (self.robot.arm, self.limb):
             p.setJointMotorControlArray(
                 body.robot_id,
@@ -329,8 +335,6 @@ class ObjectCentricLimb3DRobotEnv(
                     lateralFriction=0.0,
                     spinningFriction=0.0,
                     rollingFriction=0.0,
-                    contactStiffness=0.0,
-                    contactDamping=0.0,
                     physicsClientId=self.physics_client_id,
                 )
                 p.setCollisionFilterGroupMask(
@@ -345,7 +349,10 @@ class ObjectCentricLimb3DRobotEnv(
             -1,
             p.getNumJoints(self.limb.robot_id, physicsClientId=self.physics_client_id),
         )
-        for furniture_id in self.scene.get_scene_collision_ids():
+        for furniture_id in [
+            *self.scene.get_scene_collision_ids(),
+            self.robot.base.robot_id,
+        ]:
             furniture_links = range(
                 -1, p.getNumJoints(furniture_id, physicsClientId=self.physics_client_id)
             )

@@ -96,6 +96,13 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
 
     metadata: dict[str, Any] = {"render_modes": ["rgb_array"]}
 
+    # Tasks may specialize low-level behavior without changing other robots/tasks.
+    _robot_env_classes = {
+        "tidybot": TidyBotRobotEnv,
+        "rby1a": RBY1ARobotEnv,
+        "fr3": FR3RobotEnv,
+    }
+
     def get_gripper_object_contacts(
         self, object_name: str, *, state: ObjectCentricState | None = None
     ) -> list[dict[str, Any]]:
@@ -220,11 +227,7 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
         # Initialize robot environment
         self.robot_type = list(self.task_config["robots"].keys())[0]
         self.robot_name = list(self.task_config["robots"][self.robot_type].keys())[0]
-        robot_cls = {
-            "tidybot": TidyBotRobotEnv,
-            "rby1a": RBY1ARobotEnv,
-            "fr3": FR3RobotEnv,
-        }[self.robot_type]
+        robot_cls = self._robot_env_classes[self.robot_type]
         # Robot-specific settings from the task config (e.g. mount_height)
         # are forwarded as keyword arguments.
         robot_config = self.task_config["robots"][self.robot_type][self.robot_name]

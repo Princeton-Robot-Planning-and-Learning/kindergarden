@@ -1,0 +1,231 @@
+{
+  "description": "Sweep five cubes up the entrance ramp into a covered dustpan. Its top, walls, floor and ramp are solid colliders.",
+  "variant_description": "Minimal floor sweeping.",
+  "variant_specific_description": "Five cubes.",
+  "robots": {
+    "tidybot": {
+      "robot": {}
+    }
+  },
+  "scene": {
+    "simple": {
+      "position": [
+        0,
+        0,
+        0
+      ]
+    },
+    "mimiclabs-lab2": {
+      "position": [
+        0,
+        0,
+        0
+      ]
+    }
+  },
+  "regions": {
+    "cubes_start": {
+      "target": "ground",
+      "ranges": [
+        [
+          0.45,
+          -0.12,
+          0.6,
+          0.12
+        ]
+      ],
+      "yaw_ranges": [
+        [
+          0,
+          0
+        ]
+      ]
+    },
+    "wiper_start": {
+      "target": "ground",
+      "ranges": [
+        [
+          0.25,
+          -0.5,
+          0.2501,
+          -0.4999
+        ]
+      ],
+      "yaw_ranges": [
+        [
+          90,
+          90
+        ]
+      ]
+    },
+    "robot_start": {
+      "target": "ground",
+      "ranges": [
+        [
+          -0.4,
+          -0.6,
+          -0.3999,
+          -0.5999
+        ]
+      ],
+      "yaw_ranges": [
+        [
+          0,
+          0
+        ]
+      ]
+    },
+    "dustpan_start": {
+      "target": "ground",
+      "ranges": [
+        [
+          0.9,
+          0,
+          0.9001,
+          0.0001
+        ]
+      ],
+      "yaw_ranges": [
+        [
+          0,
+          0
+        ]
+      ]
+    }
+  },
+  "objects": {
+    "wiper": {
+      "wiper_0": {
+        "handle_height": 1.0,
+        "handle_width": 0.02,
+        "head_length": 0.4,
+        "head_height": 0.04,
+        "handle_rgba": [
+          0.9,
+          0.9,
+          0.9,
+          1
+        ],
+        "head_rgba": [
+          0.1,
+          0.1,
+          0.1,
+          1
+        ],
+        "upright": false
+      }
+    },
+    "cube": {
+      "cube_0": {
+        "size": 0.01,
+        "rgba": [
+          0.65,
+          0.25,
+          0.1,
+          1
+        ]
+      },
+      "cube_1": {
+        "size": 0.01,
+        "rgba": [
+          0.65,
+          0.25,
+          0.1,
+          1
+        ]
+      },
+      "cube_2": {
+        "size": 0.01,
+        "rgba": [
+          0.65,
+          0.25,
+          0.1,
+          1
+        ]
+      },
+      "cube_3": {
+        "size": 0.01,
+        "rgba": [
+          0.65,
+          0.25,
+          0.1,
+          1
+        ]
+      },
+      "cube_4": {
+        "size": 0.01,
+        "rgba": [
+          0.65,
+          0.25,
+          0.1,
+          1
+        ]
+      }
+    },
+    "lobbydustpan": {
+      "dustpan_0": {}
+    }
+  },
+  "initial_state": [
+    [
+      "on",
+      "robot",
+      "robot_start"
+    ],
+    [
+      "on",
+      "wiper_0",
+      "wiper_start"
+    ],
+    [
+      "on",
+      "cube_0",
+      "cubes_start"
+    ],
+    [
+      "on",
+      "cube_1",
+      "cubes_start"
+    ],
+    [
+      "on",
+      "cube_2",
+      "cubes_start"
+    ],
+    [
+      "on",
+      "cube_3",
+      "cubes_start"
+    ],
+    [
+      "on",
+      "cube_4",
+      "cubes_start"
+    ],
+    [
+      "on",
+      "dustpan_0",
+      "dustpan_start"
+    ]
+  ],
+  "goal_state": [],
+  "cameras": {
+    "task_view": {
+      "position": [
+        2.4,
+        -2.8,
+        2.2
+      ],
+      "lookat": [
+        0.45,
+        0,
+        0.35
+      ],
+      "fovy": 48,
+      "resolution": [
+        640,
+        480
+      ]
+    }
+  }
+}

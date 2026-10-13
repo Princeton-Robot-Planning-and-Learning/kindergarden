@@ -532,6 +532,12 @@ def _register_dynamic3d() -> None:
                         "task_config_path": str(task_config),
                         "scene_render_camera": "task_view",
                     }
+                    if folder_name == "Dustpan3D":
+                        entry_point = "kinder.envs.dynamic3d.dustpan3d:Dustpan3DEnv"
+                    if folder_name == "Broom3D":
+                        entry_point = "kinder.envs.dynamic3d.broom3d:Broom3DEnv"
+                    if folder_name == "SweepIntoDustpan3D":
+                        entry_point = "kinder.envs.dynamic3d.sweep_into_dustpan:SweepIntoDustpan3DEnv"
                     if folder_name == "Tossing3D":
                         entry_point = "kinder.envs.dynamic3d.task_families:Tossing3DEnv"
                         task_kwargs = {"num_objects": int(task_cfg.removeprefix("o"))}
@@ -548,9 +554,14 @@ def _register_dynamic3d() -> None:
 
     for class_name, robot_variant_ids in env_class_variants.items():
         for robot, variant_ids in robot_variant_ids.items():
+            entry_point = f"kinder.envs.dynamic3d.envs:{robot}Env"
+            if class_name == "Dustpan3D":
+                entry_point = "kinder.envs.dynamic3d.dustpan3d:Dustpan3DEnv"
+            if class_name == "Broom3D":
+                entry_point = "kinder.envs.dynamic3d.broom3d:Broom3DEnv"
             _register_env_class(
                 class_name=class_name,
-                entry_point=f"kinder.envs.dynamic3d.envs:{robot}Env",
+                entry_point=entry_point,
                 category="Dynamic3D",
                 backend="mujoco",
                 variant_ids=variant_ids,

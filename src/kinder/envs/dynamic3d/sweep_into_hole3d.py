@@ -29,6 +29,11 @@ WHEEL_OFFSETS = (
     (-0.190150, -0.170150),
 )
 
+# The Robotiq gripper's root body; it and every body under it is the gripper.
+GRIPPER_ROOT_BODY = "robot_base"
+# Broom3D gives cubes contype 4 and robot links none of the bits cubes accept.
+CUBE_CONTACT_BIT = 4
+
 # White so the opening reads against the lab's wood floor. The lab plane already sits
 # at the pit bottom, so the cover rides half a millimetre above it to avoid z-fighting.
 PIT_FLOOR_RGBA = "1 1 1 1"
@@ -255,6 +260,22 @@ class ObjectCentricSweepIntoHole3DEnv(ObjectCentricBroom3DEnv):
                 & (z < 0.0)
             )
         )
+
+    def _initialize_robot_pose(self):
+        """Give the gripper the cubes' collision bit so it can pick a cube out of the
+        pit. Broom3D keeps cubes clear of every robot link; the arm and base still
+        pass through cubes so driving and reaching do not shove them around."""
+        super()._initialize_robot_pose()
+        model = self._robot_env.sim.model.mj_model
+        gripper_root = model.body(GRIPPER_ROOT_BODY).id
+        for geom in range(model.ngeom):
+            if not (model.geom_contype[geom] or model.geom_conaffinity[geom]):
+                continue
+            body = int(model.geom_bodyid[geom])
+            while body and body != gripper_root:
+                body = int(model.body_parentid[body])
+            if body == gripper_root:
+                model.geom_contype[geom] |= CUBE_CONTACT_BIT
 
     def wheel_positions(self):
         """World xy of the four wheel points."""

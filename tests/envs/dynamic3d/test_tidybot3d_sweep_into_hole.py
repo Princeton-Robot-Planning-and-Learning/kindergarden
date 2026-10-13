@@ -407,3 +407,44 @@ def test_teleporting_the_base_out_frees_it(env):
     assert not env.robot_stuck_in_hole()
     _drive(env, base_step=[0.005, 0.0, 0.0])
     assert _base_xy(env)[0] == pytest.approx(-0.2, abs=3e-2)
+
+
+def _collides(model, first, second):
+    return bool(
+        model.geom_contype[first] & model.geom_conaffinity[second]
+        or model.geom_contype[second] & model.geom_conaffinity[first]
+    )
+
+
+def _robot_geoms_by_part(model):
+    gripper_root = model.body("robot_base").id
+    parts = {"gripper": [], "arm_or_base": []}
+    for geom in range(model.ngeom):
+        if not (model.geom_contype[geom] or model.geom_conaffinity[geom]):
+            continue
+        body = int(model.geom_bodyid[geom])
+        if not (model.body(body).name or "").startswith("robot"):
+            continue
+        chain = body
+        while chain and chain != gripper_root:
+            chain = int(model.body_parentid[chain])
+        parts["gripper" if chain == gripper_root else "arm_or_base"].append(geom)
+    return parts
+
+
+def test_cubes_collide_with_the_gripper_but_not_the_arm_or_base(env):
+    """The robot must pick cubes out of the pit, so the gripper touches them; the
+    arm and base still pass through them so driving and reaching do not shove
+    them around."""
+    env.reset(seed=0)
+    model, _ = _model_and_data(env)
+    parts = _robot_geoms_by_part(model)
+    cubes = [
+        g
+        for g in range(model.ngeom)
+        if (model.body(int(model.geom_bodyid[g])).name or "").startswith("cube_")
+    ]
+    assert parts["gripper"] and parts["arm_or_base"] and cubes
+    for cube in cubes:
+        assert all(_collides(model, cube, g) for g in parts["gripper"])
+        assert not any(_collides(model, cube, g) for g in parts["arm_or_base"])

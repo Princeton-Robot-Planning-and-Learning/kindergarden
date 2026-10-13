@@ -337,29 +337,13 @@ def _drive(env, *, base_step, steps=40, arm_step=None):
         env.step(np.r_[base_step, arm, 0.0])
 
 
-def test_the_wheels_are_the_corner_posts_of_the_base(env):
-    """Each wheel point sits under a corner of the base's collision footprint."""
-    env.reset(seed=0)
-    model, data = _model_and_data(env)
-    base = model.body("robot_base_link").id
-    geom = next(
-        g
-        for g in range(model.ngeom)
-        if model.geom_bodyid[g] == base
-        and model.geom_contype[g]
-        and model.geom_dataid[g] >= 0
-        and model.mesh(model.geom_dataid[g]).name == "body"
+def test_the_wheels_are_the_real_tidybot_caster_positions():
+    """The real TidyBot++ base puts each caster's steer axis 0.190 m forward or back
+    and 0.170 m left or right of the vehicle centre; the wheel contact trails that
+    by about 1.4 cm, so the steer axis is the wheel's position."""
+    assert sorted(WHEEL_OFFSETS) == sorted(
+        (sx * 0.190150, sy * 0.170150) for sx in (-1, 1) for sy in (-1, 1)
     )
-    mesh = model.geom_dataid[geom]
-    start, count = model.mesh_vertadr[mesh], model.mesh_vertnum[mesh]
-    rotation = data.geom_xmat[geom].reshape(3, 3)
-    vertices = model.mesh_vert[start : start + count] @ rotation.T
-    vertices = vertices + data.geom_xpos[geom] - data.xpos[base]
-    bottom = vertices[vertices[:, 2] < vertices[:, 2].min() + 0.04][:, :2]
-    for offset in WHEEL_OFFSETS:
-        nearest = np.min(np.linalg.norm(bottom - np.asarray(offset), axis=1))
-        assert nearest < 0.03
-        assert abs(offset[0]) > 0.2 and abs(offset[1]) > 0.2
 
 
 def test_the_robot_is_not_stuck_at_reset(env):
@@ -373,19 +357,18 @@ def test_one_wheel_over_the_rim_is_stuck_and_none_is_not(env, inside):
     env.reset(seed=0)
     robot = env._robot_env  # pylint: disable=protected-access
     front_wheel_x = max(offset[0] for offset in WHEEL_OFFSETS)
-    # The wheel track is wider than the pit, so the base is offset in y to put
-    # only the +y front wheel over the opening.
+    # Offset in y so only the +y front wheel is over the opening.
     y = -0.1
     robot.set_robot_base_pos_yaw(PIT_X[0] - front_wheel_x + inside, y, 0.0)
     assert env.robot_stuck_in_hole() == (inside > 0)
 
 
-def test_a_base_centred_over_the_pit_straddles_it_and_is_not_stuck(env):
-    """The wheel track is wider than the opening, so a centred base has every wheel
-    on the floor either side of the pit."""
+def test_a_base_centred_over_the_pit_is_stuck(env):
+    """The caster track is narrower than the opening, so a base driving down the
+    middle of the pit cannot straddle it."""
     env.reset(seed=0)
     env._robot_env.set_robot_base_pos_yaw(1.0, 0.0, 0.0)  # pylint: disable=W0212
-    assert not env.robot_stuck_in_hole()
+    assert env.robot_stuck_in_hole()
 
 
 def test_a_stuck_base_cannot_drive_out_but_its_arm_still_moves(env):

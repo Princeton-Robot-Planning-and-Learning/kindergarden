@@ -18,13 +18,15 @@ PIT_DEPTH = 0.08
 # The slabs reach as far as the ground plane they replace renders.
 FLOOR_EXTENT = 10.0
 
-# The TidyBot's casters sit under the four corner posts of its base, which are the
-# lowest parts of its collision mesh; offsets are in the base frame (x forward).
+# The real TidyBot++ base's caster steer axes, measured from the vehicle centre in
+# the base frame (x forward), from its base controller's constants. Each wheel's
+# ground contact trails its steer axis by about 1.4 cm, so the axis stands in for
+# the wheel. The track is narrower than the pit, so a base cannot straddle it.
 WHEEL_OFFSETS = (
-    (0.246, 0.237),
-    (0.246, -0.237),
-    (-0.246, 0.237),
-    (-0.246, -0.237),
+    (0.190150, 0.170150),
+    (0.190150, -0.170150),
+    (-0.190150, 0.170150),
+    (-0.190150, -0.170150),
 )
 
 # White so the opening reads against the lab's wood floor. The lab plane already sits

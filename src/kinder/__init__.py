@@ -532,6 +532,10 @@ def _register_dynamic3d() -> None:
                         "task_config_path": str(task_config),
                         "scene_render_camera": "task_view",
                     }
+                    if folder_name == "SweepOffShelf3D":
+                        entry_point = (
+                            "kinder.envs.dynamic3d.sweep_off_shelf3d:SweepOffShelf3DEnv"
+                        )
                     if folder_name == "Tossing3D":
                         entry_point = "kinder.envs.dynamic3d.task_families:Tossing3DEnv"
                         task_kwargs = {"num_objects": int(task_cfg.removeprefix("o"))}
@@ -548,9 +552,14 @@ def _register_dynamic3d() -> None:
 
     for class_name, robot_variant_ids in env_class_variants.items():
         for robot, variant_ids in robot_variant_ids.items():
+            entry_point = f"kinder.envs.dynamic3d.envs:{robot}Env"
+            if class_name == "SweepOffShelf3D":
+                entry_point = (
+                    "kinder.envs.dynamic3d.sweep_off_shelf3d:SweepOffShelf3DEnv"
+                )
             _register_env_class(
                 class_name=class_name,
-                entry_point=f"kinder.envs.dynamic3d.envs:{robot}Env",
+                entry_point=entry_point,
                 category="Dynamic3D",
                 backend="mujoco",
                 variant_ids=variant_ids,

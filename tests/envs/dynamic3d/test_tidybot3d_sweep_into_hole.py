@@ -347,6 +347,7 @@ def test_the_wheels_are_the_real_tidybot_caster_positions():
 
 
 def test_the_robot_is_not_stuck_at_reset(env):
+    """The start pose keeps every wheel on the floor."""
     env.reset(seed=0)
     assert not env.robot_stuck_in_hole()
 
@@ -372,6 +373,7 @@ def test_a_base_centred_over_the_pit_is_stuck(env):
 
 
 def test_a_stuck_base_cannot_drive_out_but_its_arm_still_moves(env):
+    """Base commands are ignored while stuck; arm commands still act."""
     env.reset(seed=0)
     robot = env._robot_env  # pylint: disable=protected-access
     robot.set_robot_base_pos_yaw(1.0, 0.1, 0.0)
@@ -396,6 +398,7 @@ def test_driving_into_the_pit_gets_stuck_at_the_rim(env):
 
 
 def test_teleporting_the_base_out_frees_it(env):
+    """Setting the base pose directly is the only way out, and it works."""
     env.reset(seed=0)
     robot = env._robot_env  # pylint: disable=protected-access
     robot.set_robot_base_pos_yaw(1.0, 0.1, 0.0)

@@ -538,6 +538,10 @@ def _register_dynamic3d() -> None:
                         entry_point = "kinder.envs.dynamic3d.broom3d:Broom3DEnv"
                     if folder_name == "SweepIntoDustpan3D":
                         entry_point = "kinder.envs.dynamic3d.sweep_into_dustpan:SweepIntoDustpan3DEnv"
+                    if folder_name == "SweepIntoHole3D":
+                        entry_point = (
+                            "kinder.envs.dynamic3d.sweep_into_hole3d:SweepIntoHole3DEnv"
+                        )
                     if folder_name == "Tossing3D":
                         entry_point = "kinder.envs.dynamic3d.task_families:Tossing3DEnv"
                         task_kwargs = {"num_objects": int(task_cfg.removeprefix("o"))}
@@ -559,6 +563,10 @@ def _register_dynamic3d() -> None:
                 entry_point = "kinder.envs.dynamic3d.dustpan3d:Dustpan3DEnv"
             if class_name == "Broom3D":
                 entry_point = "kinder.envs.dynamic3d.broom3d:Broom3DEnv"
+            if class_name == "SweepIntoHole3D":
+                entry_point = (
+                    "kinder.envs.dynamic3d.sweep_into_hole3d:SweepIntoHole3DEnv"
+                )
             _register_env_class(
                 class_name=class_name,
                 entry_point=entry_point,

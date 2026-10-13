@@ -182,13 +182,7 @@ class ObjectCentricSweepIntoHole3DEnv(ObjectCentricBroom3DEnv):
                 size=f"{(x1 - x0) / 2} {(y1 - y0) / 2} {PIT_FLOOR_LIFT / 2}",
                 rgba=PIT_FLOOR_RGBA,
             )
-        extent = FLOOR_EXTENT
-        slabs = {
-            "west": (-extent, x0, -extent, extent),
-            "east": (x1, extent, -extent, extent),
-            "south": (x0, x1, -extent, y0),
-            "north": (x0, x1, y1, extent),
-        }
+        slabs = self._slab_extents(root=root, material=slab_look.get("material"))
         for name, (xa, xb, ya, yb) in slabs.items():
             worldbody.append(
                 ET.Element(
@@ -203,6 +197,43 @@ class ObjectCentricSweepIntoHole3DEnv(ObjectCentricBroom3DEnv):
         if pit_bottom is not None:
             worldbody.append(pit_bottom)
         return ET.tostring(root, encoding="unicode")
+
+    @staticmethod
+    def _slab_extents(*, root, material):
+        """Four slabs in a pinwheel around the opening, each centred on the floor
+        texture's grid.
+
+        MuJoCo maps a box's texture from the box's own centre, so tiles only line up
+        across seams when every centre sits on a whole number of texture periods;
+        each slab's two far edges are chosen to make that so. The pinwheel keeps
+        every slab large and near-square: MuJoCo lights a box from its corners, so a
+        long thin strip beside the pit shades visibly differently from its
+        neighbours.
+        """
+        period = 0.0
+        element = next(
+            (m for m in root.iter("material") if m.get("name") == material), None
+        )
+        if element is not None and element.get("texuniform") == "true":
+            repeat = float(element.get("texrepeat", "1 1").split()[0])
+            period = 1.0 / repeat
+
+        def far_edge(near, direction):
+            # The far edge at about FLOOR_EXTENT whose slab centre is on the grid.
+            far = direction * FLOOR_EXTENT
+            if period:
+                centre = round((near + far) / 2 / period) * period
+                far = 2 * centre - near
+            return far
+
+        x0, x1 = PIT_X
+        y0, y1 = PIT_Y
+        return {
+            "north": (x0, far_edge(x0, 1), y1, far_edge(y1, 1)),
+            "east": (x1, far_edge(x1, 1), far_edge(y1, -1), y1),
+            "south": (far_edge(x1, -1), x1, far_edge(y0, -1), y0),
+            "west": (far_edge(x0, -1), x0, y0, far_edge(y0, 1)),
+        }
 
     def cube_in_hole(self, name):
         """All eight corners inside the opening and below the floor: corner-exact,

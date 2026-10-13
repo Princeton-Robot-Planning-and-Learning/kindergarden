@@ -175,6 +175,32 @@ def test_the_lab_pit_floor_is_white_and_covers_the_opening():
         lab.close()
 
 
+@pytest.mark.skipif(
+    not _MIMICLABS_MESHES.is_dir(), reason="MimicLabs assets are not downloaded"
+)
+def test_the_lab_floor_tiles_line_up_across_the_slab_seams():
+    """MuJoCo maps a box's texture from its centre, so the planks only continue
+    across seams when every slab centre is a whole number of texture periods."""
+    lab = _make(scene_bg=True)
+    try:
+        lab.reset(seed=0)
+        model, _ = _model_and_data(lab)
+        slabs = [
+            g
+            for g in range(model.ngeom)
+            if (model.geom(g).name or "").startswith("floor_slab_")
+        ]
+        assert len(slabs) == 4
+        for geom in slabs:
+            material = model.geom_matid[geom]
+            assert model.mat_texuniform[material]
+            period = 1.0 / model.mat_texrepeat[material]
+            centre = model.geom_pos[geom][:2] / period
+            assert centre == pytest.approx(np.round(centre), abs=1e-6)
+    finally:
+        lab.close()
+
+
 def test_every_cube_in_the_pit_is_the_goal(env):
     """The goal is the conjunction of cube_in_hole over all five cubes."""
     env.reset(seed=0)

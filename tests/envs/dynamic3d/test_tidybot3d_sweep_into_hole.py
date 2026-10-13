@@ -12,6 +12,7 @@ from kinder.envs.dynamic3d.sweep_into_hole3d import (
     PIT_DEPTH,
     PIT_X,
     PIT_Y,
+    WHEEL_OFFSETS,
     ObjectCentricSweepIntoHole3DEnv,
     SweepIntoHole3DEnv,
 )
@@ -296,3 +297,101 @@ def test_the_robot_parks_at_the_near_rim_without_falling(env):
     assert float(data.xpos[base][2]) == pytest.approx(before, abs=1e-6)
     assert float(data.xpos[base][0]) == pytest.approx(PIT_X[0] - 0.35, abs=2e-2)
     assert min(float(data.geom_xpos[g][2]) for g in robot_geoms) >= 0.0
+
+
+def _base_xy(env):
+    model, data = _model_and_data(env)
+    return np.array(data.xpos[model.body("robot_base_link").id][:2])
+
+
+def _drive(env, *, base_step, steps=40, arm_step=None):
+    # Actions are per-step deltas (the TidyBot env's default act_delta).
+    arm = np.zeros(7) if arm_step is None else np.asarray(arm_step)
+    for _ in range(steps):
+        env.step(np.r_[base_step, arm, 0.0])
+
+
+def test_the_wheels_are_the_corner_posts_of_the_base(env):
+    """Each wheel point sits under a corner of the base's collision footprint."""
+    env.reset(seed=0)
+    model, data = _model_and_data(env)
+    base = model.body("robot_base_link").id
+    geom = next(
+        g
+        for g in range(model.ngeom)
+        if model.geom_bodyid[g] == base
+        and model.geom_contype[g]
+        and model.geom_dataid[g] >= 0
+        and model.mesh(model.geom_dataid[g]).name == "body"
+    )
+    mesh = model.geom_dataid[geom]
+    start, count = model.mesh_vertadr[mesh], model.mesh_vertnum[mesh]
+    rotation = data.geom_xmat[geom].reshape(3, 3)
+    vertices = model.mesh_vert[start : start + count] @ rotation.T
+    vertices = vertices + data.geom_xpos[geom] - data.xpos[base]
+    bottom = vertices[vertices[:, 2] < vertices[:, 2].min() + 0.04][:, :2]
+    for offset in WHEEL_OFFSETS:
+        nearest = np.min(np.linalg.norm(bottom - np.asarray(offset), axis=1))
+        assert nearest < 0.03
+        assert abs(offset[0]) > 0.2 and abs(offset[1]) > 0.2
+
+
+def test_the_robot_is_not_stuck_at_reset(env):
+    env.reset(seed=0)
+    assert not env.robot_stuck_in_hole()
+
+
+@pytest.mark.parametrize("inside", [0.02, -0.02])
+def test_one_wheel_over_the_rim_is_stuck_and_none_is_not(env, inside):
+    """Stuck as soon as one wheel point is inside the opening, not before."""
+    env.reset(seed=0)
+    robot = env._robot_env  # pylint: disable=protected-access
+    front_wheel_x = max(offset[0] for offset in WHEEL_OFFSETS)
+    # The wheel track is wider than the pit, so the base is offset in y to put
+    # only the +y front wheel over the opening.
+    y = -0.1
+    robot.set_robot_base_pos_yaw(PIT_X[0] - front_wheel_x + inside, y, 0.0)
+    assert env.robot_stuck_in_hole() == (inside > 0)
+
+
+def test_a_base_centred_over_the_pit_straddles_it_and_is_not_stuck(env):
+    """The wheel track is wider than the opening, so a centred base has every wheel
+    on the floor either side of the pit."""
+    env.reset(seed=0)
+    env._robot_env.set_robot_base_pos_yaw(1.0, 0.0, 0.0)  # pylint: disable=W0212
+    assert not env.robot_stuck_in_hole()
+
+
+def test_a_stuck_base_cannot_drive_out_but_its_arm_still_moves(env):
+    env.reset(seed=0)
+    robot = env._robot_env  # pylint: disable=protected-access
+    robot.set_robot_base_pos_yaw(1.0, 0.1, 0.0)
+    assert env.robot_stuck_in_hole()
+    held = _base_xy(env)
+    arm_before = np.array(robot.qpos["arm"])
+    _drive(env, base_step=[-0.02, -0.02, 0.0], arm_step=np.r_[0.3 / 40, np.zeros(6)])
+    assert _base_xy(env) == pytest.approx(held, abs=1e-2)
+    assert env.robot_stuck_in_hole()
+    assert robot.qpos["arm"][0] - arm_before[0] > 0.03
+
+
+def test_driving_into_the_pit_gets_stuck_at_the_rim(env):
+    """A base driving toward the pit stops once a wheel crosses the rim."""
+    env.reset(seed=0)
+    robot = env._robot_env  # pylint: disable=protected-access
+    front_wheel_x = max(offset[0] for offset in WHEEL_OFFSETS)
+    robot.set_robot_base_pos_yaw(PIT_X[0] - front_wheel_x - 0.1, 0.1, 0.0)
+    _drive(env, base_step=[0.02, 0.0, 0.0], steps=40)
+    assert env.robot_stuck_in_hole()
+    assert _base_xy(env)[0] + front_wheel_x < PIT_X[0] + 0.1
+
+
+def test_teleporting_the_base_out_frees_it(env):
+    env.reset(seed=0)
+    robot = env._robot_env  # pylint: disable=protected-access
+    robot.set_robot_base_pos_yaw(1.0, 0.1, 0.0)
+    assert env.robot_stuck_in_hole()
+    robot.set_robot_base_pos_yaw(-0.4, -0.6, 0.0)
+    assert not env.robot_stuck_in_hole()
+    _drive(env, base_step=[0.005, 0.0, 0.0])
+    assert _base_xy(env)[0] == pytest.approx(-0.2, abs=3e-2)

@@ -18,6 +18,15 @@ PIT_DEPTH = 0.08
 # The slabs reach as far as the ground plane they replace renders.
 FLOOR_EXTENT = 10.0
 
+# The TidyBot's casters sit under the four corner posts of its base, which are the
+# lowest parts of its collision mesh; offsets are in the base frame (x forward).
+WHEEL_OFFSETS = (
+    (0.246, 0.237),
+    (0.246, -0.237),
+    (-0.246, 0.237),
+    (-0.246, -0.237),
+)
+
 # White so the opening reads against the lab's wood floor. The lab plane already sits
 # at the pit bottom, so the cover rides half a millimetre above it to avoid z-fighting.
 PIT_FLOOR_RGBA = "1 1 1 1"
@@ -213,6 +222,47 @@ class ObjectCentricSweepIntoHole3DEnv(ObjectCentricBroom3DEnv):
                 & (z < 0.0)
             )
         )
+
+    def wheel_positions(self):
+        """World xy of the four wheel points."""
+        base = self._robot_env.qpos["base"]
+        x, y, yaw = (float(v) for v in base)
+        cos, sin = np.cos(yaw), np.sin(yaw)
+        return np.array(
+            [
+                [x + cos * dx - sin * dy, y + sin * dx + cos * dy]
+                for dx, dy in WHEEL_OFFSETS
+            ]
+        )
+
+    def robot_stuck_in_hole(self):
+        """Stuck as soon as one wheel is over the opening.
+
+        The base is a slide-joint body that never touches the floor, so it cannot
+        physically drop in; being stuck is this rule, and `step` enforces it.
+        """
+        wheels = self.wheel_positions()
+        return bool(
+            np.any(
+                (wheels[:, 0] > PIT_X[0])
+                & (wheels[:, 0] < PIT_X[1])
+                & (wheels[:, 1] > PIT_Y[0])
+                & (wheels[:, 1] < PIT_Y[1])
+            )
+        )
+
+    def step(self, action):
+        """A stuck base ignores base commands and holds where it is; the arm and
+        gripper still act. Only setting the base pose directly frees it."""
+        if self.robot_stuck_in_hole():
+            action = np.array(action, dtype=float, copy=True)
+            robot = self._robot_env
+            hold = 0.0 if robot.act_delta else np.asarray(robot.qpos["base"])
+            if action.ndim == 2:
+                action[:, :3] = hold
+            else:
+                action[:3] = hold
+        return super().step(action)
 
     def _check_goals(self):
         return all(

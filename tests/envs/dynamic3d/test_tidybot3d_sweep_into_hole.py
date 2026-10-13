@@ -154,6 +154,26 @@ def test_the_pit_is_the_same_depth_in_the_lab_scene():
         lab.close()
 
 
+@pytest.mark.skipif(
+    not _MIMICLABS_MESHES.is_dir(), reason="MimicLabs assets are not downloaded"
+)
+def test_the_lab_pit_floor_is_white_and_covers_the_opening():
+    """The lab's wood floor shows through as the pit bottom unless something covers
+    it, and then the opening is hard to see; a white floor makes the pit read."""
+    lab = _make(scene_bg=True)
+    try:
+        lab.reset(seed=0)
+        model, data = _model_and_data(lab)
+        pit = model.geom("pit_floor").id
+        assert list(model.geom_rgba[pit][:3]) == pytest.approx([1.0, 1.0, 1.0])
+        centre, half = data.geom_xpos[pit], model.geom_size[pit]
+        assert centre[0] - half[0] <= PIT_X[0] and centre[0] + half[0] >= PIT_X[1]
+        assert centre[1] - half[1] <= PIT_Y[0] and centre[1] + half[1] >= PIT_Y[1]
+        assert centre[2] + half[2] == pytest.approx(-PIT_DEPTH, abs=1e-3)
+    finally:
+        lab.close()
+
+
 def test_every_cube_in_the_pit_is_the_goal(env):
     """The goal is the conjunction of cube_in_hole over all five cubes."""
     env.reset(seed=0)

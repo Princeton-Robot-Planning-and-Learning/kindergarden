@@ -18,6 +18,11 @@ PIT_DEPTH = 0.08
 # The slabs reach as far as the ground plane they replace renders.
 FLOOR_EXTENT = 10.0
 
+# White so the opening reads against the lab's wood floor. The lab plane already sits
+# at the pit bottom, so the cover rides half a millimetre above it to avoid z-fighting.
+PIT_FLOOR_RGBA = "1 1 1 1"
+PIT_FLOOR_LIFT = 0.0005
+
 
 @register_object
 class Shovel(Cuboid):
@@ -160,6 +165,14 @@ class ObjectCentricSweepIntoHole3DEnv(ObjectCentricBroom3DEnv):
                 )
             material = floor.get("material")
             slab_look = {"material": material} if material else {}
+            pit_bottom = ET.Element(
+                "geom",
+                name="pit_floor",
+                type="box",
+                pos=f"{(x0 + x1) / 2} {(y0 + y1) / 2} {-PIT_DEPTH + PIT_FLOOR_LIFT / 2}",
+                size=f"{(x1 - x0) / 2} {(y1 - y0) / 2} {PIT_FLOOR_LIFT / 2}",
+                rgba=PIT_FLOOR_RGBA,
+            )
         extent = FLOOR_EXTENT
         slabs = {
             "west": (-extent, x0, -extent, extent),

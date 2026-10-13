@@ -179,7 +179,7 @@ def test_a_dropped_wiper_lands_on_its_shelf(env, yaw, drop):
 def test_cubes_falling_from_the_shelf_edge_stay_in_the_box(env):
     """A cube leaving the cube shelf at its front edge lands and stays in the box."""
     env.reset(seed=0)
-    (x0, y0, x1, y1), _ = env.box_interior()
+    (_, y0, x1, _), _ = env.box_interior()
     start = env.shelf_top_z(shelf=1) + 0.011
     for i, name in enumerate(_CUBES):
         cube = env.get_object(name)

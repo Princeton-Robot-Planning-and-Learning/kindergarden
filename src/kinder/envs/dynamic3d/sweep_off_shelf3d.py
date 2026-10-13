@@ -10,6 +10,15 @@ from kinder.envs.dynamic3d.envs import ObjectCentricTidyBot3DEnv, TidyBot3DEnv
 CUPBOARD = "cupboard_1"
 BOX = "box_0"
 _SHELF_GEOM = re.compile(rf"^{CUPBOARD}_shelf\d+$")
+# MuJoCo's default contact (solref 0.02) lets a falling object sink 7-9 mm into a
+# surface, about half the combined thickness of a 12.7 mm board and the 15 mm
+# wiper, after which the box-box contact resolves out the far side and the object
+# falls through. The thin parts that catch falling objects get the stiffer contact
+# the gripper pads use; priority makes their parameters win over the softer
+# object's instead of being averaged with it.
+STIFF_SOLREF = (0.004, 1.0)
+STIFF_SOLIMP = (0.99, 0.999, 0.001, 0.5, 2.0)
+STIFF_PRIORITY = 1
 
 
 class ObjectCentricSweepOffShelf3DEnv(ObjectCentricTidyBot3DEnv):
@@ -18,6 +27,18 @@ class ObjectCentricSweepOffShelf3DEnv(ObjectCentricTidyBot3DEnv):
     def _model_and_data(self):
         sim = self._robot_env.sim
         return sim.model.mj_model, sim.data.mj_data
+
+    def _initialize_robot_pose(self):
+        super()._initialize_robot_pose()
+        model, _ = self._model_and_data()
+        box = model.body(BOX).id
+        for geom in range(model.ngeom):
+            if _SHELF_GEOM.match(model.geom(geom).name or "") or (
+                model.geom_bodyid[geom] == box
+            ):
+                model.geom_solref[geom] = STIFF_SOLREF
+                model.geom_solimp[geom] = STIFF_SOLIMP
+                model.geom_priority[geom] = STIFF_PRIORITY
 
     def _shelf_geoms(self):
         model, data = self._model_and_data()

@@ -3,10 +3,12 @@
 import os
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 import kinder
 from kinder.envs.dynamic3d.sweep_off_shelf3d import ObjectCentricSweepOffShelf3DEnv
+from kinder.envs.dynamic3d.utils import convert_yaw_to_quaternion
 
 _TASK_CONFIG_PATH = (
     Path(kinder.__path__[0])
@@ -131,6 +133,62 @@ def test_the_declared_goal_region_is_the_box_interior(env):
     goal = env.task_config["goal_state"]
     assert sorted(pred[1] for pred in goal) == _CUBES
     assert all(pred[2] == "box_goal_region" for pred in goal)
+
+
+def _catching_geoms(model):
+    """The shelf boards and the box: the thin parts that catch falling objects."""
+    box = model.body("box_0").id
+    return [
+        g
+        for g in range(model.ngeom)
+        if (model.geom(g).name or "").startswith("cupboard_1_shelf")
+        or model.geom_bodyid[g] == box
+    ]
+
+
+def test_only_the_boards_and_box_have_stiff_contacts(env):
+    """Stiffened with priority so their parameters win over the soft wiper and
+    cubes; nothing else in the scene is changed."""
+    env.reset(seed=0)
+    model, _ = _model_and_data(env)
+    catching = set(_catching_geoms(model))
+    assert len(catching) == 4 + 5
+    for geom in range(model.ngeom):
+        if geom in catching:
+            assert model.geom_solref[geom][0] == pytest.approx(0.004)
+            assert model.geom_priority[geom] == 1
+        elif (model.geom(geom).name or "").startswith(("cupboard_1", "wiper", "cube")):
+            assert model.geom_solref[geom][0] == pytest.approx(0.02)
+
+
+@pytest.mark.parametrize("yaw", [0.0, 90.0])
+@pytest.mark.parametrize("drop", [0.1, 0.2, 0.25])
+def test_a_dropped_wiper_lands_on_its_shelf(env, yaw, drop):
+    """A wiper falling onto a shelf stays on it rather than passing through."""
+    env.reset(seed=0)
+    shelf = env.shelf_top_z(shelf=2)
+    wiper = env.get_object("wiper_0")
+    wiper.set_pose(
+        [1.512, 0.038, shelf + drop], convert_yaw_to_quaternion(np.deg2rad(yaw))
+    )
+    wiper.set_velocity([0.0] * 3, [0.0] * 3)
+    _settle(env, steps=1500)
+    assert wiper.get_pose()[0][2] > shelf - 0.003
+
+
+def test_cubes_falling_from_the_shelf_edge_stay_in_the_box(env):
+    """A cube leaving the cube shelf at its front edge lands and stays in the box."""
+    env.reset(seed=0)
+    (x0, y0, x1, y1), _ = env.box_interior()
+    start = env.shelf_top_z(shelf=1) + 0.011
+    for i, name in enumerate(_CUBES):
+        cube = env.get_object(name)
+        cube.set_pose([x1 - 0.02, y0 + 0.06 + 0.08 * i, start], _IDENTITY)
+        cube.set_velocity([-0.3, 0.0, 0.0], [0.0] * 3)
+    _settle(env)
+    for name in _CUBES:
+        assert env.cube_in_box(name), name
+        assert env.get_object(name).get_pose()[0][2] > 0.005
 
 
 def test_a_cube_on_the_floor_beside_the_box_is_not_in_it(env):

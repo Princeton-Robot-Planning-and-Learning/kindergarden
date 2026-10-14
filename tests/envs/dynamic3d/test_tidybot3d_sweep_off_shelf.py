@@ -200,3 +200,16 @@ def test_a_cube_on_the_floor_beside_the_box_is_not_in_it(env):
     cube.set_velocity([0.0] * 3, [0.0] * 3)
     _settle(env)
     assert not env.cube_in_box("cube_0")
+
+
+@pytest.mark.parametrize("seed", [0, 1, 2, 3, 4, 1109584189, 1282264805])
+def test_the_cupboard_stands_on_the_floor_at_one_height(env, seed):
+    """The cupboard is a fixed fixture and never settles, so it must be placed on
+    the floor; otherwise the shelves and the drop into the box change with the seed."""
+    env.reset(seed=seed)
+    model, data = _model_and_data(env)
+    assert float(data.xpos[model.body("cupboard_1").id][2]) == pytest.approx(
+        0.0, abs=1e-6
+    )
+    # The board above the bottom one: 0.254 m shelf height plus the board thickness.
+    assert env.shelf_top_z(shelf=1) == pytest.approx(0.2794, abs=1e-4)

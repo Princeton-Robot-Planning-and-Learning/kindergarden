@@ -133,11 +133,15 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
                 ):
                     continue
                 contacts.append({
-                    "geom1": mujoco.mj_id2name(
-                        model, mujoco.mjtObj.mjOBJ_GEOM, int(contact.geom1)
+                    "geom1": mujoco.mj_id2name(  # pylint: disable=no-member
+                        model,
+                        mujoco.mjtObj.mjOBJ_GEOM,  # pylint: disable=no-member
+                        int(contact.geom1),
                     ),
-                    "geom2": mujoco.mj_id2name(
-                        model, mujoco.mjtObj.mjOBJ_GEOM, int(contact.geom2)
+                    "geom2": mujoco.mj_id2name(  # pylint: disable=no-member
+                        model,
+                        mujoco.mjtObj.mjOBJ_GEOM,  # pylint: disable=no-member
+                        int(contact.geom2),
                     ),
                     "distance": float(contact.dist),
                     "position": [float(value) for value in contact.pos],

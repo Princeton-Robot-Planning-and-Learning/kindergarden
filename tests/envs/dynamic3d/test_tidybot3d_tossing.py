@@ -25,6 +25,16 @@ _TASK_CONFIG_PATH = (
     / "Tossing3D"
     / "Tossing3D-o1.json"
 )
+_LAB2_MESHES_DIR = (
+    Path(kinder.__path__[0])
+    / "envs"
+    / "dynamic3d"
+    / "models"
+    / "assets"
+    / "mimiclabs_scenes"
+    / "meshes"
+    / "lab2"
+)
 
 
 def _make_env(count: int = 1) -> ObjectCentricTidyBot3DEnv:
@@ -85,6 +95,11 @@ def test_outside_room_reset_fails_without_moving_bin():
         env.close()
 
 
+@pytest.mark.skipif(
+    not _LAB2_MESHES_DIR.exists(),
+    reason="MimicLabs lab2 meshes not downloaded. "
+    "Run: python scripts/download_mimiclabs_assets.py",
+)
 def test_resets_avoid_background_furniture():
     """Even non-colliding decorative furniture must not contain reset objects."""
     env = ObjectCentricTidyBot3DEnv(

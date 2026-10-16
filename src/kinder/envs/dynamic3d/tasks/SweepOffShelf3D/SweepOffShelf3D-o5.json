@@ -8,6 +8,7 @@
     }
   },
   "scene": "lab2",
+  "observe_static_colliders": true,
   "fixtures": {
     "cupboard": {
       "cupboard_1": {

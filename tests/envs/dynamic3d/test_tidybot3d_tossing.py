@@ -1,12 +1,15 @@
 """Tests for the TidyBot3D Tossing3D task."""
 
+import json
 from pathlib import Path
 
 import gymnasium as gym
-import kinder
 import mujoco
 import numpy as np
 import pytest
+from scipy.spatial.transform import Rotation
+
+import kinder
 from kinder.envs.dynamic3d.envs import (
     ObjectCentricTidyBot3DEnv,
     TidyBot3DConfig,
@@ -14,7 +17,6 @@ from kinder.envs.dynamic3d.envs import (
 from kinder.envs.dynamic3d.object_types import MujocoStaticColliderType
 from kinder.envs.dynamic3d.robots.tidybot_robot_env import TidyBot3DRobotActionSpace
 from kinder.envs.dynamic3d.task_families import Tossing3DEnv
-from scipy.spatial.transform import Rotation
 
 _TASK_CONFIG_PATH = (
     Path(kinder.__path__[0])
@@ -23,6 +25,16 @@ _TASK_CONFIG_PATH = (
     / "tasks"
     / "Tossing3D"
     / "Tossing3D-o1.json"
+)
+_LAB2_MESHES_DIR = (
+    Path(kinder.__path__[0])
+    / "envs"
+    / "dynamic3d"
+    / "models"
+    / "assets"
+    / "mimiclabs_scenes"
+    / "meshes"
+    / "lab2"
 )
 
 
@@ -64,6 +76,7 @@ def test_reset_bin_stays_inside_room_for_both_destinations(bounds, yaw):
 
 
 def test_outside_room_reset_fails_without_moving_bin():
+    """A region entirely outside the room raises and leaves the bin where it was."""
     env = _make_env()
     try:
         before, _ = env.reset(seed=125)
@@ -76,13 +89,18 @@ def test_outside_room_reset_fails_without_moving_bin():
             env.reset_ground_objects_to_regions(
                 {"bin_0": "outside"}, region_configs={"outside": region}
             )
-        after = env._get_current_state()
+        after = env._get_current_state()  # pylint: disable=protected-access
         obj = before.get_object_from_name("bin_0")
         np.testing.assert_array_equal(before[obj], after[obj])
     finally:
         env.close()
 
 
+@pytest.mark.skipif(
+    not _LAB2_MESHES_DIR.exists(),
+    reason="MimicLabs lab2 meshes not downloaded. "
+    "Run: python scripts/download_mimiclabs_assets.py",
+)
 def test_resets_avoid_background_furniture():
     """Even non-colliding decorative furniture must not contain reset objects."""
     env = ObjectCentricTidyBot3DEnv(
@@ -93,9 +111,11 @@ def test_resets_avoid_background_furniture():
     )
     try:
         env.reset(seed=125)
-        sim = env._robot_env.sim
+        sim = env._robot_env.sim  # pylint: disable=protected-access
         model, data = sim.model.mj_model, sim.data.mj_data
-        geom = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, "living_room")
+        geom = mujoco.mj_name2id(  # pylint: disable=no-member
+            model, mujoco.mjtObj.mjOBJ_GEOM, "living_room"  # pylint: disable=no-member
+        )
         mesh = model.geom_dataid[geom]
         start, count = model.mesh_vertadr[mesh], model.mesh_vertnum[mesh]
         vertices = (
@@ -136,14 +156,18 @@ def test_static_collision_boxes_match_compiled_mujoco_geometry():
     env = _make_env()
     try:
         state, _ = env.reset(seed=125)
-        sim = env._robot_env.sim
+        sim = env._robot_env.sim  # pylint: disable=protected-access
         model, data = sim.model.mj_model, sim.data.mj_data
         colliders = state.get_objects(MujocoStaticColliderType)
         assert len(colliders) >= 7
         names = set()
         for obj in colliders:
             geom = int(obj.name.rsplit(":", 1)[1])
-            names.add(mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_GEOM, geom))
+            names.add(
+                mujoco.mj_id2name(  # pylint: disable=no-member
+                    model, mujoco.mjtObj.mjOBJ_GEOM, geom  # pylint: disable=no-member
+                )
+            )
             np.testing.assert_allclose(
                 [state.get(obj, k) for k in ("x", "y", "z")], data.geom_xpos[geom]
             )
@@ -371,8 +395,6 @@ def test_bin_spawn_range_is_the_graded_union_of_original_and_far_receivers() -> 
     distance ramp rather than a far-only band. 1.48 is not arbitrary -- it is
     exactly the closest legal bin centre, derived from this task's own constants:
     barrier x + barrier x half-size + bin half-footprint."""
-    import json
-
     for count in (1, 2):
         config_path = _TASK_CONFIG_PATH.with_name(f"Tossing3D-o{count}.json")
         config = json.loads(config_path.read_text())
@@ -391,8 +413,6 @@ def test_near_barrier_bin_spawn_is_constructible(tmp_path) -> None:
     """A bin placed at the spawn range's new west edge, right behind the barrier,
     must compile and reset cleanly -- the graded range is usable, not just
     declared."""
-    import json
-
     config = json.loads(_TASK_CONFIG_PATH.read_text())
     config["regions"]["bin_init_region"]["ranges"] = [[1.48, -0.4, 1.48, -0.4]]
     near_path = tmp_path / "Tossing3D-o1-near-barrier.json"

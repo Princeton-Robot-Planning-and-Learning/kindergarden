@@ -12,6 +12,7 @@ from kinder.envs.dynamic3d.utils import bboxes_overlap
 
 
 def test_direct_sampler_handles_tiny_feasible_sliver_without_retries():
+    """A feasible sliver microns wide is sampled directly, without retries."""
     configs = {"cube": {"cube_0": {"size": 0.025}}}
     regions = {"region": {"ranges": [[0, 0, 1, 1]], "yaw_ranges": [[0, 0]]}}
     for seed in range(100):
@@ -30,6 +31,7 @@ def test_direct_sampler_handles_tiny_feasible_sliver_without_retries():
 
 
 def test_direct_sampler_subtracts_obstacles_and_places_multiple_objects():
+    """Sampled objects avoid a box obstacle and each other."""
     configs = {"cube": {"cube_0": {"size": 0.025}, "cube_1": {"size": 0.025}}}
     regions = {"region": {"ranges": [[0, 0, 1, 1]], "yaw_ranges": [[0, 0]]}}
     for seed in range(100):

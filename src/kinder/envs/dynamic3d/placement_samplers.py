@@ -1,6 +1,6 @@
 """Placement sampling utilities for dynamic3d environments."""
 
-from typing import Any, Union
+from typing import Any, Union, cast
 
 import numpy as np
 from numpy.typing import NDArray
@@ -102,7 +102,7 @@ def sample_feasible_ground_positions(
             triangle, yaw, half = candidates[
                 int(rng.choice(len(candidates), p=areas / areas.sum()))
             ]
-            a, b, c = np.array(triangle.exterior.coords)[:3]
+            a, b, c = np.array(cast(Polygon, triangle).exterior.coords)[:3]
             u, v = rng.random(2)
             root = np.sqrt(u)
             xy = (1 - root) * a + root * (1 - v) * b + root * v * c

@@ -412,3 +412,102 @@ def test_near_barrier_bin_spawn_is_constructible(tmp_path) -> None:
         assert not env._check_goals()  # pylint: disable=protected-access
     finally:
         env.close()
+
+
+# The bin stands in for one the robot cannot move: a 20 kg bin, twice the smallest
+# round mass at which no replayed cube impact or pick moved it more than 5 mm.
+_BIN_MASS = 20.0
+
+
+@pytest.mark.parametrize("count", [1, 2])
+def test_tossing_bin_compiles_with_its_declared_mass_and_inertia(count: int) -> None:
+    """The compiled bin body is 20 kg of uniform density, so its COM and inertia are
+    those of the panels it is built from."""
+    env = _make_env(count)
+    try:
+        env.reset(seed=125)
+        model = env._robot_env.sim.model.mj_model  # pylint: disable=protected-access
+        body_type = mujoco.mjtObj.mjOBJ_BODY  # pylint: disable=no-member
+        body = mujoco.mj_name2id(model, body_type, "bin_0")  # pylint: disable=no-member
+        length, width, height, wall = 0.3, 0.3, 0.2, 0.02
+        wall_height = height - wall
+        panels = [
+            ((length, width, wall), (0.0, 0.0, wall / 2)),
+            (
+                (length, wall, wall_height),
+                (0.0, (wall - width) / 2, wall + wall_height / 2),
+            ),
+            (
+                (length, wall, wall_height),
+                (0.0, (width - wall) / 2, wall + wall_height / 2),
+            ),
+            (
+                (wall, width - 2 * wall, wall_height),
+                ((wall - length) / 2, 0.0, wall + wall_height / 2),
+            ),
+            (
+                (wall, width - 2 * wall, wall_height),
+                ((length - wall) / 2, 0.0, wall + wall_height / 2),
+            ),
+        ]
+        volumes = np.array([np.prod(size) for size, _ in panels])
+        masses = _BIN_MASS * volumes / volumes.sum()
+        centres = np.array([pos for _, pos in panels])
+        com = (masses[:, None] * centres).sum(axis=0) / _BIN_MASS
+        inertia = np.zeros(3)
+        for m, (size, _), centre in zip(masses, panels, centres):
+            a, b, c = size
+            d = centre - com
+            inertia += m * np.array([b * b + c * c, a * a + c * c, a * a + b * b]) / 12
+            inertia += m * np.array(
+                [d[1] ** 2 + d[2] ** 2, d[0] ** 2 + d[2] ** 2, d[0] ** 2 + d[1] ** 2]
+            )
+        np.testing.assert_allclose(model.body_mass[body], _BIN_MASS)
+        np.testing.assert_allclose(model.body_ipos[body], com, atol=1e-9)
+        np.testing.assert_allclose(
+            np.sort(model.body_inertia[body]), np.sort(inertia), rtol=1e-6
+        )
+    finally:
+        env.close()
+
+
+def test_a_cube_striking_the_bin_rim_does_not_tip_or_slide_it() -> None:
+    """Replays a toss that tipped the old 0.1 kg bin onto its side: the cube's pose and
+    velocity one control step before it struck the rim, taken from a practice run's
+    state log.
+
+    The bin must stay upright and where it was.
+    """
+    env = _make_env()
+    try:
+        env.reset(seed=125)
+        keys = ["x", "y", "z", "qw", "qx", "qy", "qz"]
+        keys += ["vx", "vy", "vz", "wx", "wy", "wz"]
+        bin_xy = (3.20142, 1.82489)
+        bin_values = [*bin_xy, 0.0, 1.0, 0.0, 0.0, 0.0] + [0.0] * 6
+        cube_values = [
+            *(3.10114, 1.82417, 0.58666),
+            *(-0.88517, 0.04905, -0.4622, 0.02086),
+            *(2.26229, 0.00268, -3.09639),
+            *(0.57967, -7.72932, 0.05886),
+        ]
+        state = env._get_current_state()  # pylint: disable=protected-access
+        for name, values in (("bin_0", bin_values), ("cube_0", cube_values)):
+            obj = state.get_object_from_name(name)
+            for key, value in zip(keys, values):
+                state.set(obj, key, value)
+        env.set_state(state)
+        hold = np.zeros(env.action_space.shape or (), dtype=np.float32)
+        for _ in range(80):
+            env.step(hold)
+        state = env._get_current_state()  # pylint: disable=protected-access
+        bin_obj = state.get_object_from_name("bin_0")
+        qx, qy = state.get(bin_obj, "qx"), state.get(bin_obj, "qy")
+        tilt_deg = np.degrees(np.arccos(np.clip(1 - 2 * (qx**2 + qy**2), -1, 1)))
+        assert tilt_deg < 1.0
+        shift = np.hypot(
+            state.get(bin_obj, "x") - bin_xy[0], state.get(bin_obj, "y") - bin_xy[1]
+        )
+        assert shift < 0.005
+    finally:
+        env.close()

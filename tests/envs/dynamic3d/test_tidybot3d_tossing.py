@@ -1,5 +1,6 @@
 """Tests for the TidyBot3D Tossing3D task."""
 
+import json
 from pathlib import Path
 
 import gymnasium as gym
@@ -394,8 +395,6 @@ def test_bin_spawn_range_is_the_graded_union_of_original_and_far_receivers() -> 
     distance ramp rather than a far-only band. 1.48 is not arbitrary -- it is
     exactly the closest legal bin centre, derived from this task's own constants:
     barrier x + barrier x half-size + bin half-footprint."""
-    import json
-
     for count in (1, 2):
         config_path = _TASK_CONFIG_PATH.with_name(f"Tossing3D-o{count}.json")
         config = json.loads(config_path.read_text())
@@ -414,8 +413,6 @@ def test_near_barrier_bin_spawn_is_constructible(tmp_path) -> None:
     """A bin placed at the spawn range's new west edge, right behind the barrier,
     must compile and reset cleanly -- the graded range is usable, not just
     declared."""
-    import json
-
     config = json.loads(_TASK_CONFIG_PATH.read_text())
     config["regions"]["bin_init_region"]["ranges"] = [[1.48, -0.4, 1.48, -0.4]]
     near_path = tmp_path / "Tossing3D-o1-near-barrier.json"

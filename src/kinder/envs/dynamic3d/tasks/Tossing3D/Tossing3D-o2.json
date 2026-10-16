@@ -61,6 +61,7 @@
                 "height": 0.2,
                 "wall_thickness": 0.02,
                 "rgba": [0.8, 0.8, 0.0, 1.0],
+                "fixed": true,
                 "solref": [0.001, 1],
                 "solimp": [0.99, 0.99, 0.001]
             }

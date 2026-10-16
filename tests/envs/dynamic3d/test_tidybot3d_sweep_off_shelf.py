@@ -162,7 +162,9 @@ def test_only_the_boards_and_box_have_stiff_contacts(env):
 
 
 @pytest.mark.parametrize("yaw", [0.0, 90.0])
-@pytest.mark.parametrize("drop", [0.1, 0.2, 0.25])
+# 0.239 m is the largest drop the shelf gap allows: the 0.254 m between boards less
+# the wiper's 15 mm. A 0.25 m drop starts the wiper 11 mm inside the board above.
+@pytest.mark.parametrize("drop", [0.1, 0.2, 0.239])
 def test_a_dropped_wiper_lands_on_its_shelf(env, yaw, drop):
     """A wiper falling onto a shelf stays on it rather than passing through."""
     env.reset(seed=0)
@@ -213,3 +215,61 @@ def test_the_cupboard_stands_on_the_floor_at_one_height(env, seed):
     )
     # The board above the bottom one: 0.254 m shelf height plus the board thickness.
     assert env.shelf_top_z(shelf=1) == pytest.approx(0.2794, abs=1e-4)
+
+
+def _push_cube_on_the_shelf(env, *, above_centre: float, force_over_weight: float):
+    """Rest cube_0 alone on the cube shelf, push it toward the front edge with a
+    constant horizontal force applied `above_centre` metres above its centre, and return
+    (distance slid, largest tilt in degrees)."""
+    env.reset(seed=0)
+    (x0, y0, x1, _), _ = env.box_interior()
+    for i, name in enumerate(_CUBES[1:]):
+        cube = env.get_object(name)
+        cube.set_pose([(x0 + x1) / 2, y0 + 0.06 + 0.08 * i, 0.1], _IDENTITY)
+        cube.set_velocity([0.0] * 3, [0.0] * 3)
+    cube = env.get_object("cube_0")
+    cube.set_pose([1.5, 0.0, env.shelf_top_z(shelf=1) + 0.0101], _IDENTITY)
+    cube.set_velocity([0.0] * 3, [0.0] * 3)
+    _settle(env, steps=500)
+    sim = env._robot_env.sim  # pylint: disable=protected-access
+    model, data = sim.model.mj_model, sim.data.mj_data
+    body = model.body("cube_0").id
+    weight = float(model.body_subtreemass[body]) * 9.81
+    force = np.array([-force_over_weight * weight, 0.0, 0.0])
+    torque = np.cross([0.0, 0.0, above_centre], force)
+    start = data.xpos[body].copy()
+    tilt = 0.0
+    for _ in range(int(0.15 / model.opt.timestep)):
+        data.xfrc_applied[body] = np.concatenate([force, torque])
+        sim.step()
+        up = data.xmat[body].reshape(3, 3)[2, 2]
+        tilt = max(tilt, float(np.degrees(np.arccos(np.clip(abs(up), 0.0, 1.0)))))
+    data.xfrc_applied[body] = 0.0
+    return float(start[0] - data.xpos[body][0]), tilt
+
+
+def test_a_cube_pushed_above_its_centre_slides_rather_than_tips(env):
+    """A 2 cm cube on a wooden board, pushed 5 mm above its centre with 0.8 of its
+    weight, slides. A rigid cube pushed at height h, half-width a, tips while static
+    only if F h > m g a with F below mu m g, and while sliding only if
+    F (h - a) > m g a (1 - mu): for dry wood on wood (mu 0.25-0.5) neither holds.
+    With MuJoCo's default friction (mu = 1) it cannot slide and tips instead, which
+    is how a wiper pulling cubes across the shelf rolled them over."""
+    slid, tilt = _push_cube_on_the_shelf(env, above_centre=0.005, force_over_weight=0.8)
+    assert tilt < 5.0
+    assert slid > 0.01
+
+
+def test_only_the_shelf_boards_have_wooden_friction(env):
+    """The boards slide like wood; the box, the cubes, the wiper and the gripper pads
+    keep their own friction."""
+    env.reset(seed=0)
+    model, _ = _model_and_data(env)
+    for geom in range(model.ngeom):
+        name = model.geom(geom).name or ""
+        if name.startswith("cupboard_1_shelf"):
+            assert 0.25 <= model.geom_friction[geom][0] <= 0.5
+        elif model.geom_bodyid[geom] == model.body("box_0").id or (
+            str(model.body(model.geom_bodyid[geom]).name).startswith(("cube", "wiper"))
+        ):
+            assert model.geom_friction[geom][0] == pytest.approx(1.0)

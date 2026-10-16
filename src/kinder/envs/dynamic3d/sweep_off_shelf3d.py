@@ -19,6 +19,12 @@ _SHELF_GEOM = re.compile(rf"^{CUPBOARD}_shelf\d+$")
 STIFF_SOLREF = (0.004, 1.0)
 STIFF_SOLIMP = (0.99, 0.999, 0.001, 0.5, 2.0)
 STIFF_PRIORITY = 1
+# Sliding friction of the wooden shelf boards: dry wood on wood is 0.25-0.5. With
+# MuJoCo's default (1.0) a cube pushed anywhere above its centre tips before it can
+# slide (it tips iff mu > half-width / push height), so a wiper pulling cubes across
+# the shelf rolled them over. The boards' priority makes this the value every contact
+# with them uses.
+SHELF_FRICTION = 0.4
 
 
 class ObjectCentricSweepOffShelf3DEnv(ObjectCentricTidyBot3DEnv):
@@ -39,6 +45,8 @@ class ObjectCentricSweepOffShelf3DEnv(ObjectCentricTidyBot3DEnv):
                 model.geom_solref[geom] = STIFF_SOLREF
                 model.geom_solimp[geom] = STIFF_SOLIMP
                 model.geom_priority[geom] = STIFF_PRIORITY
+            if _SHELF_GEOM.match(model.geom(geom).name or ""):
+                model.geom_friction[geom][0] = SHELF_FRICTION
 
     def _shelf_geoms(self):
         model, data = self._model_and_data()

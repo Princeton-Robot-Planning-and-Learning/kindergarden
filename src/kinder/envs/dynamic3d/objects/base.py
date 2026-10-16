@@ -387,7 +387,7 @@ class MujocoObject:
                 obj_yaw = 0.0
                 if self.env is not None:
                     try:
-                        obj_pos, obj_quat = self.env.get_joint_pos_quat(self.joint_name)
+                        obj_pos, obj_quat = self._read_pose()
                         obj_pos = np.array(obj_pos, dtype=np.float32)
                         obj_yaw = utils.quat_to_yaw(obj_quat)
                     except Exception:
@@ -410,6 +410,30 @@ class MujocoObject:
 
             self.region_objects[region_name] = region_list
 
+    def _read_pose(self) -> tuple[NDArray[np.float32], NDArray[np.float32]]:
+        """The object's (position, quaternion), read from wherever its pose lives."""
+        assert self.env is not None
+        return self.env.get_joint_pos_quat(self.joint_name)
+
+    def _write_pose(
+        self, position: NDArray[np.float32], quaternion: NDArray[np.float32]
+    ) -> None:
+        """Write the object's pose; every pose setter goes through here."""
+        assert self.env is not None
+        self.env.set_joint_pos_quat(self.joint_name, position, quaternion)
+
+    def _read_velocity(self) -> tuple[NDArray[np.float32], NDArray[np.float32]]:
+        """The object's (linear, angular) velocity."""
+        assert self.env is not None
+        return self.env.get_joint_vel(self.joint_name)
+
+    def _write_velocity(
+        self, linear: NDArray[np.float32], angular: NDArray[np.float32]
+    ) -> None:
+        """Write the object's velocity."""
+        assert self.env is not None
+        self.env.set_joint_vel(self.joint_name, linear, angular)
+
     def get_position(self) -> NDArray[np.float32]:
         """Get the object's current position.
 
@@ -422,7 +446,7 @@ class MujocoObject:
         if self.env is None:
             raise ValueError("Environment must be set to get position")
 
-        pos, _ = self.env.get_joint_pos_quat(self.joint_name)
+        pos, _ = self._read_pose()
         return pos
 
     def get_orientation(self) -> NDArray[np.float32]:
@@ -437,7 +461,7 @@ class MujocoObject:
         if self.env is None:
             raise ValueError("Environment must be set to get orientation")
 
-        _, quat = self.env.get_joint_pos_quat(self.joint_name)
+        _, quat = self._read_pose()
         return quat
 
     def get_pose(self) -> tuple[NDArray[np.float32], NDArray[np.float32]]:
@@ -452,7 +476,7 @@ class MujocoObject:
         if self.env is None:
             raise ValueError("Environment must be set to get pose")
 
-        return self.env.get_joint_pos_quat(self.joint_name)
+        return self._read_pose()
 
     def set_position(self, position: Union[list[float], NDArray[np.float32]]) -> None:
         """Set the object's position.
@@ -467,10 +491,10 @@ class MujocoObject:
             raise ValueError("Environment must be set to set position")
 
         # Get current orientation to preserve it
-        _, current_quat = self.env.get_joint_pos_quat(self.joint_name)
+        _, current_quat = self._read_pose()
 
         # Set new position with current orientation
-        self.env.set_joint_pos_quat(self.joint_name, np.array(position), current_quat)
+        self._write_pose(np.array(position), current_quat)
 
     def set_orientation(
         self, quaternion: Union[list[float], NDArray[np.float32]]
@@ -487,10 +511,10 @@ class MujocoObject:
             raise ValueError("Environment must be set to set orientation")
 
         # Get current position to preserve it
-        current_pos, _ = self.env.get_joint_pos_quat(self.joint_name)
+        current_pos, _ = self._read_pose()
 
         # Set new orientation with current position
-        self.env.set_joint_pos_quat(self.joint_name, current_pos, np.array(quaternion))
+        self._write_pose(current_pos, np.array(quaternion))
 
     def set_pose(
         self,
@@ -509,9 +533,7 @@ class MujocoObject:
         if self.env is None:
             raise ValueError("Environment must be set to set pose")
 
-        self.env.set_joint_pos_quat(
-            self.joint_name, np.array(position), np.array(quaternion)
-        )
+        self._write_pose(np.array(position), np.array(quaternion))
 
     def set_velocity(
         self,
@@ -530,9 +552,7 @@ class MujocoObject:
         if self.env is None:
             raise ValueError("Environment must be set to set velocity")
 
-        self.env.set_joint_vel(
-            self.joint_name, np.array(linear_velocity), np.array(angular_velocity)
-        )
+        self._write_velocity(np.array(linear_velocity), np.array(angular_velocity))
 
     @abc.abstractmethod
     def get_bounding_box_dimensions(self) -> tuple[float, float, float]:
@@ -568,8 +588,8 @@ class MujocoObject:
         if self.env is None:
             raise ValueError("Environment must be set to get state")
 
-        pos, quat = self.env.get_joint_pos_quat(self.joint_name)
-        linear_vel, angular_vel = self.env.get_joint_vel(self.joint_name)
+        pos, quat = self._read_pose()
+        linear_vel, angular_vel = self._read_velocity()
         bb_x, bb_y, bb_z = self.get_bounding_box_dimensions()
 
         # Create and return the data

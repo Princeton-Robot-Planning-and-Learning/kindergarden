@@ -5,6 +5,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from scipy.spatial.transform import Rotation
 
 import kinder
 from kinder.envs.dynamic3d.sweep_off_shelf3d import ObjectCentricSweepOffShelf3DEnv
@@ -146,9 +147,9 @@ def _catching_geoms(model):
     ]
 
 
-def test_only_the_boards_and_box_have_stiff_contacts(env):
+def test_only_the_boards_and_box_have_stiff_contacts_with_priority(env):
     """Stiffened with priority so their parameters win over the soft wiper and
-    cubes; nothing else in the scene is changed."""
+    cubes; the rest of the cupboard and the cubes are unchanged."""
     env.reset(seed=0)
     model, _ = _model_and_data(env)
     catching = set(_catching_geoms(model))
@@ -157,8 +158,150 @@ def test_only_the_boards_and_box_have_stiff_contacts(env):
         if geom in catching:
             assert model.geom_solref[geom][0] == pytest.approx(0.004)
             assert model.geom_priority[geom] == 1
-        elif (model.geom(geom).name or "").startswith(("cupboard_1", "wiper", "cube")):
+        elif (model.geom(geom).name or "").startswith(("cupboard_1", "cube")):
             assert model.geom_solref[geom][0] == pytest.approx(0.02)
+
+
+def _descendants(model, root):
+    bodies = {root}
+    for body in range(model.nbody):
+        parent = body
+        while parent not in (0, root):
+            parent = int(model.body_parentid[parent])
+        if parent == root:
+            bodies.add(body)
+    return bodies
+
+
+def _gripper_geoms(model):
+    """(pad geoms, every other collidable gripper geom)."""
+    bodies = _descendants(model, model.body("robot_base").id)
+    collidable = [
+        g
+        for g in range(model.ngeom)
+        if int(model.geom_bodyid[g]) in bodies
+        and (model.geom_contype[g] or model.geom_conaffinity[g])
+    ]
+    pads = [
+        g for g in collidable if (model.geom(g).name or "").endswith(("pad1", "pad2"))
+    ]
+    return pads, [g for g in collidable if g not in pads]
+
+
+def _wiper_geoms(model):
+    wiper = model.body("wiper_0").id
+    return [g for g in range(model.ngeom) if model.geom_bodyid[g] == wiper]
+
+
+def test_the_gripper_links_and_wiper_have_the_pads_stiff_contact(env):
+    """Every gripper link and the wiper collide as stiffly as the pads, without the
+    pads' priority: priority would also make their friction win, and friction is
+    unchanged."""
+    env.reset(seed=0)
+    model, _ = _model_and_data(env)
+    pads, links = _gripper_geoms(model)
+    assert len(pads) == 4 and len(links) == 9
+    for geom in links + _wiper_geoms(model):
+        assert model.geom_solref[geom] == pytest.approx(model.geom_solref[pads[0]])
+        assert model.geom_solimp[geom] == pytest.approx(model.geom_solimp[pads[0]])
+        assert model.geom_priority[geom] == 0
+        assert model.geom_friction[geom][0] == pytest.approx(1.0)
+
+
+def _contacts_with(data, geoms, others):
+    """{other geom: deepest penetration in metres} over contacts of geoms with
+    others."""
+    deepest: dict[int, float] = {}
+    for i in range(data.ncon):
+        contact = data.contact[i]
+        for mine, other in (
+            (contact.geom1, contact.geom2),
+            (contact.geom2, contact.geom1),
+        ):
+            if mine in geoms and other in others:
+                deepest[int(other)] = max(deepest.get(int(other), 0.0), -contact.dist)
+    return deepest
+
+
+# Controllers have pressed the held wiper into cubes, a shelf edge or a panel with
+# 84-105 N; the handle slid up through the pads and sank up to 22.7 mm into the palm.
+_PRESS_N = 100.0
+
+
+def test_a_held_wiper_pressed_into_the_hand_stays_out_of_the_gripper_links(env):
+    """A wiper pinched by its handle and pressed head-first against a board (the
+    board's push on the wiper, and the arm's equal push on the hand) slides up into
+    the palm. It must stop at the palm's surface rather than sink into it, and stay
+    held by both pads."""
+    env.reset(seed=0)
+    sim = env._robot_env.sim  # pylint: disable=protected-access
+    model, data = _model_and_data(env)
+    pads, links = _gripper_geoms(model)
+    wiper_geoms = set(_wiper_geoms(model))
+    hand = model.body("robot_base").id
+    wiper_body = model.body("wiper_0").id
+    sim.forward()
+    middle = (
+        data.xpos[model.body("robot_left_pad").id]
+        + data.xpos[model.body("robot_right_pad").id]
+    ) / 2
+    up = data.xpos[hand] - middle
+    up /= np.linalg.norm(up)
+    across = np.array([0.0, 1.0, 0.0])
+    frame = np.column_stack([up, across, np.cross(up, across)])
+    quaternion = Rotation.from_matrix(frame).as_quat(scalar_first=True).tolist()
+    # The handle runs along the wiper's x to x = 0.115; pinched at x = 0.10 its end
+    # starts clear of the palm.
+    position = (middle - frame @ np.array([0.10, 0.0, 0.0075])).tolist()
+    wiper = env.get_object("wiper_0")
+    env._robot_env.ctrl["gripper"][:] = 255.0  # pylint: disable=protected-access
+    for _ in range(1500):
+        wiper.set_pose(position, quaternion)
+        wiper.set_velocity([0.0] * 3, [0.0] * 3)
+        sim.step()
+    _settle(env, steps=500)
+    assert set(_contacts_with(data, wiper_geoms, pads)) == set(pads)
+    assert not _contacts_with(data, wiper_geoms, links)
+    deepest = 0.0
+    for step in range(4000):
+        force = _PRESS_N * min(1.0, step / 1000) * up
+        data.xfrc_applied[wiper_body, :3] = force
+        data.xfrc_applied[hand, :3] = -force
+        sim.step()
+        deepest = max([deepest, *_contacts_with(data, wiper_geoms, links).values()])
+    data.xfrc_applied[[wiper_body, hand]] = 0.0
+    _settle(env, steps=1000)
+    assert deepest < 3e-3
+    held = _contacts_with(data, wiper_geoms, pads)
+    assert {int(model.geom_bodyid[g]) for g in held} == {
+        model.body("robot_left_pad").id,
+        model.body("robot_right_pad").id,
+    }
+
+
+def test_a_cube_pinched_between_the_pads_stays_held(env):
+    """The stiffer gripper links leave an ordinary cube grasp closing and holding."""
+    env.reset(seed=0)
+    sim = env._robot_env.sim  # pylint: disable=protected-access
+    model, data = _model_and_data(env)
+    pads, _ = _gripper_geoms(model)
+    sim.forward()
+    middle = data.geom_xpos[pads].mean(axis=0)
+    cube = env.get_object("cube_0")
+    body = model.body("cube_0").id
+    cube_geoms = {g for g in range(model.ngeom) if model.geom_bodyid[g] == body}
+    env._robot_env.ctrl["gripper"][:] = 255.0  # pylint: disable=protected-access
+    for _ in range(1500):
+        cube.set_pose(middle.tolist(), _IDENTITY)
+        cube.set_velocity([0.0] * 3, [0.0] * 3)
+        sim.step()
+    _settle(env, steps=2000)
+    held = _contacts_with(data, cube_geoms, pads)
+    assert {int(model.geom_bodyid[g]) for g in held} == {
+        model.body("robot_left_pad").id,
+        model.body("robot_right_pad").id,
+    }
+    assert np.linalg.norm(cube.get_pose()[0] - middle) < 5e-3
 
 
 @pytest.mark.parametrize("yaw", [0.0, 90.0])

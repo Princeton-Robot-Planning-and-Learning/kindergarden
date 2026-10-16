@@ -369,6 +369,71 @@ def test_bin_contact_options_compile_into_the_model():
     np.testing.assert_array_equal(model.geom_priority, [1] * 5)
 
 
+def _uniform_bin_mass_properties(
+    mass: float, length: float, width: float, height: float, wall: float
+) -> tuple[np.ndarray, np.ndarray]:
+    """COM and inertia about the COM of a bin of uniform density, from the panels."""
+    wall_height = height - wall
+    panels = [
+        ((length, width, wall), (0.0, 0.0, wall / 2)),
+        (
+            (length, wall, wall_height),
+            (0.0, -width / 2 + wall / 2, wall + wall_height / 2),
+        ),
+        (
+            (length, wall, wall_height),
+            (0.0, width / 2 - wall / 2, wall + wall_height / 2),
+        ),
+        (
+            (wall, width - 2 * wall, wall_height),
+            (-length / 2 + wall / 2, 0.0, wall + wall_height / 2),
+        ),
+        (
+            (wall, width - 2 * wall, wall_height),
+            (length / 2 - wall / 2, 0.0, wall + wall_height / 2),
+        ),
+    ]
+    volumes = np.array([np.prod(size) for size, _ in panels])
+    masses = mass * volumes / volumes.sum()
+    centres = np.array([pos for _, pos in panels])
+    com = (masses[:, None] * centres).sum(axis=0) / mass
+    inertia = np.zeros((3, 3))
+    for m, (size, _), centre in zip(masses, panels, centres):
+        a, b, c = size
+        inertia += np.diag([b * b + c * c, a * a + c * c, a * a + b * b]) * m / 12
+        d = centre - com
+        inertia += m * (np.dot(d, d) * np.eye(3) - np.outer(d, d))
+    return com, inertia
+
+
+def test_bin_mass_is_distributed_by_panel_volume():
+    """A bin of uniform density: compiled mass, COM and inertia match the analytic
+    values, rather than each panel getting a fifth of the mass whatever its size."""
+    length, width, height, wall, mass = 0.3, 0.3, 0.2, 0.02, 7.0
+    bin_obj = Bin(
+        "test_bin",
+        options={
+            "length": length,
+            "width": width,
+            "height": height,
+            "wall_thickness": wall,
+            "mass": mass,
+        },
+    )
+    root = ET.Element("mujoco")
+    ET.SubElement(root, "worldbody").append(bin_obj.xml_element)
+    model = MjModel(ET.tostring(root, encoding="unicode")).mj_model
+
+    com, inertia = _uniform_bin_mass_properties(mass, length, width, height, wall)
+    body = 1  # body 0 is the world
+    np.testing.assert_allclose(model.body_mass[body], mass)
+    np.testing.assert_allclose(model.body_ipos[body], com, atol=1e-9)
+    # The bin is symmetric about x and y, so the principal axes are the body axes.
+    np.testing.assert_allclose(
+        np.sort(model.body_inertia[body]), np.sort(np.diag(inertia)), rtol=1e-6
+    )
+
+
 def test_bin_str_repr():
     """Test string representations for Bin."""
     bin_obj = Bin(

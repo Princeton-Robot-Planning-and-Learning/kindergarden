@@ -328,8 +328,19 @@ class Bin(MujocoObject):
         wall_height = self.height - self.wall_thickness
         half_wall_height = wall_height / 2
 
-        # Mass distribution (divide among 5 components)
-        component_mass = self.mass / 5.0
+        # Uniform density: each panel's share of the mass is its share of the volume,
+        # so the compiled COM and inertia are those of a real bin.
+        bottom_volume = self.length * self.width * self.wall_thickness
+        long_wall_volume = self.length * self.wall_thickness * wall_height
+        short_wall_volume = (
+            (self.width - 2 * self.wall_thickness) * self.wall_thickness * wall_height
+        )
+        density = self.mass / (
+            bottom_volume + 2 * long_wall_volume + 2 * short_wall_volume
+        )
+        bottom_mass = density * bottom_volume
+        long_wall_mass = density * long_wall_volume
+        short_wall_mass = density * short_wall_volume
 
         # Bottom panel (full outer dimensions, at z = 0 to z = wall_thickness)
         bottom_size = [half_length, half_width, half_wall]
@@ -341,7 +352,7 @@ class Bin(MujocoObject):
             size=" ".join(str(x) for x in bottom_size),
             pos=" ".join(str(x) for x in bottom_pos),
             rgba=self.rgba,
-            mass=str(component_mass),
+            mass=str(bottom_mass),
         )
 
         # Back wall (along x-axis, at -y edge)
@@ -355,7 +366,7 @@ class Bin(MujocoObject):
             size=" ".join(str(x) for x in back_wall_size),
             pos=" ".join(str(x) for x in back_wall_pos),
             rgba=self.rgba,
-            mass=str(component_mass),
+            mass=str(long_wall_mass),
         )
 
         # Front wall (along x-axis, at +y edge)
@@ -369,7 +380,7 @@ class Bin(MujocoObject):
             size=" ".join(str(x) for x in front_wall_size),
             pos=" ".join(str(x) for x in front_wall_pos),
             rgba=self.rgba,
-            mass=str(component_mass),
+            mass=str(long_wall_mass),
         )
 
         # Left wall (along y-axis, at -x edge)
@@ -383,7 +394,7 @@ class Bin(MujocoObject):
             size=" ".join(str(x) for x in left_wall_size),
             pos=" ".join(str(x) for x in left_wall_pos),
             rgba=self.rgba,
-            mass=str(component_mass),
+            mass=str(short_wall_mass),
         )
 
         # Right wall (along y-axis, at +x edge)
@@ -397,7 +408,7 @@ class Bin(MujocoObject):
             size=" ".join(str(x) for x in right_wall_size),
             pos=" ".join(str(x) for x in right_wall_pos),
             rgba=self.rgba,
-            mass=str(component_mass),
+            mass=str(short_wall_mass),
         )
 
         # Priority makes these parameters govern the contact instead of being

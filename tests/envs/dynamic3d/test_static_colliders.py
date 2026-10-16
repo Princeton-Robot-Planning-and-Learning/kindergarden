@@ -44,3 +44,14 @@ def test_tossing3d_observes_static_colliders(env_id: str):
         assert any(name.startswith("collider:cuboid_barrier:") for name in names)
     finally:
         env.close()
+
+
+def test_sweep_off_shelf3d_observes_static_colliders():
+    """SweepOffShelf3D opts in, so its room walls stay in the state."""
+    env = _make("kinder/SweepOffShelf3D-o5-v0")
+    inner = getattr(env.unwrapped, "_object_centric_env")
+    try:
+        env.reset(seed=0)
+        assert len(inner.get_state().get_objects(MujocoStaticColliderType)) >= 7
+    finally:
+        env.close()

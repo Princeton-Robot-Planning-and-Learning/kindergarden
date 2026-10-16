@@ -981,7 +981,9 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
         assert self._robot_env is not None and self._robot_env.sim is not None
         sim = self._robot_env.sim
         model, data = sim.model.mj_model, sim.data.mj_data
-        body = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, body_name)
+        body = mujoco.mj_name2id(  # pylint: disable=no-member
+            model, mujoco.mjtObj.mjOBJ_BODY, body_name  # pylint: disable=no-member
+        )
         if body < 0:
             raise ValueError(f"Unknown placement room body: {body_name}")
         geoms = [
@@ -995,7 +997,10 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
         interior = np.mean([data.geom_xpos[g, :2] for g in geoms], axis=0)
         planes = []
         for geom in geoms:
-            if model.geom_type[geom] != mujoco.mjtGeom.mjGEOM_BOX:
+            if (
+                model.geom_type[geom]
+                != mujoco.mjtGeom.mjGEOM_BOX  # pylint: disable=no-member
+            ):
                 raise ValueError("Placement room walls must be boxes")
             rotation = data.geom_xmat[geom].reshape(3, 3)
             axis = int(np.argmin(model.geom_size[geom]))
@@ -1286,7 +1291,10 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
         model, data = sim.model.mj_model, sim.data.mj_data
         bounds = []
         for geom in range(model.ngeom):
-            if model.geom_type[geom] != mujoco.mjtGeom.mjGEOM_MESH:
+            if (
+                model.geom_type[geom]
+                != mujoco.mjtGeom.mjGEOM_MESH  # pylint: disable=no-member
+            ):
                 continue
             ancestor = int(model.geom_bodyid[geom])
             while ancestor and model.body_jntnum[ancestor] == 0:
@@ -1315,7 +1323,10 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
         model, data = sim.model.mj_model, sim.data.mj_data
         result = {}
         for geom in range(model.ngeom):
-            if model.geom_type[geom] != mujoco.mjtGeom.mjGEOM_BOX:
+            if (
+                model.geom_type[geom]
+                != mujoco.mjtGeom.mjGEOM_BOX  # pylint: disable=no-member
+            ):
                 continue
             if not (model.geom_contype[geom] or model.geom_conaffinity[geom]):
                 continue
@@ -1332,7 +1343,10 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
                 continue
             quaternion = Rotation.from_matrix(rotation).as_quat()
             body_name = (
-                mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_BODY, body) or "world"
+                mujoco.mj_id2name(  # pylint: disable=no-member
+                    model, mujoco.mjtObj.mjOBJ_BODY, body  # pylint: disable=no-member
+                )
+                or "world"
             )
             name = f"collider:{body_name}:{geom}"
             result[Object(name, MujocoStaticColliderType)] = dict(

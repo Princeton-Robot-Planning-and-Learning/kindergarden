@@ -369,6 +369,28 @@ def test_bin_contact_options_compile_into_the_model():
     np.testing.assert_array_equal(model.geom_priority, [1] * 5)
 
 
+def test_fixed_bin_is_a_mocap_body_with_no_joint():
+    """A fixed bin has no freejoint, so no contact can move it; it is a mocap body,
+    so it can still be repositioned between steps."""
+    bin_obj = Bin("test_bin", options={"fixed": True})
+
+    assert bin_obj.xml_element.find("freejoint") is None
+    assert bin_obj.xml_element.get("mocap") == "true"
+    root = ET.Element("mujoco")
+    ET.SubElement(root, "worldbody").append(bin_obj.xml_element)
+    model = MjModel(ET.tostring(root, encoding="unicode")).mj_model
+    assert model.njnt == 0
+    assert model.body_mocapid[1] == 0
+
+
+def test_bin_is_free_by_default():
+    """Without the option a bin keeps its freejoint, as every other task expects."""
+    bin_obj = Bin("test_bin")
+
+    assert bin_obj.xml_element.find("freejoint") is not None
+    assert bin_obj.xml_element.get("mocap") is None
+
+
 def test_bin_str_repr():
     """Test string representations for Bin."""
     bin_obj = Bin(

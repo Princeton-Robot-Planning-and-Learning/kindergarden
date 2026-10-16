@@ -799,6 +799,10 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
 
                     obj = self._objects_dict[obj_name]
                     quat = convert_yaw_to_quaternion(yaw)
+                    if getattr(obj, "fixed", False):
+                        # A fixed body cannot settle under gravity, and the ground
+                        # sampler draws its height above the floor: rest it on z = 0.
+                        pos = [float(pos[0]), float(pos[1]), 0.0]
                     obj.set_pose(pos, quat)
                     self._ground_object_xy[obj_name] = (float(pos[0]), float(pos[1]))
 
@@ -1300,7 +1304,13 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
             ):
                 continue
             ancestor = int(model.geom_bodyid[geom])
-            while ancestor and model.body_jntnum[ancestor] == 0:
+            # A mocap body (e.g. a fixed bin) is placed per reset, so it is a movable
+            # object, not fixed world geometry.
+            while (
+                ancestor
+                and model.body_jntnum[ancestor] == 0
+                and model.body_mocapid[ancestor] < 0
+            ):
                 ancestor = int(model.body_parentid[ancestor])
             if ancestor:
                 continue
@@ -1335,7 +1345,13 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
                 continue
             body = int(model.geom_bodyid[geom])
             ancestor = body
-            while ancestor and model.body_jntnum[ancestor] == 0:
+            # A mocap body (e.g. a fixed bin) is placed per reset, so it is a movable
+            # object, not fixed world geometry.
+            while (
+                ancestor
+                and model.body_jntnum[ancestor] == 0
+                and model.body_mocapid[ancestor] < 0
+            ):
                 ancestor = int(model.body_parentid[ancestor])
             if ancestor:
                 continue

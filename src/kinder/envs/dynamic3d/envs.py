@@ -1276,7 +1276,10 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
         # Add robot into object-centric state.
         robot_state_dict = self._get_object_centric_robot_data()
         state_dict.update(robot_state_dict)
-        state_dict.update(self._get_static_collision_boxes())
+        # Opt-in per task: observing the colliders changes the observation's shape,
+        # which would invalidate every recorded demo of the tasks that do not use them.
+        if self.task_config.get("observe_static_colliders", False):
+            state_dict.update(self._get_static_collision_boxes())
         return create_state_from_dict(state_dict, MujocoObjectTypeFeatures)
 
     def _get_static_mesh_placement_bounds(self) -> list[list[float]]:

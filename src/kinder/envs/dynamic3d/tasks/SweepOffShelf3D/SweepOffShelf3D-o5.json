@@ -1,0 +1,342 @@
+{
+  "description": "Sweep cubes off a cupboard shelf, over its open front edge, into a heavy box on the floor below it. The box is far too heavy for the robot to lift.",
+  "variant_description": "Variants differ in the number of cubes on the shelf.",
+  "variant_specific_description": "Five cubes.",
+  "robots": {
+    "tidybot": {
+      "robot": {}
+    }
+  },
+  "scene": "lab2",
+  "observe_static_colliders": true,
+  "fixtures": {
+    "cupboard": {
+      "cupboard_1": {
+        "length": 0.60198,
+        "depth": 0.254,
+        "shelf_heights": [
+          0.254,
+          0.254,
+          0.254
+        ],
+        "shelf_partitions": [
+          [],
+          [],
+          []
+        ],
+        "shelf_thickness": 0.0127,
+        "side_and_back_open": false
+      }
+    }
+  },
+  "regions": {
+    "ground_cupboard_init_region": {
+      "target": "ground",
+      "ranges": [
+        [
+          1.5,
+          0.0,
+          0.0,
+          1.5,
+          0.0,
+          0.0
+        ]
+      ],
+      "yaw_ranges": [
+        [
+          90,
+          90
+        ]
+      ]
+    },
+    "robot_init_region": {
+      "target": "ground",
+      "ranges": [
+        [
+          0.0,
+          -0.05,
+          0.0001,
+          0.05
+        ]
+      ],
+      "yaw_ranges": [
+        [
+          0,
+          0
+        ]
+      ]
+    },
+    "box_goal_region": {
+      "target": "ground",
+      "ranges": [
+        [
+          1.12,
+          -0.24,
+          1.35,
+          0.24
+        ]
+      ],
+      "yaw_ranges": [
+        [
+          0,
+          0
+        ]
+      ],
+      "rgba": [
+        0.0,
+        1.0,
+        0.0,
+        0.0
+      ]
+    },
+    "box_init_region": {
+      "target": "ground",
+      "ranges": [
+        [
+          1.235,
+          0.0,
+          1.2351,
+          0.0001
+        ]
+      ],
+      "yaw_ranges": [
+        [
+          0,
+          0
+        ]
+      ]
+    },
+    "cubes_init_region": {
+      "target": "cupboard_1",
+      "shelf": 1,
+      "ranges": [
+        [
+          -0.24,
+          -0.07,
+          0.0,
+          0.24,
+          0.07,
+          0.03
+        ]
+      ],
+      "yaw_ranges": [
+        [
+          0,
+          360
+        ]
+      ]
+    },
+    "wiper_init_region": {
+      "target": "cupboard_1",
+      "shelf": 2,
+      "ranges": [
+        [
+          -0.2,
+          -0.115,
+          0.0,
+          0.2,
+          0.115,
+          0.03
+        ]
+      ],
+      "yaw_ranges": [
+        [
+          90,
+          90
+        ]
+      ]
+    }
+  },
+  "objects": {
+    "wiper": {
+      "wiper_0": {
+        "handle_height": 0.2,
+        "handle_width": 0.015,
+        "head_length": 0.2,
+        "head_height": 0.03,
+        "upright": false,
+        "handle_rgba": [
+          0.9,
+          0.9,
+          0.9,
+          1.0
+        ],
+        "head_rgba": [
+          0.1,
+          0.1,
+          0.1,
+          1.0
+        ]
+      }
+    },
+    "cube": {
+      "cube_0": {
+        "size": 0.01,
+        "rgba": [
+          0.65,
+          0.25,
+          0.1,
+          1
+        ]
+      },
+      "cube_1": {
+        "size": 0.01,
+        "rgba": [
+          0.65,
+          0.25,
+          0.1,
+          1
+        ]
+      },
+      "cube_2": {
+        "size": 0.01,
+        "rgba": [
+          0.65,
+          0.25,
+          0.1,
+          1
+        ]
+      },
+      "cube_3": {
+        "size": 0.01,
+        "rgba": [
+          0.65,
+          0.25,
+          0.1,
+          1
+        ]
+      },
+      "cube_4": {
+        "size": 0.01,
+        "rgba": [
+          0.65,
+          0.25,
+          0.1,
+          1
+        ]
+      }
+    },
+    "bin": {
+      "box_0": {
+        "length": 0.25,
+        "width": 0.5,
+        "height": 0.2,
+        "wall_thickness": 0.01,
+        "mass": 40.0,
+        "rgba": [
+          0.42,
+          0.44,
+          0.48,
+          1.0
+        ]
+      }
+    }
+  },
+  "cameras": {
+    "task_view": {
+      "position": [
+        -1,
+        1,
+        2
+      ],
+      "lookat": [
+        2,
+        0,
+        0
+      ],
+      "fovy": 42,
+      "resolution": [
+        640,
+        480
+      ]
+    },
+    "side_view": {
+      "position": [
+        0.9,
+        -1.4,
+        0.9
+      ],
+      "lookat": [
+        1.35,
+        0.0,
+        0.3
+      ],
+      "fovy": 45,
+      "resolution": [
+        640,
+        480
+      ]
+    },
+    "front_view": {
+      "position": [
+        0.55,
+        -0.75,
+        0.95
+      ],
+      "lookat": [
+        1.45,
+        0.0,
+        0.35
+      ],
+      "fovy": 45,
+      "resolution": [
+        640,
+        480
+      ]
+    }
+  },
+  "initial_state": [
+    [
+      "on",
+      "cupboard_1",
+      "ground_cupboard_init_region"
+    ],
+    [
+      "on",
+      "robot",
+      "robot_init_region"
+    ],
+    [
+      "on",
+      "box_0",
+      "box_init_region"
+    ],
+    [
+      "in",
+      "wiper_0",
+      "wiper_init_region"
+    ],
+    [
+      "in",
+      "cube_0",
+      "cubes_init_region"
+    ],
+    [
+      "in",
+      "cube_1",
+      "cubes_init_region"
+    ],
+    [
+      "in",
+      "cube_2",
+      "cubes_init_region"
+    ],
+    [
+      "in",
+      "cube_3",
+      "cubes_init_region"
+    ],
+    [
+      "in",
+      "cube_4",
+      "cubes_init_region"
+    ]
+  ],
+  "goal_state": [
+    ["on", "cube_0", "box_goal_region"],
+    ["on", "cube_1", "box_goal_region"],
+    ["on", "cube_2", "box_goal_region"],
+    ["on", "cube_3", "box_goal_region"],
+    ["on", "cube_4", "box_goal_region"]
+  ]
+}

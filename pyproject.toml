@@ -62,8 +62,13 @@ develop = [
    "black[jupyter]",
    "docformatter",
    "isort",
-   "mypy",
-   "pylint>=2.14.5",
+   # Lint and type-check tools are pinned to the last versions main was green on:
+   # pylint 4.1 / astroid 4.3 add chained-comparison and abstract-method findings,
+   # and under gymnasium 1.4 mypy rejects the robots' action_space return types.
+   "mypy==2.3.1",
+   "pylint==4.0.8",
+   "astroid==4.0.4",
+   "gymnasium<1.4",
    "pytest-pylint>=0.18.0",
    # pytest 9.1 dropped the `path` arg from the pytest_collect_file hookspec,
    # which pytest-pylint 0.21.0 still uses -- it crashes the lint job. Temporary

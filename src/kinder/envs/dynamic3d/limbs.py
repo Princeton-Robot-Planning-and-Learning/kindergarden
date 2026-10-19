@@ -402,7 +402,7 @@ def create_muscle_tone_model(name: str, num_joints: int) -> BaseMuscleToneModel:
     raise ValueError(f"Unrecognized muscle tone model: {name}")
 
 
-class HumanLimbPyBulletRobot(SingleArmPyBulletRobot):
+class HumanLimbPyBulletRobot(SingleArmPyBulletRobot, abc.ABC):
     """Base class for a passive human limb.
 
     A limb is modelled as a robot, but is never commanded directly: it moves only in
@@ -537,6 +537,16 @@ class HumanLimbPyBulletRobot(SingleArmPyBulletRobot):
     @property
     def tool_link_name(self) -> str:
         return "ee_link"
+
+    def custom_inverse_kinematics(
+        self,
+        end_effector_pose: Pose,
+        validate: bool = True,
+        best_effort: bool = False,
+        validation_atol: float = 1e-3,
+    ) -> None:
+        """A passive limb is never commanded to a pose, so it has no custom IK."""
+        del end_effector_pose, validate, best_effort, validation_atol
 
 
 class HumanLeftArm(HumanLimbPyBulletRobot):

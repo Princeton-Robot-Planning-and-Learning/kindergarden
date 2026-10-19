@@ -469,12 +469,15 @@ class ObjectCentricKinematic3DRobotEnv(
     ) -> bool:
         """Check if an object is inside the grasped object."""
         return (
-            obj_pose.position[0] > grasped_object_pose.position[0] - half_extents[0]
-            and obj_pose.position[0] < grasped_object_pose.position[0] + half_extents[0]
-            and obj_pose.position[1] > grasped_object_pose.position[1] - half_extents[1]
-            and obj_pose.position[1] < grasped_object_pose.position[1] + half_extents[1]
-            and obj_pose.position[2] > grasped_object_pose.position[2] - half_extents[2]
-            and obj_pose.position[2] < grasped_object_pose.position[2] + half_extents[2]
+            grasped_object_pose.position[0] - half_extents[0]
+            < obj_pose.position[0]
+            < grasped_object_pose.position[0] + half_extents[0]
+            and grasped_object_pose.position[1] - half_extents[1]
+            < obj_pose.position[1]
+            < grasped_object_pose.position[1] + half_extents[1]
+            and grasped_object_pose.position[2] - half_extents[2]
+            < obj_pose.position[2]
+            < grasped_object_pose.position[2] + half_extents[2]
         )
 
     def _get_inside_objects(self) -> tuple[set[str], dict[str, Pose]]:

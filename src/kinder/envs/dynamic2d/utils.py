@@ -699,7 +699,7 @@ class KinRobot:
             p_a = SE2Pose(x=pt_a.x, y=pt_a.y, theta=0.0)
             rel_a = self.gripper_base_pose.inverse * p_a
             if (abs(rel_a.y) < self.gripper_base_height / 2) and (
-                (rel_a.x < self.gripper_finger_width / 2) and rel_a.x > 0
+                0 < rel_a.x < self.gripper_finger_width / 2
             ):
                 return True
         return False

@@ -25,6 +25,13 @@ STIFF_PRIORITY = 1
 # the shelf rolled them over. The boards' priority makes this the value every contact
 # with them uses.
 SHELF_FRICTION = 0.4
+WIPER = "wiper_0"
+# Every gripper collision shape but the four pads is a mesh hull with MuJoCo's default
+# contact, as is the wiper, so a wiper-to-link pair is the softest contact in the
+# scene: a held wiper pressed against a shelf edge or cubes slid up through the pads
+# and sank over 20 mm into the palm. The links and the wiper take the pads' own
+# stiffness, without their priority, which would also make their friction win.
+_PADS = re.compile(r"_pad[12]$")
 # A box tipped further than this from upright no longer holds anything. It stands
 # on the floor, so a wiper or arm nudging it turns it; only tipping it tilts it.
 MAX_BOX_TILT = np.deg2rad(5.0)
@@ -50,6 +57,30 @@ class ObjectCentricSweepOffShelf3DEnv(ObjectCentricTidyBot3DEnv):
                 model.geom_priority[geom] = STIFF_PRIORITY
             if _SHELF_GEOM.match(model.geom(geom).name or ""):
                 model.geom_friction[geom][0] = SHELF_FRICTION
+        self._stiffen_gripper_and_wiper_contacts()
+
+    def _stiffen_gripper_and_wiper_contacts(self):
+        model, _ = self._model_and_data()
+        hand = model.body(f"{self.robot_name}_base").id
+        wiper = model.body(WIPER).id
+
+        def in_hand(body):
+            while body not in (0, hand):
+                body = int(model.body_parentid[body])
+            return body == hand
+
+        collidable = [
+            g
+            for g in range(model.ngeom)
+            if model.geom_contype[g] or model.geom_conaffinity[g]
+        ]
+        gripper = [g for g in collidable if in_hand(int(model.geom_bodyid[g]))]
+        pads = [g for g in gripper if _PADS.search(model.geom(g).name or "")]
+        pad = pads[0]
+        for geom in gripper + [g for g in collidable if model.geom_bodyid[g] == wiper]:
+            if geom not in pads:
+                model.geom_solref[geom] = model.geom_solref[pad]
+                model.geom_solimp[geom] = model.geom_solimp[pad]
 
     def _shelf_geoms(self):
         model, data = self._model_and_data()

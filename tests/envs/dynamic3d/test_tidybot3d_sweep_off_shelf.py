@@ -5,6 +5,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from scipy.spatial.transform import Rotation
 
 import kinder
 from kinder.envs.dynamic3d.sweep_off_shelf3d import ObjectCentricSweepOffShelf3DEnv
@@ -213,3 +214,112 @@ def test_the_cupboard_stands_on_the_floor_at_one_height(env, seed):
     )
     # The board above the bottom one: 0.254 m shelf height plus the board thickness.
     assert env.shelf_top_z(shelf=1) == pytest.approx(0.2794, abs=1e-4)
+
+
+def _turn_box(env, yaw_deg, tilt_deg=0.0, shift=(0.0, 0.0)):
+    """Turn the box in place about z by yaw_deg, then tip it about its own x by
+    tilt_deg; return its rotation and position."""
+    box = env.get_object("box_0")
+    position, _ = box.get_pose()
+    position = np.asarray(position, dtype=float) + np.array([*shift, 0.0])
+    rotation = Rotation.from_euler("zx", [yaw_deg, tilt_deg], degrees=True)
+    box.set_pose(position, rotation.as_quat()[[3, 0, 1, 2]])
+    box.set_velocity([0.0] * 3, [0.0] * 3)
+    return rotation, position
+
+
+def _place_in_box_frame(env, name, rotation, position, local):
+    """Put a cube at `local` in the box's frame, turned with the box."""
+    env.get_object(name).set_pose(
+        rotation.apply(local) + position, rotation.as_quat()[[3, 0, 1, 2]]
+    )
+
+
+def _box_half_extents(env):
+    box = env.get_object("box_0")
+    return box.length / 2 - box.wall_thickness, box.width / 2 - box.wall_thickness
+
+
+@pytest.mark.parametrize("yaw", [-10.0, -2.0, -0.3, 0.3, 2.0, 10.0])
+def test_a_cube_inside_a_turned_box_is_in_it(env, yaw):
+    """A cube in a corner of a box turned about z still counts as in the box."""
+    env.reset(seed=0)
+    rotation, position = _turn_box(env, yaw)
+    half_x, half_y = _box_half_extents(env)
+    _place_in_box_frame(
+        env, "cube_0", rotation, position, [half_x - 0.02, half_y - 0.02, 0.05]
+    )
+    assert env.cube_in_box("cube_0")
+
+
+@pytest.mark.parametrize("yaw", [-10.0, -2.0, -0.3, 0.3, 2.0, 10.0])
+def test_a_cube_outside_a_turned_box_is_not_in_it(env, yaw):
+    """Just beyond a turned box's wall, or above its rim, is not in the box."""
+    env.reset(seed=0)
+    rotation, position = _turn_box(env, yaw)
+    half_x, half_y = _box_half_extents(env)
+    height = env.get_object("box_0").height
+    outside = {
+        "cube_0": [half_x + 0.02, 0.0, 0.05],
+        "cube_1": [0.0, -half_y - 0.02, 0.05],
+        "cube_2": [0.0, 0.0, height + 0.02],
+    }
+    for name, local in outside.items():
+        _place_in_box_frame(env, name, rotation, position, local)
+    for name in outside:
+        assert not env.cube_in_box(name), name
+
+
+def test_a_spot_the_turned_box_has_moved_away_from_is_not_in_it(env):
+    """A spot inside the unturned footprint that the turned box no longer covers is
+    outside: containment follows the box, not where it used to be."""
+    env.reset(seed=0)
+    half_x, half_y = _box_half_extents(env)
+    position, _ = env.get_object("box_0").get_pose()
+    spot = np.asarray(position, dtype=float) + [half_x - 0.015, half_y - 0.015, 0.05]
+    cube = env.get_object("cube_0")
+    cube.set_pose(spot, _IDENTITY)
+    assert env.cube_in_box("cube_0")
+    _turn_box(env, 10.0)
+    cube.set_pose(spot, _IDENTITY)
+    assert not env.cube_in_box("cube_0")
+
+
+def test_unturned_containment_is_still_the_footprint_and_rim_test(env):
+    """For an axis-aligned box, cube_in_box answers exactly as before."""
+    env.reset(seed=0)
+    (x0, y0, x1, y1), rim = env.box_interior()
+    cube = env.get_object("cube_0")
+    half = float(cube.size[0])
+    cases = {
+        (x0 + half + 1e-6, y0 + half + 1e-6, rim - half - 1e-4): True,
+        (x1 - half - 1e-6, y1 - half - 1e-6, rim - half - 1e-4): True,
+        (x0 + half - 1e-4, (y0 + y1) / 2, 0.05): False,
+        ((x0 + x1) / 2, y1 - half + 1e-4, 0.05): False,
+        ((x0 + x1) / 2, (y0 + y1) / 2, rim - half + 1e-4): False,
+    }
+    for xyz, inside in cases.items():
+        cube.set_pose(list(xyz), _IDENTITY)
+        assert env.cube_in_box("cube_0") is inside, xyz
+
+
+def test_a_tipped_box_holds_nothing(env):
+    """A box tipped well over is no longer a container, so nothing in its frame counts;
+    a box tilted a degree on the floor still holds its cubes."""
+    env.reset(seed=0)
+    rotation, position = _turn_box(env, 0.0, tilt_deg=30.0)
+    _place_in_box_frame(env, "cube_0", rotation, position, [0.0, 0.0, 0.05])
+    assert not env.cube_in_box("cube_0")
+    rotation, position = _turn_box(env, 0.0, tilt_deg=1.0)
+    _place_in_box_frame(env, "cube_0", rotation, position, [0.0, 0.0, 0.05])
+    assert env.cube_in_box("cube_0")
+
+
+def test_an_episode_survives_a_box_nudged_a_fraction_of_a_degree(env):
+    """A wiper nudging the box ~0.3 degrees and ~1.4 mm must not end the episode; every
+    env.step checks the goal, which used to raise for a box not axis-aligned."""
+    env.reset(seed=0)
+    _turn_box(env, 0.28, shift=(0.0014, 0.0))
+    env.action_space.seed(0)
+    _, _, terminated, _, _ = env.step(env.action_space.sample())
+    assert not terminated

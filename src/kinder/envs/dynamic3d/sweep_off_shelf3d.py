@@ -19,6 +19,9 @@ _SHELF_GEOM = re.compile(rf"^{CUPBOARD}_shelf\d+$")
 STIFF_SOLREF = (0.004, 1.0)
 STIFF_SOLIMP = (0.99, 0.999, 0.001, 0.5, 2.0)
 STIFF_PRIORITY = 1
+# A box tipped further than this from upright no longer holds anything. It stands
+# on the floor, so a wiper or arm nudging it turns it; only tipping it tilts it.
+MAX_BOX_TILT = np.deg2rad(5.0)
 
 
 class ObjectCentricSweepOffShelf3DEnv(ObjectCentricTidyBot3DEnv):
@@ -79,15 +82,24 @@ class ObjectCentricSweepOffShelf3DEnv(ObjectCentricTidyBot3DEnv):
         return (x - half_x, y - half_y, x + half_x, y + half_y), rim
 
     def cube_in_box(self, name):
-        """All eight cube corners inside the inner walls and below the rim."""
-        (x0, y0, x1, y1), rim = self.box_interior()
+        """All eight cube corners inside the inner walls and below the rim, measured in
+        the box's own frame; nothing is in a box tipped past MAX_BOX_TILT."""
+        box = self._objects_dict[BOX]
+        box_position, box_quaternion = box.get_pose()
+        box_rotation = Rotation.from_quat(box_quaternion[[1, 2, 3, 0]])
+        if box_rotation.apply([0.0, 0.0, 1.0])[2] < np.cos(MAX_BOX_TILT):
+            return False
         cube = self._objects_dict[name]
         position, quaternion = cube.get_pose()
         rotation = Rotation.from_quat(quaternion[[1, 2, 3, 0]])
         signs = np.array([[x, y, z] for x in (-1, 1) for y in (-1, 1) for z in (-1, 1)])
         corners = rotation.apply(signs * np.asarray(cube.size)) + position
-        x, y, z = corners.T
-        return bool(np.all((x >= x0) & (x <= x1) & (y >= y0) & (y <= y1) & (z < rim)))
+        x, y, z = box_rotation.inv().apply(corners - box_position).T
+        half_x = box.length / 2 - box.wall_thickness
+        half_y = box.width / 2 - box.wall_thickness
+        return bool(
+            np.all((np.abs(x) <= half_x) & (np.abs(y) <= half_y) & (z < box.height))
+        )
 
     def _check_goals(self):
         return all(

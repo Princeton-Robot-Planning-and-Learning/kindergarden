@@ -5,7 +5,7 @@
 **Random Action Stats**: Total Reward: -25.00, Success: No, Steps: 25
 
 ## Description
-A 3D task where an object that is initially on the floor must be transferred to the bin. The robot must toss the object into a bin, since it cannot reach the goal position due to an immovable obstacle.
+A 3D task where an object that is initially on the floor must be transferred to the bin.
 
 The robot has a holonomic mobile base with powered casters and a Kinova Gen3 arm.
 
@@ -17,7 +17,7 @@ The robot can control:
 
 
 ## Available Variants
-The variants require tossing different numbers of objects into the bin.
+The variants require transferring different numbers of objects to the bin.
 
 - [`kinder/Tossing3D-o2-v0`](variants/Tossing3D/Tossing3D-o2.md) (o2)
 - [`kinder/Tossing3D-o1-v0`](variants/Tossing3D/Tossing3D-o1.md) (o1)
@@ -43,10 +43,11 @@ The episode terminates when all objects are placed at their respective targets.
 
 
 ## References
-TidyBot++: An Open-Source Holonomic Mobile Manipulator
-for Robot Learning
-- Jimmy Wu, William Chong, Robert Holmberg, Aaditya Prasad, Yihuai Gao,
-  Oussama Khatib, Shuran Song, Szymon Rusinkiewicz, Jeannette Bohg
-- Conference on Robot Learning (CoRL), 2024
+TidyBot++: An Open-Source Holonomic Mobile Manipulator.
 
-https://github.com/tidybot2/tidybot2
+               for Robot Learning
+               - Jimmy Wu, William Chong, Robert Holmberg, Aaditya Prasad, Yihuai Gao,
+                 Oussama Khatib, Shuran Song, Szymon Rusinkiewicz, Jeannette Bohg
+               - Conference on Robot Learning (CoRL), 2024
+
+               https://github.com/tidybot2/tidybot2

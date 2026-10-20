@@ -105,9 +105,9 @@ class Limb3DEnvConfig(KinDEREnvConfig):
 
     def __post_init__(self) -> None:
         substeps = self.dt / PYBULLET_TIMESTEP
-        assert abs(substeps - round(substeps)) < 1e-9, (
-            f"dt={self.dt} is not a whole multiple of PYBULLET_TIMESTEP"
-        )
+        assert (
+            abs(substeps - round(substeps)) < 1e-9
+        ), f"dt={self.dt} is not a whole multiple of PYBULLET_TIMESTEP"
         object.__setattr__(self, "render_fps", round(1.0 / self.dt))
 
     @property

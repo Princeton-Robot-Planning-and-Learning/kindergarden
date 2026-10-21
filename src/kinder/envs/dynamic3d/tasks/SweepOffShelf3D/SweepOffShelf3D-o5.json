@@ -128,21 +128,21 @@
     },
     "wiper_init_region": {
       "target": "cupboard_1",
-      "shelf": 2,
+      "shelf": 3,
       "ranges": [
         [
-          -0.2,
-          -0.115,
+          -0.1,
+          0.1345,
           0.0,
-          0.2,
-          0.115,
-          0.03
+          0.1,
+          0.1346,
+          0.001
         ]
       ],
       "yaw_ranges": [
         [
-          90,
-          90
+          180,
+          180
         ]
       ]
     }
@@ -302,7 +302,7 @@
       "box_init_region"
     ],
     [
-      "in",
+      "on",
       "wiper_0",
       "wiper_init_region"
     ],

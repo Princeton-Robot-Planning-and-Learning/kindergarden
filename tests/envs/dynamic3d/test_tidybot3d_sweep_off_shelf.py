@@ -74,14 +74,35 @@ def test_cubes_start_on_the_second_shelf_from_the_bottom(env):
     assert not env._check_goals()  # pylint: disable=protected-access
 
 
-def test_the_wiper_starts_on_the_third_shelf(env):
-    """The SweepIntoDrawer3D wiper lies on shelf index 2."""
-    env.reset(seed=0)
+# The top board of the cupboard: the board above the third shelf.
+_TOP_BOARD = 3
+
+
+@pytest.mark.parametrize("seed", [0, 1, 2])
+def test_the_wiper_starts_on_top_of_the_cupboard_with_its_handle_over_the_front(
+    env, seed
+):
+    """The wiper lies flat on the cupboard's top board, its centre of mass behind the
+    open front and its handle overhanging it, so a hand reaching from outside the
+    cupboard can pinch the handle without entering a shelf."""
+    env.reset(seed=seed)
     _settle(env, steps=1000)
-    shelf = env.shelf_top_z(shelf=2)
+    model, data = _model_and_data(env)
+    board = env.shelf_top_z(shelf=_TOP_BOARD)
+    front = env.shelf_front_x()
+    body = model.body("wiper_0").id
     position, _ = env.get_object("wiper_0").get_pose()
     # The wiper's origin is its bottom face; soft contact lets it sink ~0.1 mm.
-    assert shelf - 0.002 < position[2] < shelf + 0.06
+    assert board - 0.002 < position[2] < board + 0.06
+    up = data.xmat[body].reshape(3, 3)[2, 2]
+    assert np.degrees(np.arccos(np.clip(up, -1.0, 1.0))) < 5.0
+    # The cupboard opens toward -x: behind the front is x > front.
+    assert float(data.subtree_com[body][0]) > front + 0.005
+    handle = max(_wiper_geoms(model), key=lambda g: float(model.geom_size[g][0]))
+    signs = np.array([[x, y, z] for x in (-1, 1) for y in (-1, 1) for z in (-1, 1)])
+    rotation = data.geom_xmat[handle].reshape(3, 3)
+    corners = (signs * model.geom_size[handle]) @ rotation.T + data.geom_xpos[handle]
+    assert float(corners[:, 0].min()) < front - 0.05
 
 
 def test_the_box_is_heavy_and_its_rim_is_below_the_cube_shelf(env):

@@ -164,6 +164,25 @@ def test_crowded_scenario_fallback():
     assert isinstance(bbox, list)
 
 
+def test_crowded_scenario_can_fail_instead_of_returning_invalid_fallback():
+    """Partial in-episode resets must never silently place an object at origin."""
+    np_random = np.random.default_rng(42)
+    initial_bbox = Table.get_bounding_box_from_config(
+        np.array([0.0, 0.0, 0.0], dtype=np.float32),
+        {"shape": "rectangle", "length": 3.0, "width": 3.0, "height": 0.8},
+    )
+    with pytest.raises(RuntimeError, match="Could not find collision-free position"):
+        sample_collision_free_position(
+            initial_bbox,
+            [[-100.0, -100.0, -100.0, 100.0, 100.0, 100.0]],
+            np_random,
+            "test_region",
+            create_mock_sampler(),
+            max_attempts=2,
+            fail_on_exhaustion=True,
+        )
+
+
 def test_circular_table():
     """Test sampling with circular table configuration."""
     np_random = np.random.default_rng(42)

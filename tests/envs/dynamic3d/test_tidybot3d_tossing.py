@@ -432,3 +432,150 @@ def test_near_barrier_bin_spawn_is_constructible(tmp_path) -> None:
         assert not env._check_goals()  # pylint: disable=protected-access
     finally:
         env.close()
+
+
+_STATE_KEYS = [
+    "x",
+    "y",
+    "z",
+    "qw",
+    "qx",
+    "qy",
+    "qz",
+    "vx",
+    "vy",
+    "vz",
+    "wx",
+    "wy",
+    "wz",
+]
+
+
+def _set_objects(
+    env: ObjectCentricTidyBot3DEnv, values: dict[str, list[float]]
+) -> None:
+    state = env._get_current_state()  # pylint: disable=protected-access
+    for name, row in values.items():
+        obj = state.get_object_from_name(name)
+        for key, value in zip(_STATE_KEYS, row):
+            state.set(obj, key, value)
+    env.set_state(state)
+
+
+def _pose(env: ObjectCentricTidyBot3DEnv, name: str) -> np.ndarray:
+    state = env._get_current_state()  # pylint: disable=protected-access
+    obj = state.get_object_from_name(name)
+    return np.array([state.get(obj, key) for key in _STATE_KEYS])
+
+
+@pytest.mark.parametrize("count", [1, 2])
+def test_tossing_bin_has_no_joint(count: int) -> None:
+    """The Tossing3D bin is fixed to the floor: no joint, so nothing can move it."""
+    env = _make_env(count)
+    try:
+        env.reset(seed=125)
+        model = env._robot_env.sim.model.mj_model  # pylint: disable=protected-access
+        body_type = mujoco.mjtObj.mjOBJ_BODY  # pylint: disable=no-member
+        body = mujoco.mj_name2id(model, body_type, "bin_0")  # pylint: disable=no-member
+        assert model.body_jntnum[body] == 0
+        assert model.body_mocapid[body] >= 0
+    finally:
+        env.close()
+
+
+def test_a_cube_striking_the_bin_rim_does_not_move_it() -> None:
+    """Replays a toss that tipped the old free bin onto its side: the cube's pose and
+    velocity one control step before it struck the rim, from a practice run's log."""
+    env = _make_env()
+    try:
+        env.reset(seed=125)
+        bin_row = [3.20142, 1.82489, 0.0, 1.0, 0.0, 0.0, 0.0] + [0.0] * 6
+        cube_row = [
+            *(3.10114, 1.82417, 0.58666),
+            *(-0.88517, 0.04905, -0.4622, 0.02086),
+            *(2.26229, 0.00268, -3.09639),
+            *(0.57967, -7.72932, 0.05886),
+        ]
+        _set_objects(env, {"bin_0": bin_row, "cube_0": cube_row})
+        before = _pose(env, "bin_0")
+        hold = np.zeros(env.action_space.shape or (), dtype=np.float32)
+        for _ in range(80):
+            env.step(hold)
+        np.testing.assert_allclose(_pose(env, "bin_0"), before, atol=1e-9)
+    finally:
+        env.close()
+
+
+def test_the_base_driving_into_the_bin_does_not_move_it() -> None:
+    """The base is a stiff position servo that pushed even a 40 kg bin 0.49 m; it must
+    not move a fixed bin at all."""
+    env = _make_env()
+    try:
+        env.reset(seed=125)
+        state = env._get_current_state()  # pylint: disable=protected-access
+        robot = state.get_object_from_name("robot")
+        rx, ry = state.get(robot, "pos_base_x"), state.get(robot, "pos_base_y")
+        _set_objects(
+            env,
+            {
+                "cube_0": [rx - 1.0, ry + 1.0, 0.025, 1.0, 0.0, 0.0, 0.0] + [0.0] * 6,
+                "bin_0": [rx + 0.45, ry, 0.0, 1.0, 0.0, 0.0, 0.0] + [0.0] * 6,
+            },
+        )
+        before = _pose(env, "bin_0")
+        forward = np.zeros(env.action_space.shape or (), dtype=np.float32)
+        forward[0] = 0.02
+        for _ in range(30):
+            env.step(forward)
+        np.testing.assert_allclose(_pose(env, "bin_0"), before, atol=1e-9)
+    finally:
+        env.close()
+
+
+def test_a_fixed_bin_round_trips_through_set_state_and_carries_the_goal() -> None:
+    """Repositioning works between steps: set_state moves the bin, the state reads
+    the new pose back, and the goal region moves with it."""
+    env = _make_env()
+    try:
+        env.reset(seed=125)
+        half = np.sqrt(0.5)
+        bin_row = [2.6, -1.2, 0.0, half, 0.0, 0.0, half] + [0.0] * 6
+        cube_row = [2.6, -1.2, 0.045, 1.0, 0.0, 0.0, 0.0] + [0.0] * 6
+        _set_objects(env, {"bin_0": bin_row, "cube_0": cube_row})
+        np.testing.assert_allclose(_pose(env, "bin_0"), bin_row, atol=1e-6)
+        assert env._check_goals()  # pylint: disable=protected-access
+        hold = np.zeros(env.action_space.shape or (), dtype=np.float32)
+        for _ in range(10):
+            env.step(hold)
+        np.testing.assert_allclose(_pose(env, "bin_0"), bin_row, atol=1e-6)
+        assert env._check_goals()  # pylint: disable=protected-access
+    finally:
+        env.close()
+
+
+@pytest.mark.parametrize("seed", [0, 1, 2, 3, 4])
+def test_a_fixed_bin_is_placed_on_the_floor(seed: int) -> None:
+    """A fixed bin cannot settle under gravity, so placement must put it on the floor:
+    the ground sampler draws a 4-value region's height from [0, 2 * threshold]."""
+    env = _make_env()
+    try:
+        env.reset(seed=seed)
+        pose = _pose(env, "bin_0")
+        assert pose[2] == pytest.approx(0.0, abs=1e-9)
+        np.testing.assert_allclose(pose[4:6], [0.0, 0.0], atol=1e-9)
+    finally:
+        env.close()
+
+
+def test_a_fixed_bin_is_not_exported_as_static_collider_geometry() -> None:
+    """The bin has no joint, but it is placed per reset: it must stay a movable object
+    in the state, not be frozen into `collider:` boxes at whatever pose the scene was
+    built with (which would leave a phantom bin for planners after a reset)."""
+    env = _make_env()
+    try:
+        state, _ = env.reset(seed=125)
+        names = {obj.name for obj in state}
+        assert "bin_0" in names
+        assert not any(name.startswith("collider:bin_0") for name in names)
+    finally:
+        env.close()

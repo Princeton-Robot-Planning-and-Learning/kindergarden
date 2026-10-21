@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import xml.etree.ElementTree as ET
 
+import mujoco
 import numpy as np
 from numpy.typing import NDArray
 from relational_structs import Object
@@ -254,6 +255,8 @@ class Bin(MujocoObject):
                 - mass: Mass of the bin
                 - solref: Optional MuJoCo contact solref applied to every bin geom
                 - solimp: Optional MuJoCo contact solimp applied to every bin geom
+                - fixed: If true, the bin is a mocap body with no joint: placement
+                  (reset, set_state) positions it, and no contact can move it.
             env: Reference to the environment (needed for position get/set operations)
         """
         # Initialize base class
@@ -289,6 +292,10 @@ class Bin(MujocoObject):
         self.solref: list[float] | None = self.options.get("solref")
         self.solimp: list[float] | None = self.options.get("solimp")
 
+        # A fixed bin is placed, never pushed: a mocap body has no degrees of freedom,
+        # so nothing it touches can tip or slide it, yet its pose is still writable.
+        self.fixed = bool(self.options.get("fixed", False))
+
         # Create the XML element
         self.xml_element = self._create_xml_element()
 
@@ -313,8 +320,11 @@ class Bin(MujocoObject):
         # Create body element
         body = ET.Element("body", name=self.name)
 
-        # Add freejoint for position/orientation control
-        ET.SubElement(body, "freejoint", name=self.joint_name)
+        if self.fixed:
+            body.set("mocap", "true")
+        else:
+            # Add freejoint for position/orientation control
+            ET.SubElement(body, "freejoint", name=self.joint_name)
 
         # Calculate half dimensions
         half_length = self.length / 2
@@ -411,6 +421,48 @@ class Bin(MujocoObject):
                 geom.set("priority", "1")
 
         return body
+
+    def _mocap_id(self) -> int:
+        assert self.env is not None and self.env.sim is not None
+        model = self.env.sim.model.mj_model
+        body = mujoco.mj_name2id(  # pylint: disable=no-member
+            model, mujoco.mjtObj.mjOBJ_BODY, self.name  # pylint: disable=no-member
+        )
+        return int(model.body_mocapid[body])
+
+    def _read_pose(self) -> tuple[NDArray[np.float32], NDArray[np.float32]]:
+        if not self.fixed:
+            return super()._read_pose()
+        assert self.env is not None and self.env.sim is not None
+        data = self.env.sim.data.mj_data
+        mocap = self._mocap_id()
+        return data.mocap_pos[mocap].copy(), data.mocap_quat[mocap].copy()
+
+    def _write_pose(
+        self, position: NDArray[np.float32], quaternion: NDArray[np.float32]
+    ) -> None:
+        if not self.fixed:
+            super()._write_pose(position, quaternion)
+            return
+        assert self.env is not None and self.env.sim is not None
+        data = self.env.sim.data.mj_data
+        mocap = self._mocap_id()
+        data.mocap_pos[mocap] = position
+        data.mocap_quat[mocap] = quaternion
+
+    def _read_velocity(self) -> tuple[NDArray[np.float32], NDArray[np.float32]]:
+        if not self.fixed:
+            return super()._read_velocity()
+        zero = np.zeros(3, dtype=np.float32)
+        return zero, zero.copy()
+
+    def _write_velocity(
+        self, linear: NDArray[np.float32], angular: NDArray[np.float32]
+    ) -> None:
+        # A fixed bin has no velocity to set; a state carrying one is still a valid
+        # place to put the bin.
+        if not self.fixed:
+            super()._write_velocity(linear, angular)
 
     def get_bounding_box_dimensions(self) -> tuple[float, float, float]:
         """Get the bounding box dimensions for this bin.

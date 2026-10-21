@@ -1,0 +1,155 @@
+"""Sweep cubes off a cupboard shelf into a heavy box standing below its front edge."""
+
+import re
+
+import numpy as np
+from scipy.spatial.transform import Rotation
+
+from kinder.envs.dynamic3d.envs import ObjectCentricTidyBot3DEnv, TidyBot3DEnv
+
+CUPBOARD = "cupboard_1"
+BOX = "box_0"
+_SHELF_GEOM = re.compile(rf"^{CUPBOARD}_shelf\d+$")
+# MuJoCo's default contact (solref 0.02) lets a falling object sink 7-9 mm into a
+# surface, about half the combined thickness of a 12.7 mm board and the 15 mm
+# wiper, after which the box-box contact resolves out the far side and the object
+# falls through. The thin parts that catch falling objects get the stiffer contact
+# the gripper pads use; priority makes their parameters win over the softer
+# object's instead of being averaged with it.
+STIFF_SOLREF = (0.004, 1.0)
+STIFF_SOLIMP = (0.99, 0.999, 0.001, 0.5, 2.0)
+STIFF_PRIORITY = 1
+# Sliding friction of the wooden shelf boards: dry wood on wood is 0.25-0.5. With
+# MuJoCo's default (1.0) a cube pushed anywhere above its centre tips before it can
+# slide (it tips iff mu > half-width / push height), so a wiper pulling cubes across
+# the shelf rolled them over. The boards' priority makes this the value every contact
+# with them uses.
+SHELF_FRICTION = 0.4
+WIPER = "wiper_0"
+# Every gripper collision shape but the four pads is a mesh hull with MuJoCo's default
+# contact, as is the wiper, so a wiper-to-link pair is the softest contact in the
+# scene: a held wiper pressed against a shelf edge or cubes slid up through the pads
+# and sank over 20 mm into the palm. The links and the wiper take the pads' own
+# stiffness, without their priority, which would also make their friction win.
+_PADS = re.compile(r"_pad[12]$")
+# A box tipped further than this from upright no longer holds anything. It stands
+# on the floor, so a wiper or arm nudging it turns it; only tipping it tilts it.
+MAX_BOX_TILT = np.deg2rad(5.0)
+
+
+class ObjectCentricSweepOffShelf3DEnv(ObjectCentricTidyBot3DEnv):
+    """Shelf3D's cupboard, cubes on one shelf, and a box too heavy for the arm."""
+
+    def _model_and_data(self):
+        sim = self._robot_env.sim
+        return sim.model.mj_model, sim.data.mj_data
+
+    def _initialize_robot_pose(self):
+        super()._initialize_robot_pose()
+        model, _ = self._model_and_data()
+        box = model.body(BOX).id
+        for geom in range(model.ngeom):
+            if _SHELF_GEOM.match(model.geom(geom).name or "") or (
+                model.geom_bodyid[geom] == box
+            ):
+                model.geom_solref[geom] = STIFF_SOLREF
+                model.geom_solimp[geom] = STIFF_SOLIMP
+                model.geom_priority[geom] = STIFF_PRIORITY
+            if _SHELF_GEOM.match(model.geom(geom).name or ""):
+                model.geom_friction[geom][0] = SHELF_FRICTION
+        self._stiffen_gripper_and_wiper_contacts()
+
+    def _stiffen_gripper_and_wiper_contacts(self):
+        model, _ = self._model_and_data()
+        hand = model.body(f"{self.robot_name}_base").id
+        wiper = model.body(WIPER).id
+
+        def in_hand(body):
+            while body not in (0, hand):
+                body = int(model.body_parentid[body])
+            return body == hand
+
+        collidable = [
+            g
+            for g in range(model.ngeom)
+            if model.geom_contype[g] or model.geom_conaffinity[g]
+        ]
+        gripper = [g for g in collidable if in_hand(int(model.geom_bodyid[g]))]
+        pads = [g for g in gripper if _PADS.search(model.geom(g).name or "")]
+        pad = pads[0]
+        for geom in gripper + [g for g in collidable if model.geom_bodyid[g] == wiper]:
+            if geom not in pads:
+                model.geom_solref[geom] = model.geom_solref[pad]
+                model.geom_solimp[geom] = model.geom_solimp[pad]
+
+    def _shelf_geoms(self):
+        model, data = self._model_and_data()
+        geoms = [
+            g for g in range(model.ngeom) if _SHELF_GEOM.match(model.geom(g).name or "")
+        ]
+        return sorted(geoms, key=lambda g: float(data.geom_xpos[g][2]))
+
+    def _world_corners(self, geom):
+        model, data = self._model_and_data()
+        signs = np.array([[x, y, z] for x in (-1, 1) for y in (-1, 1) for z in (-1, 1)])
+        local = signs * model.geom_size[geom]
+        return local @ data.geom_xmat[geom].reshape(3, 3).T + data.geom_xpos[geom]
+
+    def shelf_top_z(self, shelf):
+        """World height of the top surface of a board, 0 = the bottom board."""
+        return float(self._world_corners(self._shelf_geoms()[shelf])[:, 2].max())
+
+    def shelf_front_x(self):
+        """World x of the cupboard's open front, the edge cubes are pulled over."""
+        return float(
+            min(self._world_corners(g)[:, 0].min() for g in self._shelf_geoms())
+        )
+
+    def box_interior(self):
+        """((x0, y0, x1, y1), rim_z): the box's inner footprint and rim height."""
+        box = self._objects_dict[BOX]
+        position, quaternion = box.get_pose()
+        yaw = Rotation.from_quat(quaternion[[1, 2, 3, 0]]).as_euler("xyz")[2]
+        if not np.isclose(np.sin(2 * yaw), 0.0, atol=1e-3):
+            raise ValueError("box_interior assumes an axis-aligned box")
+        half_x = box.length / 2 - box.wall_thickness
+        half_y = box.width / 2 - box.wall_thickness
+        if np.isclose(abs(np.sin(yaw)), 1.0, atol=1e-3):
+            half_x, half_y = half_y, half_x
+        x, y, z = (float(v) for v in position)
+        rim = z + box.height
+        return (x - half_x, y - half_y, x + half_x, y + half_y), rim
+
+    def cube_in_box(self, name):
+        """All eight cube corners inside the inner walls and below the rim, measured in
+        the box's own frame; nothing is in a box tipped past MAX_BOX_TILT."""
+        box = self._objects_dict[BOX]
+        box_position, box_quaternion = box.get_pose()
+        box_rotation = Rotation.from_quat(box_quaternion[[1, 2, 3, 0]])
+        if box_rotation.apply([0.0, 0.0, 1.0])[2] < np.cos(MAX_BOX_TILT):
+            return False
+        cube = self._objects_dict[name]
+        position, quaternion = cube.get_pose()
+        rotation = Rotation.from_quat(quaternion[[1, 2, 3, 0]])
+        signs = np.array([[x, y, z] for x in (-1, 1) for y in (-1, 1) for z in (-1, 1)])
+        corners = rotation.apply(signs * np.asarray(cube.size)) + position
+        x, y, z = box_rotation.inv().apply(corners - box_position).T
+        half_x = box.length / 2 - box.wall_thickness
+        half_y = box.width / 2 - box.wall_thickness
+        return bool(
+            np.all((np.abs(x) <= half_x) & (np.abs(y) <= half_y) & (z < box.height))
+        )
+
+    def _check_goals(self):
+        return all(
+            self.cube_in_box(name)
+            for name in self._objects_dict
+            if name.startswith("cube_")
+        )
+
+
+class SweepOffShelf3DEnv(TidyBot3DEnv):
+    """Sweep five cubes off the second shelf of Shelf3D's cupboard into a heavy box."""
+
+    def _create_object_centric_env(self, *args, **kwargs):
+        return ObjectCentricSweepOffShelf3DEnv(*args, **kwargs)

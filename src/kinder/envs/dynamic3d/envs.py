@@ -6,7 +6,7 @@ import os
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import cv2 as cv
 import numpy as np
@@ -1356,7 +1356,11 @@ class ObjectCentricTidyBot3DEnv(ObjectCentricRobotEnv):
         self, config: TidyBot3DConfig
     ) -> Space[Array]:
         """Create action space for TidyBot's control interface."""
-        return TidyBot3DRobotActionSpace(config.use_arm_velocities)
+        # gymnasium >= 1.4 types an unparameterised Box as floating|integer; this
+        # space is always float32 (RobotActionSpace's default dtype).
+        return cast(
+            Space[Array], TidyBot3DRobotActionSpace(config.use_arm_velocities)
+        )
 
     def _get_object_centric_robot_data(self) -> dict[Object, dict[str, float]]:
         assert self.robot_type == "tidybot"
@@ -1520,7 +1524,7 @@ class ObjectCentricRBY1A3DEnv(ObjectCentricRobotEnv):
         self, config: TidyBot3DConfig
     ) -> Space[Array]:
         """Create action space for TidyBot's control interface."""
-        return RBY1ARobotActionSpace()
+        return cast(Space[Array], RBY1ARobotActionSpace())  # float32, as above
 
     def _get_object_centric_robot_data(self) -> dict[Object, dict[str, float]]:
         assert self.robot_type == "rby1a"
@@ -1656,7 +1660,7 @@ class ObjectCentricFranka3DEnv(ObjectCentricRobotEnv):
         self, config: TidyBot3DConfig
     ) -> Space[Array]:
         """Create action space for the FR3's control interface."""
-        return FR3RobotActionSpace()
+        return cast(Space[Array], FR3RobotActionSpace())  # float32, as above
 
     def _get_object_centric_robot_data(self) -> dict[Object, dict[str, float]]:
         assert self.robot_type == "fr3"

@@ -40,6 +40,9 @@ class FixedCuboid(MujocoFixture):
         self.primitive = Cuboid(name, options=fixture_config)
         self.xml_element = self._create_xml_element()
 
+    def _create_regions(self) -> None:
+        """A fixed obstacle has no placement regions; the constructor rejects any."""
+
     def _create_xml_element(self) -> ET.Element:
         body = self.primitive.xml_element
         joint = body.find("freejoint")

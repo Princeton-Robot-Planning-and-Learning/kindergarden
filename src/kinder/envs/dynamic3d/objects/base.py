@@ -176,12 +176,9 @@ class Region:
 
             # Check if position is within the bounds
             return bool(
-                position[0] >= x_min
-                and position[0] <= x_max
-                and position[1] >= y_min
-                and position[1] <= y_max
-                and position[2] >= z_min
-                and position[2] <= z_max
+                x_min <= position[0] <= x_max
+                and y_min <= position[1] <= y_max
+                and z_min <= position[2] <= z_max
             )
         finally:
             # Restore original env

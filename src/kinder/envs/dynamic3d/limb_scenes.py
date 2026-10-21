@@ -300,14 +300,22 @@ class HumanScene(LimbRepositioningScene):
             limb_name: self._create_limb(limb_name) for limb_name in ALL_LIMB_NAMES
         }
 
-        # Only the limb being repositioned participates in collision checking.
+        # The three resting limbs are static obstacles, not unobserved dynamic bodies.
+        # Otherwise they drift under gravity across MPC rollouts; the coupled-state
+        # snapshot contains only the robot and the limb being manipulated.
         for limb_name, limb in self.limbs.items():
             if limb_name == config.limb_name:
                 continue
             num_joints = p.getNumJoints(
                 limb.robot_id, physicsClientId=self.physics_client_id
             )
-            for joint in range(num_joints):
+            for joint in range(-1, num_joints):
+                p.changeDynamics(
+                    limb.robot_id,
+                    joint,
+                    mass=0.0,
+                    physicsClientId=self.physics_client_id,
+                )
                 p.setCollisionFilterGroupMask(
                     limb.robot_id,
                     joint,

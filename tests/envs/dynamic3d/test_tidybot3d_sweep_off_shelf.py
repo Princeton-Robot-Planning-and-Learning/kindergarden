@@ -11,14 +11,11 @@ import kinder
 from kinder.envs.dynamic3d.sweep_off_shelf3d import ObjectCentricSweepOffShelf3DEnv
 from kinder.envs.dynamic3d.utils import convert_yaw_to_quaternion
 
-_TASK_CONFIG_PATH = (
-    Path(kinder.__path__[0])
-    / "envs"
-    / "dynamic3d"
-    / "tasks"
-    / "SweepOffShelf3D"
-    / "SweepOffShelf3D-o5.json"
+_TASKS_DIR = (
+    Path(kinder.__path__[0]) / "envs" / "dynamic3d" / "tasks" / "SweepOffShelf3D"
 )
+# Every variant, and the inner y extent of its box, which is centred on the shelf.
+_BOX_INNER_HALF_Y = {"o5": 0.24, "o5-narrow_box": 0.14}
 _IDENTITY = [1.0, 0.0, 0.0, 0.0]
 _CUBES = [f"cube_{i}" for i in range(5)]
 # The Kinova Gen3 on the TidyBot is rated for a 4 kg payload.
@@ -44,10 +41,17 @@ def _model_and_data(env):
     return sim.model.mj_model, sim.data.mj_data
 
 
+@pytest.fixture(name="variant", scope="module", params=sorted(_BOX_INNER_HALF_Y))
+def _variant(request):
+    return request.param
+
+
 @pytest.fixture(name="env", scope="module")
-def _env():
+def _env(variant):
     env = ObjectCentricSweepOffShelf3DEnv(
-        task_config_path=str(_TASK_CONFIG_PATH), scene_bg=False, allow_state_access=True
+        task_config_path=str(_TASKS_DIR / f"SweepOffShelf3D-{variant}.json"),
+        scene_bg=False,
+        allow_state_access=True,
     )
     try:
         yield env
@@ -55,11 +59,17 @@ def _env():
         env.close()
 
 
-def test_sweep_off_shelf3d_registers():
+def test_sweep_off_shelf3d_registers(variant):
     """The task folder registers like every other Dynamic3D task."""
     _register_keeping_render_backend()
-    env = kinder.make("kinder/SweepOffShelf3D-o5-v0")
+    env = kinder.make(f"kinder/SweepOffShelf3D-{variant}-v0")
     env.close()
+
+
+def _cube_spacing(y0: float, y1: float) -> float:
+    """Spacing for a row of the five cubes starting 6 cm in from the y0 wall, ending at
+    least 6 cm from the y1 wall: 8 cm apart where the box is wide enough."""
+    return min(0.08, (y1 - y0 - 0.12) / (len(_CUBES) - 1))
 
 
 def test_cubes_start_on_the_second_shelf_from_the_bottom(env):
@@ -114,13 +124,15 @@ def test_the_box_is_heavy_and_its_rim_is_below_the_cube_shelf(env):
     assert rim < env.shelf_top_z(shelf=1)
 
 
-def test_the_box_stands_under_the_cube_shelfs_front_edge(env):
-    """The box is on the floor against the open front, spanning most of the shelf."""
+def test_the_box_stands_under_the_cube_shelfs_front_edge(env, variant):
+    """The box is on the floor against the open front, centred on the shelf, as wide
+    along it as the variant says."""
     env.reset(seed=0)
     (x0, y0, x1, y1), _ = env.box_interior()
     front = env.shelf_front_x()
     assert x0 < front <= x1 + 0.03
-    assert y1 - y0 > 0.4
+    half_y = _BOX_INNER_HALF_Y[variant]
+    assert (y0, y1) == pytest.approx((-half_y, half_y), abs=1e-3)
 
 
 def test_a_cube_dropped_into_the_box_is_in_it(env):
@@ -137,10 +149,11 @@ def test_a_cube_dropped_into_the_box_is_in_it(env):
 def test_every_cube_in_the_box_is_the_goal(env):
     """The goal is all five cubes inside the box."""
     env.reset(seed=0)
-    (x0, y0, x1, _), _ = env.box_interior()
+    (x0, y0, x1, y1), _ = env.box_interior()
+    step = _cube_spacing(y0, y1)
     for i, name in enumerate(_CUBES):
         cube = env.get_object(name)
-        cube.set_pose([(x0 + x1) / 2, y0 + 0.06 + 0.08 * i, 0.3], _IDENTITY)
+        cube.set_pose([(x0 + x1) / 2, y0 + 0.06 + step * i, 0.3], _IDENTITY)
         cube.set_velocity([0.0] * 3, [0.0] * 3)
     _settle(env)
     assert env._check_goals()  # pylint: disable=protected-access
@@ -345,11 +358,12 @@ def test_a_dropped_wiper_lands_on_its_shelf(env, yaw, drop):
 def test_cubes_falling_from_the_shelf_edge_stay_in_the_box(env):
     """A cube leaving the cube shelf at its front edge lands and stays in the box."""
     env.reset(seed=0)
-    (_, y0, x1, _), _ = env.box_interior()
+    (_, y0, x1, y1), _ = env.box_interior()
+    step = _cube_spacing(y0, y1)
     start = env.shelf_top_z(shelf=1) + 0.011
     for i, name in enumerate(_CUBES):
         cube = env.get_object(name)
-        cube.set_pose([x1 - 0.02, y0 + 0.06 + 0.08 * i, start], _IDENTITY)
+        cube.set_pose([x1 - 0.02, y0 + 0.06 + step * i, start], _IDENTITY)
         cube.set_velocity([-0.3, 0.0, 0.0], [0.0] * 3)
     _settle(env)
     for name in _CUBES:
@@ -386,10 +400,11 @@ def _push_cube_on_the_shelf(env, *, above_centre: float, force_over_weight: floa
     constant horizontal force applied `above_centre` metres above its centre, and return
     (distance slid, largest tilt in degrees)."""
     env.reset(seed=0)
-    (x0, y0, x1, _), _ = env.box_interior()
+    (x0, y0, x1, y1), _ = env.box_interior()
+    step = _cube_spacing(y0, y1)
     for i, name in enumerate(_CUBES[1:]):
         cube = env.get_object(name)
-        cube.set_pose([(x0 + x1) / 2, y0 + 0.06 + 0.08 * i, 0.1], _IDENTITY)
+        cube.set_pose([(x0 + x1) / 2, y0 + 0.06 + step * i, 0.1], _IDENTITY)
         cube.set_velocity([0.0] * 3, [0.0] * 3)
     cube = env.get_object("cube_0")
     cube.set_pose([1.5, 0.0, env.shelf_top_z(shelf=1) + 0.0101], _IDENTITY)

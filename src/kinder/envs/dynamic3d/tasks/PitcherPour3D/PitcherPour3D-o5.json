@@ -1,0 +1,253 @@
+{
+    "description": "Pour five cubes from a handled pitcher into a tray on the floor in front of TidyBot.",
+    "variant_description": "A five-cube pitcher-to-tray task with movable containers.",
+    "variant_specific_description": "All five cubes must settle entirely inside the tray.",
+    "robots": {
+        "tidybot": {
+            "robot": {}
+        }
+    },
+    "scene": "lab2",
+    "observe_static_colliders": true,
+    "regions": {
+        "robot_home": {
+            "target": "ground",
+            "ranges": [
+                [
+                    -0.16,
+                    -0.25,
+                    -0.16,
+                    -0.25
+                ]
+            ],
+            "yaw_ranges": [
+                [
+                    0,
+                    0
+                ]
+            ]
+        },
+        "pitcher_home": {
+            "target": "ground",
+            "ranges": [
+                [
+                    0.6,
+                    -0.25,
+                    0,
+                    0.6,
+                    -0.25,
+                    0
+                ]
+            ],
+            "yaw_ranges": [
+                [
+                    0,
+                    0
+                ]
+            ]
+        },
+        "tray_home": {
+            "target": "ground",
+            "ranges": [
+                [
+                    0.65,
+                    0.2,
+                    0,
+                    0.65,
+                    0.2,
+                    0
+                ]
+            ],
+            "yaw_ranges": [
+                [
+                    0,
+                    0
+                ]
+            ]
+        },
+        "tray_interior": {
+            "target": "tray",
+            "ranges": [
+                [
+                    -0.2,
+                    -0.17,
+                    0.015,
+                    0.2,
+                    0.17,
+                    0.075
+                ]
+            ],
+            "rgba": [
+                0,
+                0.7,
+                0,
+                0
+            ]
+        }
+    },
+    "objects": {
+        "pouringpitcher": {
+            "pitcher": {
+                "length": 0.18,
+                "width": 0.18,
+                "height": 0.21,
+                "wall_thickness": 0.02,
+                "mass": 0.04,
+                "rgba": [
+                    0.15,
+                    0.5,
+                    0.7,
+                    0.65
+                ],
+                "solref": [
+                    0.004,
+                    1
+                ],
+                "solimp": [
+                    0.99,
+                    0.999,
+                    0.001
+                ]
+            }
+        },
+        "bin": {
+            "tray": {
+                "length": 0.44,
+                "width": 0.38,
+                "height": 0.075,
+                "wall_thickness": 0.01,
+                "mass": 0.3,
+                "rgba": [
+                    0.8,
+                    0.7,
+                    0.2,
+                    1
+                ],
+                "solref": [
+                    0.004,
+                    1
+                ],
+                "solimp": [
+                    0.99,
+                    0.999,
+                    0.001
+                ]
+            }
+        },
+        "cube": {
+            "cube_0": {
+                "size": 0.015,
+                "mass": 0.005,
+                "rgba": [
+                    0.8,
+                    0.2,
+                    0.2,
+                    1
+                ]
+            },
+            "cube_1": {
+                "size": 0.015,
+                "mass": 0.005,
+                "rgba": [
+                    0.9,
+                    0.6,
+                    0.1,
+                    1
+                ]
+            },
+            "cube_2": {
+                "size": 0.015,
+                "mass": 0.005,
+                "rgba": [
+                    0.2,
+                    0.7,
+                    0.3,
+                    1
+                ]
+            },
+            "cube_3": {
+                "size": 0.015,
+                "mass": 0.005,
+                "rgba": [
+                    0.2,
+                    0.3,
+                    0.8,
+                    1
+                ]
+            },
+            "cube_4": {
+                "size": 0.015,
+                "mass": 0.005,
+                "rgba": [
+                    0.7,
+                    0.2,
+                    0.7,
+                    1
+                ]
+            }
+        }
+    },
+    "cameras": {
+        "task_view": {
+            "position": [
+                1.4,
+                -1.8,
+                1.65
+            ],
+            "lookat": [
+                0.4,
+                0,
+                0.3
+            ],
+            "fovy": 55,
+            "resolution": [
+                640,
+                480
+            ]
+        }
+    },
+    "initial_state": [
+        [
+            "on",
+            "robot",
+            "robot_home"
+        ],
+        [
+            "on",
+            "pitcher",
+            "pitcher_home"
+        ],
+        [
+            "on",
+            "tray",
+            "tray_home"
+        ]
+    ],
+    "goal_state": [
+        [
+            "on",
+            "cube_0",
+            "tray_interior"
+        ],
+        [
+            "on",
+            "cube_1",
+            "tray_interior"
+        ],
+        [
+            "on",
+            "cube_2",
+            "tray_interior"
+        ],
+        [
+            "on",
+            "cube_3",
+            "tray_interior"
+        ],
+        [
+            "on",
+            "cube_4",
+            "tray_interior"
+        ]
+    ]
+}

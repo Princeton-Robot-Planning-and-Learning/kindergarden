@@ -1,4 +1,4 @@
-"""Pour five cubes from a physical handled pitcher into a floor tray.
+"""Pour a requested count of five cubes from a handled pitcher into a floor tray.
 
 Uses the standard TidyBot robot, torque controllers, scene loading and rendering.
 All seven movable objects have free joints. Harness initialization and the explicit
@@ -189,6 +189,17 @@ class ObjectCentricPitcherPour3DEnv(ObjectCentricTidyBot3DEnv):
 
     cube_names = tuple(f"cube_{i}" for i in range(5))
 
+    def __init__(self, *args: Any, requested_count: int = 5, **kwargs: Any) -> None:
+        """Fix the requested split for this task instance; five preserves the default."""
+        if (
+            isinstance(requested_count, bool)
+            or not isinstance(requested_count, int)
+            or not 1 <= requested_count <= 5
+        ):
+            raise ValueError("requested_count must be an integer from 1 to 5")
+        self.requested_count = requested_count
+        super().__init__(*args, **kwargs)
+
     def _model_and_data(
         self,
     ) -> tuple[mujoco.MjModel, mujoco.MjData]:  # pylint: disable=no-member
@@ -284,12 +295,18 @@ class ObjectCentricPitcherPour3DEnv(ObjectCentricTidyBot3DEnv):
         return True
 
     def _check_goals(self) -> bool:
-        return self.cube_locations() == ["tray"] * 5 and self.cubes_settled()
+        locations = self.cube_locations()
+        return (
+            locations.count("tray") == self.requested_count
+            and locations.count("pitcher") == 5 - self.requested_count
+            and self.cubes_settled()
+        )
 
     def physical_snapshot(self) -> dict[str, Any]:
         """Capture the physical state and measured outcomes for recording."""
         model, data = self._model_and_data()
         return {
+            "requested_count": self.requested_count,
             "time": float(data.time),
             "qpos": data.qpos.tolist(),
             "qvel": data.qvel.tolist(),
@@ -323,3 +340,11 @@ class PitcherPour3DEnv(TidyBot3DEnv):
         self, *args: Any, **kwargs: Any
     ) -> ObjectCentricPitcherPour3DEnv:
         return ObjectCentricPitcherPour3DEnv(*args, **kwargs)
+
+    def _create_variant_specific_description(self) -> str:
+        scene = self._object_centric_env
+        assert isinstance(scene, ObjectCentricPitcherPour3DEnv)
+        return (
+            f"Exactly {scene.requested_count} cubes must settle in the tray and "
+            f"{5 - scene.requested_count} remain settled in the pitcher, with no spills."
+        )

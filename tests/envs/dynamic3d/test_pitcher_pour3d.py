@@ -4,10 +4,9 @@
 
 import os
 
+import kinder
 import mujoco
 import numpy as np
-
-import kinder
 from kinder.envs.dynamic3d.pitcher_pour3d import PitcherPour3DEnv
 
 
@@ -113,3 +112,47 @@ def test_explicit_human_respawn_preserves_vessels_and_robot():
         assert scene.cubes_settled()
     finally:
         env.close()
+
+
+def test_requested_count_requires_exact_split_and_settling():
+    """Goal fixtures are privileged setup, never a robot pour implementation."""
+    env = PitcherPour3DEnv(requested_count=3, scene_bg=False)
+    try:
+        env.reset(seed=0)
+        scene = env._object_centric_env
+        model, data = scene._model_and_data()
+        assert scene.requested_count == 3
+        assert not scene._check_goals()
+        for i in range(4):
+            cube = scene.get_object(f"cube_{i}")
+            cube.set_pose([0.56 + i * 0.04, 0.2, 0.02], [1, 0, 0, 0])
+            cube.set_velocity([0, 0, 0], [0, 0, 0])
+            mujoco.mj_forward(model, data)
+            assert scene._check_goals() == (i == 2)
+            assert scene.physical_snapshot()["requested_count"] == 3
+            if i == 2:
+                cube.set_velocity([0.1, 0, 0], [0, 0, 0])
+                assert not scene._check_goals()
+                cube.set_velocity([0, 0, 0], [0, 0, 0])
+                retained = scene.get_object("cube_4")
+                pose = retained.get_position().copy()
+                retained.set_pose([0.9, 0.5, 0.01], [1, 0, 0, 0])
+                mujoco.mj_forward(model, data)
+                assert not scene._check_goals()
+                retained.set_pose(pose, [1, 0, 0, 0])
+                mujoco.mj_forward(model, data)
+                assert scene._check_goals()
+        scene.respawn_payload_in_pitcher()
+        assert not scene._check_goals()
+    finally:
+        env.close()
+
+
+def test_requested_count_rejects_invalid_targets():
+    """Do not silently round requests or accept impossible counts."""
+    for count in [0, 6, 2.5, True]:
+        try:
+            PitcherPour3DEnv(requested_count=count, scene_bg=False)
+        except ValueError:
+            continue
+        raise AssertionError(f"Accepted invalid requested_count={count}")

@@ -4,9 +4,10 @@
 
 import os
 
-import kinder
 import mujoco
 import numpy as np
+
+import kinder
 from kinder.envs.dynamic3d.pitcher_pour3d import PitcherPour3DEnv
 
 
@@ -156,3 +157,48 @@ def test_requested_count_rejects_invalid_targets():
         except ValueError:
             continue
         raise AssertionError(f"Accepted invalid requested_count={count}")
+
+
+def test_winco_material_profiles_set_pair_contacts_and_density():
+    """Read the effective compiled pairs, not just per-geom friction inputs."""
+    from pathlib import Path
+
+    import kinder.envs.dynamic3d.pitcher_pour3d as module
+
+    task = (
+        Path(module.__file__).parent / "tasks/PitcherPour3D/PitcherPour3D-o5-winco.json"
+    )
+    for material, mass, surface_mu, self_mu in [
+        ("wood", 0.0048, 0.3, 0.4),
+        ("foam", 0.00064, 0.6, 0.8),
+    ]:
+        env = PitcherPour3DEnv(
+            task_config_path=str(task), cube_material=material, scene_bg=False
+        )
+        try:
+            env.reset(seed=0)
+            scene = env._object_centric_env
+            model, data = scene._model_and_data()
+            assert np.allclose(
+                scene.get_object("pitcher").get_bounding_box_dimensions(),
+                [0.14, 0.114, 0.14],
+            )
+            assert np.isclose(model.body_mass[model.body("pitcher").id], 0.17)
+            assert np.isclose(model.body_mass[model.body("cube_0").id], mass)
+            assert np.isclose(scene.get_object("cube_0").mass, mass)
+            pair = model.pair("cube_0_material_surface_cube_1_material_surface").id
+            assert np.allclose(model.pair_friction[pair][:2], self_mu)
+            assert model.pair_dim[pair] == 3
+            cube_bodies = {model.body(name).id for name in scene.cube_names}
+            contacts = [
+                c
+                for c in data.contact
+                if model.geom_bodyid[c.geom1] in cube_bodies
+                or model.geom_bodyid[c.geom2] in cube_bodies
+            ]
+            assert contacts
+            assert all(np.isclose(c.friction[0], surface_mu) for c in contacts)
+            assert scene.cube_locations() == ["pitcher"] * 5
+            assert scene.cubes_settled()
+        finally:
+            env.close()

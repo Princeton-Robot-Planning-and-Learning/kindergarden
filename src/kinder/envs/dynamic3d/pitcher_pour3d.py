@@ -27,6 +27,13 @@ class PouringPitcher(Bin):
     Taper, 3 mm walls, spout profile and open-handle clearance are estimates,
     not manufacturer CAD or hardware calibration. The origin is the base centre;
     the spout points along +x and the handle sits on -x.
+
+    The Winco comparison variant uses clear polycarbonate PMCP-100:
+    https://www.amazon.com/dp/B00C0N8098
+    https://www.wincous.com/products/pmcp-100
+    Its listing gives 5.5 x 4.5 x 5.5 inches and 0.17 kg. That variant rounds
+    to 140 x 114 x 140 mm overall; handle, taper, spout, wall thickness and
+    inertia remain estimates rather than measured manufacturer CAD.
     """
 
     wall_segments = 32
@@ -43,7 +50,7 @@ class PouringPitcher(Bin):
             * taper
         )
         flare = max(0.0, (fraction - 0.14 / 0.178) / (1 - 0.14 / 0.178))
-        radii[:, 0] += 0.011 * flare * np.maximum(0, np.cos(angles)) ** 12
+        radii[:, 0] += self.spout_flare * flare * np.maximum(0, np.cos(angles)) ** 12
         if inner:
             radii -= self.wall_thickness * np.column_stack(
                 (np.cos(angles), np.sin(angles))
@@ -51,9 +58,21 @@ class PouringPitcher(Bin):
         return radii
 
     @property
+    def spout_flare(self) -> float:
+        """Additional mouth projection along the pouring direction."""
+        return float(self.options.get("spout_flare", 0.011))
+
+    @property
+    def handle_outset(self) -> float:
+        """Distance from the body edge to the outer handle centreline."""
+        return float(self.options.get("handle_outset", 0.021))
+
+    @property
     def handle_grasp_position(self) -> np.ndarray:
         """Centre of the upper handle grip, in the pitcher frame."""
-        return np.array([-self.length / 2 - 0.021, 0, self.height * 0.135 / 0.178])
+        return np.array(
+            [-self.length / 2 - self.handle_outset, 0, self.height * 0.135 / 0.178]
+        )
 
     def _create_xml_element(self) -> ET.Element:
         body = ET.Element("body", name=self.name)
@@ -113,8 +132,12 @@ class PouringPitcher(Bin):
         # Open-bottom hook: upper bridge plus outer grip, without a lower bridge.
         x = -self.length / 2
         for name, start, end in [
-            ("handle_upper", [x + 0.004, 0, 0.162], [x - 0.021, 0, 0.162]),
-            ("handle_grip", [x - 0.021, 0, 0.162], [x - 0.021, 0, 0.078]),
+            ("handle_upper", [x + 0.004, 0, 0.162], [x - self.handle_outset, 0, 0.162]),
+            (
+                "handle_grip",
+                [x - self.handle_outset, 0, 0.162],
+                [x - self.handle_outset, 0, 0.078],
+            ),
         ]:
             points = np.array([start, end])
             points[:, 2] *= self.height / 0.178
@@ -172,15 +195,19 @@ class PouringPitcher(Bin):
         return True
 
     def get_bounding_box_dimensions(self) -> tuple[float, float, float]:
-        return self.length + 0.038, self.width, self.height
+        return (
+            self.length + self.handle_outset + 0.006 + self.spout_flare,
+            self.width,
+            self.height,
+        )
 
     @staticmethod
     def get_bounding_box_from_config(
         pos: np.ndarray, object_config: dict[str, str | float]
     ) -> list[float]:
         bounds = Bin.get_bounding_box_from_config(pos, object_config)
-        bounds[0] -= 0.027
-        bounds[3] += 0.011
+        bounds[0] -= float(object_config.get("handle_outset", 0.021)) + 0.006
+        bounds[3] += float(object_config.get("spout_flare", 0.011))
         return bounds
 
 
@@ -188,8 +215,33 @@ class ObjectCentricPitcherPour3DEnv(ObjectCentricTidyBot3DEnv):
     """Physical containment, settled outcomes, and explicit payload initialization."""
 
     cube_names = tuple(f"cube_{i}" for i in range(5))
+    # Density is a plausible material assumption. Friction and contact softness
+    # are comparison hypotheses, not measured foam/wood-on-polycarbonate values.
+    # SweepOffShelf's 0.4 wood-on-wood assumption informs only wood self-contact.
+    cube_materials = {
+        "wood": {
+            "density": 600.0,
+            "surface_mu": 0.3,
+            "self_mu": 0.4,
+            "timeconst": 0.004,
+            "damping": 1.0,
+        },
+        "foam": {
+            "density": 80.0,
+            "surface_mu": 0.6,
+            "self_mu": 0.8,
+            "timeconst": 0.008,
+            "damping": 1.2,
+        },
+    }
 
-    def __init__(self, *args: Any, requested_count: int = 5, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        *args: Any,
+        requested_count: int = 5,
+        cube_material: str | None = None,
+        **kwargs: Any,
+    ) -> None:
         """Fix the requested split for this task instance; five preserves the default."""
         if (
             isinstance(requested_count, bool)
@@ -198,7 +250,70 @@ class ObjectCentricPitcherPour3DEnv(ObjectCentricTidyBot3DEnv):
         ):
             raise ValueError("requested_count must be an integer from 1 to 5")
         self.requested_count = requested_count
+        if cube_material is not None and cube_material not in self.cube_materials:
+            raise ValueError("cube_material must be wood, foam, or None (legacy)")
+        self.cube_material = cube_material
         super().__init__(*args, **kwargs)
+
+    def _create_scene_xml(self) -> str:
+        """Use explicit material pairs so priority cannot silently change friction.
+
+        Foam remains a rigid cube with compliant contacts, not deformable foam.
+        Legacy tasks preserve their original contacts unless a profile is selected.
+        """
+        xml = super()._create_scene_xml()
+        if self.cube_material is None:
+            return xml
+        profile = self.cube_materials[self.cube_material]
+        root = ET.fromstring(xml)
+        contact = root.find("contact")
+        if contact is None:
+            contact = ET.SubElement(root, "contact")
+        cube_geoms = []
+        for name in self.cube_names:
+            body = root.find(f".//body[@name='{name}']")
+            assert body is not None
+            geom = body.find("geom")
+            assert geom is not None
+            geom_name = f"{name}_material_surface"
+            geom.set("name", geom_name)
+            half_size = np.fromstring(geom.attrib["size"], sep=" ")
+            mass = float(profile["density"] * 8 * np.prod(half_size))
+            geom.set("mass", str(mass))
+            cube_object = self.get_object(name)
+            assert isinstance(cube_object, Cube)
+            cube_object.mass = mass
+            cube_geoms.append(geom_name)
+        vessel_geoms = []
+        for vessel in ("pitcher", "tray"):
+            body = root.find(f".//body[@name='{vessel}']")
+            assert body is not None
+            for index, geom in enumerate(body.findall("geom")):
+                geom_name = geom.get("name") or f"{vessel}_material_surface_{index}"
+                geom.set("name", geom_name)
+                vessel_geoms.append(geom_name)
+        for index, cube in enumerate(cube_geoms):
+            pairs = [(vessel, profile["surface_mu"]) for vessel in vessel_geoms]
+            pairs += [(other, profile["self_mu"]) for other in cube_geoms[index + 1 :]]
+            if root.find(".//geom[@name='floor']") is not None:
+                pairs.append(("floor", profile["self_mu"]))
+            for other, friction in pairs:
+                ET.SubElement(
+                    contact,
+                    "pair",
+                    name=f"{cube}_{other}",
+                    geom1=cube,
+                    geom2=other,
+                    condim="3",
+                    friction=f"{friction} {friction} 0 0 0",
+                    solref=f"{profile['timeconst']} {profile['damping']}",
+                    solimp=(
+                        "0.9 0.99 0.002 0.5 2"
+                        if self.cube_material == "foam"
+                        else "0.99 0.999 0.001 0.5 2"
+                    ),
+                )
+        return ET.tostring(root, encoding="unicode")
 
     def _model_and_data(
         self,
@@ -307,6 +422,7 @@ class ObjectCentricPitcherPour3DEnv(ObjectCentricTidyBot3DEnv):
         model, data = self._model_and_data()
         return {
             "requested_count": self.requested_count,
+            "cube_material": self.cube_material or "legacy",
             "time": float(data.time),
             "qpos": data.qpos.tolist(),
             "qvel": data.qvel.tolist(),

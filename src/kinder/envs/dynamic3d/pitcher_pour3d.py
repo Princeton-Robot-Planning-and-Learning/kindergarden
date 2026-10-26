@@ -62,7 +62,9 @@ class ObjectCentricPitcherPour3DEnv(ObjectCentricTidyBot3DEnv):
 
     cube_names = tuple(f"cube_{i}" for i in range(5))
 
-    def _model_and_data(self) -> tuple[Any, Any]:
+    def _model_and_data(
+        self,
+    ) -> tuple[mujoco.MjModel, mujoco.MjData]:  # pylint: disable=no-member
         sim = self._robot_env.sim
         return sim.model.mj_model, sim.data.mj_data
 
@@ -85,6 +87,7 @@ class ObjectCentricPitcherPour3DEnv(ObjectCentricTidyBot3DEnv):
             )
 
     def cube_corners(self, name: str) -> np.ndarray:
+        """Return the eight physical cube corners in world coordinates."""
         model, data = self._model_and_data()
         body = model.body(name).id
         geom = int(model.body_geomadr[body])
@@ -94,6 +97,7 @@ class ObjectCentricPitcherPour3DEnv(ObjectCentricTidyBot3DEnv):
         ).T + data.geom_xpos[geom]
 
     def cube_in_vessel(self, cube: str, vessel: str) -> bool:
+        """Check whole-cube containment in the actual vessel frame."""
         model, data = self._model_and_data()
         body = model.body(vessel).id
         geometry = self.get_object(vessel)
@@ -111,6 +115,7 @@ class ObjectCentricPitcherPour3DEnv(ObjectCentricTidyBot3DEnv):
         )
 
     def cube_locations(self) -> list[str]:
+        """Classify each cube using containment and floor contact height."""
         result = []
         for cube in self.cube_names:
             if self.cube_in_vessel(cube, "pitcher"):
@@ -123,6 +128,7 @@ class ObjectCentricPitcherPour3DEnv(ObjectCentricTidyBot3DEnv):
         return result
 
     def cubes_settled(self) -> bool:
+        """Require every payload cube to have small linear and angular speed."""
         model, data = self._model_and_data()
         for name in self.cube_names:
             joint = int(model.body_jntadr[model.body(name).id])
@@ -137,6 +143,7 @@ class ObjectCentricPitcherPour3DEnv(ObjectCentricTidyBot3DEnv):
         return self.cube_locations() == ["tray"] * 5 and self.cubes_settled()
 
     def physical_snapshot(self) -> dict[str, Any]:
+        """Capture the physical state and measured outcomes for recording."""
         model, data = self._model_and_data()
         return {
             "time": float(data.time),

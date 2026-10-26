@@ -1,11 +1,17 @@
 """Native dynamics, initialization, goal, and rendering contracts for pouring."""
 
+# pylint: disable=protected-access
+
+import os
+
 import numpy as np
+
+import kinder
+from kinder.envs.dynamic3d.pitcher_pour3d import PitcherPour3DEnv
 
 
 def test_native_pitcher_task_initializes_five_dynamic_cubes():
-    from kinder.envs.dynamic3d.pitcher_pour3d import PitcherPour3DEnv
-
+    """Ensure reset uses native motors, free objects, and contact dynamics."""
     env = PitcherPour3DEnv(scene_bg=False, render_mode="rgb_array")
     try:
         env.reset(seed=0)
@@ -29,11 +35,7 @@ def test_native_pitcher_task_initializes_five_dynamic_cubes():
 
 
 def test_native_registration_and_render():
-    import os
-
-    import kinder
-    from kinder.envs.dynamic3d.pitcher_pour3d import PitcherPour3DEnv
-
+    """Construct the task through the public factory and use its renderer."""
     backend = {key: os.environ.get(key) for key in ["MUJOCO_GL", "PYOPENGL_PLATFORM"]}
     kinder.register_all_environments()
     for key, value in backend.items():

@@ -1,8 +1,8 @@
 """Pour five cubes from a physical handled pitcher into a floor tray.
 
 Uses the standard TidyBot robot, torque controllers, scene loading and rendering.
-All seven movable objects have free joints. Only harness initialization places
-the payload; no robot skill may move a vessel by assigning its pose.
+All seven movable objects have free joints. Harness initialization and the explicit
+simulated human reset place the payload; robot skills use physical manipulation.
 """
 
 import xml.etree.ElementTree as ET
@@ -197,9 +197,22 @@ class ObjectCentricPitcherPour3DEnv(ObjectCentricTidyBot3DEnv):
 
     def _initialize_object_poses(self) -> None:
         super()._initialize_object_poses()
+        self.respawn_payload_in_pitcher()
+
+    def respawn_payload_in_pitcher(self) -> None:
+        """Privileged harness/human reset of cubes only, never a robot skill.
+
+        Represent a completed human intervention without animating tray pouring.
+        Preserve both vessels and the robot; place all cubes in the pitcher's
+        current frame and clear their velocities before recomputing contacts.
+        """
         pitcher = self.get_object("pitcher")
         assert isinstance(pitcher, PouringPitcher)
         origin = pitcher.get_position().astype(float)
+        orientation = pitcher.get_orientation().astype(float)
+        rotation = np.zeros(9)
+        mujoco.mju_quat2Mat(rotation, orientation)  # pylint: disable=no-member
+        rotation = rotation.reshape(3, 3)
         angles = np.linspace(0, 2 * np.pi, len(self.cube_names), endpoint=False)
         offsets = 0.024 * np.column_stack((np.cos(angles), np.sin(angles)))
         for name, (x, y) in zip(self.cube_names, offsets):
@@ -208,9 +221,12 @@ class ObjectCentricPitcherPour3DEnv(ObjectCentricTidyBot3DEnv):
             assert isinstance(cube, Cube)
             height = pitcher.wall_thickness + cube.size[2]
             cube.set_pose(
-                origin + [x + jitter[0], y + jitter[1], height],
-                np.array([1.0, 0.0, 0.0, 0.0]),
+                origin + rotation @ np.array([x + jitter[0], y + jitter[1], height]),
+                orientation,
             )
+            cube.set_velocity([0.0, 0.0, 0.0], [0.0, 0.0, 0.0])
+        model, data = self._model_and_data()
+        mujoco.mj_forward(model, data)  # pylint: disable=no-member
 
     def cube_corners(self, name: str) -> np.ndarray:
         """Return the eight physical cube corners in world coordinates."""

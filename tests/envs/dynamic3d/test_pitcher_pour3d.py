@@ -88,3 +88,28 @@ def test_accupour_scale_mass_and_round_containment():
         assert not scene.cube_in_vessel("cube_0", "pitcher")
     finally:
         env.close()
+
+
+def test_explicit_human_respawn_preserves_vessels_and_robot():
+    """A privileged human reset changes cube state only, with no tray animation."""
+    env = PitcherPour3DEnv(scene_bg=False, render_mode="rgb_array")
+    try:
+        env.reset(seed=0)
+        scene = env._object_centric_env
+        model, data = scene._model_and_data()
+        cube = scene.get_object("cube_0")
+        cube.set_pose([0.65, 0.2, 0.03], [1.0, 0.0, 0.0, 0.0])
+        cube.set_velocity([1.0, 2.0, 3.0], [1.0, 2.0, 3.0])
+        mujoco.mj_forward(model, data)
+        before = data.qpos.copy()
+        preserved = np.ones(model.nq, dtype=bool)
+        for name in scene.cube_names:
+            joint = model.body_jntadr[model.body(name).id]
+            address = model.jnt_qposadr[joint]
+            preserved[address : address + 7] = False
+        scene.respawn_payload_in_pitcher()
+        np.testing.assert_array_equal(data.qpos[preserved], before[preserved])
+        assert scene.cube_locations() == ["pitcher"] * 5
+        assert scene.cubes_settled()
+    finally:
+        env.close()

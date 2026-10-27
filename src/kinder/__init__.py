@@ -282,6 +282,21 @@ def _register_dynamic2d() -> None:
         variant_ids=variant_ids,
     )
 
+    # DynPuckPushing2D environment, one variant per maze.
+    entry_point = "kinder.envs.dynamic2d.dyn_puckpushing2d:DynPuckPushing2DEnv"
+    variant_ids = []
+    for map_name in ["threeroutes"]:
+        variant_id = f"kinder/DynPuckPushing2D-{map_name}-v0"
+        _register(id=variant_id, entry_point=entry_point, kwargs={"map_name": map_name})
+        variant_ids.append(variant_id)
+    _register_env_class(
+        class_name="DynPuckPushing2D",
+        entry_point=entry_point,
+        category="Dynamic2D",
+        backend="pymunk",
+        variant_ids=variant_ids,
+    )
+
 
 def _register_kinematic3d() -> None:
     # BaseMotion3D environment.
@@ -482,6 +497,21 @@ def _register_dynamic3d_pybullet() -> None:
             variant_ids.append(variant_id)
     _register_env_class(
         class_name="LimbRepositioning3D",
+        entry_point=entry_point,
+        category="Dynamic3D",
+        backend="pybullet",
+        variant_ids=variant_ids,
+    )
+
+    # PuckPushing3D environment, one variant per maze.
+    entry_point = "kinder.envs.dynamic3d.puckpushing3d:PuckPushing3DEnv"
+    variant_ids = []
+    for map_name in ["threeroutes"]:
+        variant_id = f"kinder/PuckPushing3D-{map_name}-v0"
+        _register(id=variant_id, entry_point=entry_point, kwargs={"map_name": map_name})
+        variant_ids.append(variant_id)
+    _register_env_class(
+        class_name="PuckPushing3D",
         entry_point=entry_point,
         category="Dynamic3D",
         backend="pybullet",

@@ -488,6 +488,35 @@ def _register_dynamic3d_pybullet() -> None:
         variant_ids=variant_ids,
     )
 
+    # MassTransport3D: carry items of unknown mass across in a tote. The physics
+    # variant is the main one; the kinematic one only checks torques statically.
+    num_items_list = [2, 4, 8, 12]
+    for class_name, module, env_cls in [
+        ("MassTransport3D", "masstransport3d", "MassTransport3DEnv"),
+        (
+            "KinematicMassTransport3D",
+            "kinematic_masstransport3d",
+            "KinematicMassTransport3DEnv",
+        ),
+    ]:
+        entry_point = f"kinder.envs.dynamic3d.{module}:{env_cls}"
+        variant_ids = []
+        for num_items in num_items_list:
+            variant_id = f"kinder/{class_name}-o{num_items}-v0"
+            _register(
+                id=variant_id,
+                entry_point=entry_point,
+                kwargs={"num_items": num_items},
+            )
+            variant_ids.append(variant_id)
+        _register_env_class(
+            class_name=class_name,
+            entry_point=entry_point,
+            category="Dynamic3D",
+            backend="pybullet",
+            variant_ids=variant_ids,
+        )
+
 
 def _register_dynamic3d() -> None:
     # Tasks with different scenes and object counts

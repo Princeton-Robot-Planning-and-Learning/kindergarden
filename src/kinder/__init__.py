@@ -537,7 +537,9 @@ def _register_dynamic3d() -> None:
                             "kinder.envs.dynamic3d.sweep_off_shelf3d:SweepOffShelf3DEnv"
                         )
                     if folder_name == "PitcherPour3D":
-                        entry_point = "kinder.envs.dynamic3d.pitcher_pour3d:PitcherPour3DEnv"
+                        entry_point = (
+                            "kinder.envs.dynamic3d.pitcher_pour3d:PitcherPour3DEnv"
+                        )
                     if folder_name == "Tossing3D":
                         entry_point = "kinder.envs.dynamic3d.task_families:Tossing3DEnv"
                         task_kwargs = {"num_objects": int(task_cfg.removeprefix("o"))}

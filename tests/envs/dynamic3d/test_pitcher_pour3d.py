@@ -3,11 +3,13 @@
 # pylint: disable=protected-access,no-member
 
 import os
+from pathlib import Path
 
 import mujoco
 import numpy as np
 
 import kinder
+import kinder.envs.dynamic3d.pitcher_pour3d as module
 from kinder.envs.dynamic3d.pitcher_pour3d import PitcherPour3DEnv
 
 
@@ -161,10 +163,6 @@ def test_requested_count_rejects_invalid_targets():
 
 def test_winco_material_profiles_set_pair_contacts_and_density():
     """Read the effective compiled pairs, not just per-geom friction inputs."""
-    from pathlib import Path
-
-    import kinder.envs.dynamic3d.pitcher_pour3d as module
-
     task = (
         Path(module.__file__).parent / "tasks/PitcherPour3D/PitcherPour3D-o5-winco.json"
     )

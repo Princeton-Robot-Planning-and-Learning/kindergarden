@@ -337,6 +337,27 @@ def _register_kinematic3d() -> None:
         variant_ids=variant_ids,
     )
 
+    # BedsideStocking3D environment.
+    variant_ids = []
+    for num_requested in [2, 4, 6, 8]:
+        for num_clutter in [0, 2, 4, 6]:
+            variant_id = f"kinder/BedsideStocking3D-r{num_requested}-c{num_clutter}-v0"
+            _register(
+                id=variant_id,
+                entry_point=(
+                    "kinder.envs.kinematic3d.bedside_stocking3d:BedsideStocking3DEnv"
+                ),
+                kwargs={"num_requested": num_requested, "num_clutter": num_clutter},
+            )
+            variant_ids.append(variant_id)
+    _register_env_class(
+        class_name="BedsideStocking3D",
+        entry_point="kinder.envs.kinematic3d.bedside_stocking3d:BedsideStocking3DEnv",
+        category="Kinematic3D",
+        backend="pybullet",
+        variant_ids=variant_ids,
+    )
+
     # KinematicShelf3D environment.
     num_cubes = [1, 2, 3, 5, 10]
     variant_ids = []

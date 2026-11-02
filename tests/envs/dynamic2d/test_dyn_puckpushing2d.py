@@ -30,17 +30,20 @@ def _env_with_puck_at(puck_xy, frictions=FRICTIONS):
 
 
 def test_dyn_puckpushing2d_spaces():
-    """Observations are fixed-size vectors and actions are (angle, speed)."""
+    """Observations are fixed-size vectors and actions are (angle, speed, stance)."""
     kinder.register_all_environments()
     env = kinder.make("kinder/DynPuckPushing2D-threeroutes-v0")
     assert isinstance(env.observation_space, Box)
     obs, _ = env.reset(seed=0)
     assert env.observation_space.contains(obs)
-    assert env.action_space.shape == (2,)
+    assert env.action_space.shape == (3,)
     obs, reward, terminated, truncated, info = env.step(np.array([math.pi / 2, 0.5]))
     assert env.observation_space.contains(obs)
     assert reward == -1.0 and not truncated
     assert info["push_feasible"] and not terminated
+    # The stance can be named; a two-number action lets the robot pick it.
+    _, _, _, _, info = env.step(np.array([math.pi / 2, 0.5, math.radians(30)]))
+    assert info["push_feasible"]
 
 
 def test_dyn_puckpushing2d_frictions_are_hidden_and_resampled():
@@ -73,7 +76,7 @@ def test_dyn_puckpushing2d_matches_the_analytic_slide():
 
 def test_dyn_puckpushing2d_hole_fails_the_episode():
     """Sliding over a red circle ends the episode."""
-    # Along the felt corridor, past the hole at (2.6, 1.0), on slippery felt.
+    # Along the green corridor, past the hole at (2.6, 1.0), on a slippery green floor.
     env = _env_with_puck_at((1.6, 1.1), frictions=(0.03, 0.07, 0.05))
     _, _, terminated, _, info = env.step(np.array([0.0, 1.0]))
     assert info["push_feasible"] and info["fell_in_hole"]

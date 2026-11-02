@@ -61,3 +61,19 @@ def test_puckpushing3d_robot_follows_and_render():
         base.y - station[1], env.config.physics.accel_distance, abs_tol=0.02
     )
     assert env.render().ndim == 3
+
+
+def test_puckpushing3d_paddle_clears_the_arm_and_base():
+    """Held for a strike at any stance, or carried for driving, the paddle touches
+    no part of the robot except the gripper holding it."""
+    env = ObjectCentricPuckPushing3DEnv()
+    env.reset(seed=0)
+    base = env.robot.get_base()
+    heading = np.array([math.cos(base.rot), math.sin(base.rot)])
+    face = np.array([base.x, base.y]) + env.config.physics.paddle_offset * heading
+    for stance in np.radians([-60, -30, 0, 30, 60]):
+        env._place_paddle(face, base.rot - stance)  # pylint: disable=protected-access
+        assert env.paddle_robot_gap() > 0.01
+    env._stow_paddle()  # pylint: disable=protected-access
+    assert env.paddle_robot_gap() > 0.05
+    env.close()

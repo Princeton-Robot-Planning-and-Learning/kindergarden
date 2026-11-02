@@ -9,9 +9,11 @@ This module holds what both envs and the planners share:
 - the maps (walls, surface patches, holes, start and goal),
 - the friction prior,
 - an analytic model of a slide: piecewise Coulomb deceleration across patches, with
-  frictionless wall bounces, and failure if the puck's center passes over a hole,
+  frictionless bounces off the walls and off the robot that just struck, and failure if
+  the puck's center passes over a hole,
 - the robot side of a push: where it stands, whether the strike is collision-free, and
-  how far it drives to get there (shortest paths on a grid around the walls).
+  how far it drives to get there (shortest paths on a grid around the walls and the
+  puck).
 
 The envs simulate the same friction (a Coulomb force from the patch under the puck's
 center), so the analytic model matches them up to contact effects and integration error.
@@ -20,6 +22,7 @@ center), so the analytic model matches them up to contact effects and integratio
 from __future__ import annotations
 
 import math
+from collections import OrderedDict
 from dataclasses import dataclass
 from functools import cached_property
 
@@ -30,20 +33,93 @@ from scipy.sparse.csgraph import dijkstra
 
 from kinder.envs.utils import RobotActionSpace
 
-SURFACE_NAMES: tuple[str, ...] = ("laminate", "wood", "felt")
+SURFACE_NAMES: tuple[str, ...] = ("blue", "tan", "green")
 # Map characters for the surfaces, in SURFACE_NAMES order. '#' is a wall.
-SURFACE_CHARS: tuple[str, ...] = ("l", "w", "f")
+SURFACE_CHARS: tuple[str, ...] = ("b", "t", "g")
 WALL_CHAR = "#"
-# Uniform prior on each surface's sliding friction coefficient, in SURFACE_NAMES order.
-DEFAULT_FRICTION_PRIOR: tuple[tuple[float, float], ...] = (
-    (0.02, 0.05),
-    (0.05, 0.10),
-    (0.10, 0.20),
-)
+
+
+@dataclass(frozen=True)
+class FrictionPrior:
+    """Prior over the surfaces' sliding friction coefficients (in SURFACE_NAMES order).
+
+    The friction `levels` are dealt to the surfaces in a uniformly random order, and each
+    is scaled by a factor uniform in [1 - jitter, 1 + jitter]. Which surface is slippery
+    is therefore unknown: the floor layout is known, but not which floor is which.
+    """
+
+    levels: tuple[float, ...] = (0.03, 0.08, 0.15)
+    jitter: float = 0.2
+
+    @property
+    def num_surfaces(self) -> int:
+        """Number of surfaces."""
+        return len(self.levels)
+
+    @property
+    def bounds(self) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+        """Lowest and highest possible coefficient per surface."""
+        n = self.num_surfaces
+        lo = min(self.levels) * (1.0 - self.jitter)
+        hi = max(self.levels) * (1.0 + self.jitter)
+        return np.full(n, lo), np.full(n, hi)
+
+    @property
+    def mean(self) -> NDArray[np.float64]:
+        """Prior mean per surface."""
+        return np.full(self.num_surfaces, float(np.mean(self.levels)))
+
+    def sample(
+        self, rng: np.random.Generator, size: int | None = None
+    ) -> NDArray[np.float64]:
+        """One coefficient vector, or `size` of them stacked."""
+        n = 1 if size is None else size
+        levels = np.asarray(self.levels, dtype=np.float64)
+        order = np.argsort(rng.random((n, self.num_surfaces)), axis=1)
+        scale = rng.uniform(1.0 - self.jitter, 1.0 + self.jitter, (n, self.num_surfaces))
+        samples = levels[order] * scale
+        return samples[0] if size is None else samples
+
+
+@dataclass(frozen=True)
+class BoxFrictionPrior:
+    """Prior with an independent uniform range per surface (fixed order)."""
+
+    ranges: tuple[tuple[float, float], ...] = ((0.02, 0.05), (0.05, 0.10), (0.10, 0.20))
+
+    @property
+    def num_surfaces(self) -> int:
+        """Number of surfaces."""
+        return len(self.ranges)
+
+    @property
+    def bounds(self) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+        """Lowest and highest possible coefficient per surface."""
+        return (
+            np.array([lo for lo, _ in self.ranges]),
+            np.array([hi for _, hi in self.ranges]),
+        )
+
+    @property
+    def mean(self) -> NDArray[np.float64]:
+        """Prior mean per surface."""
+        lows, highs = self.bounds
+        return (lows + highs) / 2
+
+    def sample(
+        self, rng: np.random.Generator, size: int | None = None
+    ) -> NDArray[np.float64]:
+        """One coefficient vector, or `size` of them stacked."""
+        lows, highs = self.bounds
+        shape = (self.num_surfaces,) if size is None else (size, self.num_surfaces)
+        return rng.uniform(lows, highs, size=shape)
+
+
+DEFAULT_FRICTION_PRIOR = FrictionPrior()
 SURFACE_RGB: tuple[tuple[float, float, float], ...] = (
-    (0.80, 0.86, 0.92),  # laminate: pale blue-gray
-    (0.76, 0.60, 0.42),  # wood: tan
-    (0.30, 0.50, 0.32),  # felt: green
+    (0.80, 0.86, 0.92),  # blue (pale blue-gray)
+    (0.76, 0.60, 0.42),  # tan
+    (0.30, 0.50, 0.32),  # green
 )
 WALL_RGB = (0.25, 0.25, 0.25)
 HOLE_RGB = (0.9, 0.1, 0.1)
@@ -154,24 +230,26 @@ def _rect(
 
 # Cell size 0.4 m; corridors are three cells (1.2 m) wide, so the 0.55 x 0.51 m TidyBot
 # base can stand beside or at an angle behind the puck. Three routes lead from the left
-# side to the goal on the right: a slippery laminate corridor with a hole past its far
-# end, a slow felt corridor with a hole in its middle, and a one-cell slot through the
-# central block that the robot cannot enter. The slot shot reaches the goal only when
-# the laminate and wood are slippery enough, and a puck that stops inside the slot can
-# no longer be pushed toward the goal.
+# side to the goal on the right: the top (blue) corridor with a hole past its far
+# end, the bottom (green) corridor with a hole in its middle, and a one-cell slot through
+# the central block that the robot cannot enter, floored with blue like the top
+# corridor. Which floor is slippery is random (`FrictionPrior`): a slippery slot lets one
+# shot from its mouth reach the far side, while in a sticky slot the puck stops inside,
+# where it can no longer be pushed, so the robot must go around. Pushing on the top
+# corridor tells it which case it is in.
 THREE_ROUTES = PuckMap(
     name="threeroutes",
     rows=(
         "##############",
-        "#llllllllllll#",
-        "#llllllllllll#",
-        "#llllllllllll#",
-        "#wwww###wwwww#",
-        "#wwwwllllwwww#",
-        "#wwww###wwwww#",
-        "#ffffffffffff#",
-        "#ffffffffffff#",
-        "#ffffffffffff#",
+        "#bbbbbbbbbbbb#",
+        "#bbbbbbbbbbbb#",
+        "#bbbbbbbbbbbb#",
+        "#tttt###ttttt#",
+        "#ttttbbbbtttt#",
+        "#tttt###ttttt#",
+        "#gggggggggggg#",
+        "#gggggggggggg#",
+        "#gggggggggggg#",
         "##############",
     ),
     cell_size=0.4,
@@ -194,13 +272,26 @@ class PuckPhysics:
     hole_radius: float = 0.2
     goal_radius: float = 0.3
     wall_restitution: float = 0.5
-    # Robot footprint, as a circle for collision checks.
+    # Robot base footprint: the TidyBot's 0.55 x 0.51 m box (half extents along and
+    # across its heading), checked exactly where the base stands and strikes. While
+    # driving it may turn, so the path planner keeps its corner radius clear of walls.
+    base_half_extents: tuple[float, float] = (0.275, 0.255)
+    # Gap the base box keeps from the walls where it stands and strikes.
+    base_wall_margin: float = 0.01
+    # A disc for the puck bouncing off the base, and for the 2D env's base.
     robot_radius: float = 0.3
+    # Extra gap the driving robot keeps from the puck, beyond the footprint circle: the
+    # 3D TidyBot base is a 0.55 x 0.51 m box whose corners reach 0.375 m.
+    drive_clearance: float = 0.08
     # From the robot's center to the paddle face, along its heading.
     paddle_offset: float = 0.45
     # Base headings tried relative to the push direction, in order. The arm turns the
     # paddle so its face stays square to the push, and the holonomic base translates
     # along the push during the strike.
+    # A push may also name its stance: the base heading relative to the push direction,
+    # anywhere within +-max_stance. Without one, the first of `base_offsets` that fits
+    # is used.
+    max_stance: float = math.radians(60)
     base_offsets: tuple[float, ...] = (
         0.0,
         math.radians(30),
@@ -208,7 +299,10 @@ class PuckPhysics:
         math.radians(60),
         -math.radians(60),
     )
-    paddle_width: float = 0.3
+    # Slightly wider than the puck (0.24 m), so it pushes squarely, but narrow enough to
+    # push a puck along a wall it is nearly touching.
+    paddle_width: float = 0.26
+    paddle_thickness: float = 0.04
     # The paddle accelerates the puck over this distance, then brakes over the next.
     accel_distance: float = 0.3
     brake_distance: float = 0.1
@@ -237,11 +331,27 @@ class SlideResult:
 
 
 @dataclass(frozen=True)
+class StrikeEnd:
+    """Where the robot rests after a strike; the sliding puck bounces off it.
+
+    The base is a disc of `PuckPhysics.robot_radius`. The arm holds the paddle where it
+    stopped, square to the push, with its face at `face`.
+    """
+
+    base: NDArray[np.float64]
+    face: NDArray[np.float64]
+    angle: float
+
+
+@dataclass(frozen=True)
 class Push:
-    """A push: the puck's release heading (rad) and speed (m/s)."""
+    """A push: the puck's release heading (rad) and speed (m/s), and the robot's
+    stance (rad): its base heading relative to the push direction. A stance of None
+    lets the robot pick the first stance that fits (`PuckWorld.push_pose`)."""
 
     angle: float
     speed: float
+    stance: float | None = None
 
     @property
     def direction(self) -> NDArray[np.float64]:
@@ -259,7 +369,11 @@ class PuckWorld:
         self.walls = np.asarray(self.puck_map.wall_rects(), dtype=np.float64)
         self.holes = np.asarray(self.puck_map.holes, dtype=np.float64).reshape(-1, 2)
         self.goal = np.asarray(self.puck_map.goal, dtype=np.float64)
-        self._nav_cache: dict[int, NDArray[np.float64]] = {}
+        self._nav_cache: dict[int, tuple[NDArray[np.float64], NDArray[np.int32]]] = {}
+        # Shortest paths around the puck, keyed by start node and puck position.
+        self._nav_puck_cache: OrderedDict[
+            tuple[int, float, float], tuple[NDArray[np.float64], NDArray[np.int32]]
+        ] = OrderedDict()
 
     # ------------------------------------------------------------------ surfaces
 
@@ -358,6 +472,33 @@ class PuckWorld:
             t1 = np.minimum(t1, np.maximum(a, b))
         return bool(np.any(t0 < t1))
 
+    def _box_hits_walls(
+        self,
+        center: NDArray[np.float64],
+        angle: float,
+        half_length: float,
+        half_width: float,
+    ) -> bool:
+        """Whether a box rotated by `angle` (half extents along and across it)
+        overlaps a wall, by the separating axis test."""
+        u = np.array([math.cos(angle), math.sin(angle)])
+        v = np.array([-u[1], u[0]])
+        wall_center = 0.5 * (self.walls[:, :2] + self.walls[:, 2:])
+        wall_half = 0.5 * (self.walls[:, 2:] - self.walls[:, :2])
+        rel = center - wall_center
+        eps = 1e-9
+        # The walls' axes (x and y).
+        box_x = half_length * abs(u[0]) + half_width * abs(v[0])
+        box_y = half_length * abs(u[1]) + half_width * abs(v[1])
+        overlap = (np.abs(rel[:, 0]) < wall_half[:, 0] + box_x - eps) & (
+            np.abs(rel[:, 1]) < wall_half[:, 1] + box_y - eps
+        )
+        # The box's axes.
+        for axis, half in ((u, half_length), (v, half_width)):
+            wall_extent = wall_half[:, 0] * abs(axis[0]) + wall_half[:, 1] * abs(axis[1])
+            overlap &= np.abs(rel @ axis) < half + wall_extent - eps
+        return bool(np.any(overlap))
+
     def _segment_hole(
         self,
         start: NDArray[np.float64],
@@ -444,6 +585,63 @@ class PuckWorld:
         """Whether a puck stopped at `point` is in the goal."""
         return float(np.linalg.norm(point - self.goal)) <= self.physics.goal_radius
 
+    def strike_end(
+        self, station: NDArray[np.float64], puck: NDArray[np.float64], angle: float
+    ) -> StrikeEnd:
+        """Where the robot that pushed `puck` along `angle` from `station` rests: its
+        base and paddle carried forward by the acceleration distance."""
+        direction = np.array([math.cos(angle), math.sin(angle)])
+        shift = self.physics.accel_distance * direction
+        return StrikeEnd(
+            base=np.asarray(station, dtype=np.float64) + shift,
+            face=puck - self.physics.puck_radius * direction + shift,
+            angle=angle,
+        )
+
+    def _robot_hit(
+        self,
+        robot: StrikeEnd,
+        origin: NDArray[np.float64],
+        direction: NDArray[np.float64],
+    ) -> tuple[float, NDArray[np.float64] | None]:
+        """First contact of the sliding puck with the robot's base or paddle, as
+        (distance, outward unit normal at the contact)."""
+        phys = self.physics
+        best: tuple[float, NDArray[np.float64] | None] = (math.inf, None)
+        # Base: a disc.
+        reach = phys.robot_radius + phys.puck_radius
+        rel = origin - robot.base
+        b = float(rel @ direction)
+        c = float(rel @ rel) - reach * reach
+        disc = b * b - c
+        if b < 0.0 and disc >= 0.0:
+            t = -b - math.sqrt(disc)
+            if t > -1e-6:
+                best = (max(t, 0.0), (rel + t * direction) / reach)
+        # Paddle: a box square to the push, behind its face.
+        cos_a, sin_a = math.cos(robot.angle), math.sin(robot.angle)
+
+        def to_local(v: NDArray[np.float64]) -> NDArray[np.float64]:
+            return np.array([cos_a * v[0] + sin_a * v[1], -sin_a * v[0] + cos_a * v[1]])
+
+        half_w = phys.paddle_width / 2
+        rect = np.array([[-phys.paddle_thickness, -half_w, 0.0, half_w]])
+        t, axes = self._ray_hit(
+            rect, to_local(origin - robot.face), to_local(direction), phys.puck_radius
+        )
+        if t < best[0]:
+            local_dir = to_local(direction)
+            local_normal = -axes * np.sign(local_dir)
+            local_normal /= max(float(np.linalg.norm(local_normal)), 1e-12)
+            normal = np.array(
+                [
+                    cos_a * local_normal[0] - sin_a * local_normal[1],
+                    sin_a * local_normal[0] + cos_a * local_normal[1],
+                ]
+            )
+            best = (t, normal)
+        return best
+
     # ------------------------------------------------------------------ slides
 
     def slide(
@@ -453,11 +651,13 @@ class PuckWorld:
         angle: float,
         frictions,
         max_events: int = 1000,
+        robot: StrikeEnd | None = None,
     ) -> SlideResult:
         """Slide the puck from `start` at `speed` along `angle` until it stops.
 
-        Deceleration is friction * g of the patch under the puck's center. Walls reflect
-        the normal velocity scaled by the restitution, without friction.
+        Deceleration is friction * g of the patch under the puck's center. Walls, and
+        the robot's base and paddle if `robot` is given, reflect the normal velocity
+        scaled by the restitution, without friction.
         """
         phys = self.physics
         h = self.puck_map.cell_size
@@ -483,7 +683,12 @@ class PuckWorld:
                 s_cell = min(s_cell, (boundary - point[axis]) / d)
             s_cell = max(s_cell, 0.0)
             s_wall, axes = self._ray_hit(self.walls, point, direction, phys.puck_radius)
-            step = min(s_stop, s_cell, s_wall)
+            s_robot, normal = (
+                self._robot_hit(robot, point, direction)
+                if robot is not None
+                else (math.inf, None)
+            )
+            step = min(s_stop, s_cell, s_wall, s_robot)
             end = point + step * direction
             hole = self._segment_hole(point, end, phys.hole_radius)
             if hole is not None:
@@ -509,6 +714,17 @@ class PuckWorld:
                 if v <= 1e-6:
                     break
                 direction = velocity / v
+            elif step == s_robot and step < s_cell + 1e-12:
+                assert normal is not None
+                path.append(point.copy())
+                velocity = v * direction
+                velocity = velocity - (1.0 + phys.wall_restitution) * float(
+                    velocity @ normal
+                ) * normal
+                v = float(np.linalg.norm(velocity))
+                if v <= 1e-6:
+                    break
+                direction = velocity / v
         if not np.allclose(path[-1], point):
             path.append(point.copy())
         return SlideResult(point, path, hole=None, distance=total)
@@ -516,14 +732,19 @@ class PuckWorld:
     # ------------------------------------------------------------------ pushes
 
     def push_pose(
-        self, puck: NDArray[np.float64], angle: float
+        self,
+        puck: NDArray[np.float64],
+        angle: float,
+        stance: float | None = None,
     ) -> tuple[NDArray[np.float64], float] | None:
         """Robot base position and heading for pushing the puck along `angle`.
 
-        The paddle face touches the puck from behind. The first base offset (see
-        `PuckPhysics.base_offsets`) where the robot fits and its strike sweep clears the
-        walls is used. None if the push is impossible, including when the puck would hit
-        a wall while still on the paddle.
+        The paddle face touches the puck from behind. The base stands at `stance` (its
+        heading relative to the push, clipped to +-`PuckPhysics.max_stance`), or if that
+        is None, at the first of `PuckPhysics.base_offsets` where the robot fits and its
+        strike sweep clears the walls. None if the push is impossible, including when
+        the puck would hit a wall while still on the paddle, or the paddle itself would
+        sweep into a wall.
         """
         phys = self.physics
         direction = np.array([math.cos(angle), math.sin(angle)])
@@ -531,25 +752,50 @@ class PuckWorld:
         if self._segment_hits_rects(puck, release, phys.puck_radius):
             return None
         contact = puck - phys.puck_radius * direction
-        sweep = (phys.accel_distance + phys.brake_distance) * direction
-        for offset in phys.base_offsets:
+        reach = phys.accel_distance + phys.brake_distance
+        sweep = reach * direction
+        # The paddle's body, from its starting face to the end of the strike.
+        paddle_center = contact + 0.5 * (reach - phys.paddle_thickness) * direction
+        if self._box_hits_walls(
+            paddle_center,
+            angle,
+            0.5 * (reach + phys.paddle_thickness),
+            0.5 * phys.paddle_width,
+        ):
+            return None
+        if stance is None:
+            offsets: tuple[float, ...] = phys.base_offsets
+        else:
+            offsets = (min(max(stance, -phys.max_stance), phys.max_stance),)
+        for offset in offsets:
             heading = math.atan2(math.sin(angle + offset), math.cos(angle + offset))
             base = contact - phys.paddle_offset * np.array(
                 [math.cos(heading), math.sin(heading)]
             )
-            if not self.robot_position_free(base):
+            if not self.robot_clear_of_puck(base, puck):
                 continue
-            if self._segment_hits_rects(base, base + sweep, phys.robot_radius):
+            # The base box where it stands and as it lunges with the paddle, sampled
+            # finer than any wall is thick.
+            half_long, half_wide = (
+                e + phys.base_wall_margin for e in phys.base_half_extents
+            )
+            if any(
+                self._box_hits_walls(base + t * sweep, heading, half_long, half_wide)
+                for t in np.linspace(0.0, 1.0, 5)
+            ):
                 continue
             return base, heading
         return None
 
     def push_station(
-        self, puck: NDArray[np.float64], angle: float
+        self,
+        puck: NDArray[np.float64],
+        angle: float,
+        stance: float | None = None,
     ) -> NDArray[np.float64]:
         """Robot base position for pushing along `angle` (straight behind the puck if
         the push is impossible)."""
-        pose = self.push_pose(puck, angle)
+        pose = self.push_pose(puck, angle, stance)
         if pose is not None:
             return pose[0]
         direction = np.array([math.cos(angle), math.sin(angle)])
@@ -564,19 +810,34 @@ class PuckWorld:
         return puck + self.physics.accel_distance * direction
 
     def robot_position_free(self, point: NDArray[np.float64]) -> bool:
-        """Whether the robot fits at `point` without touching a wall.
+        """Whether the robot can be at `point`, facing any way, without touching a wall
+        (its base's corner radius clears the walls).
 
         Holes only swallow the puck; the robot base bridges them.
         """
-        return not self._segment_hits_rects(point, point, self.physics.robot_radius)
+        reach = float(np.hypot(*self.physics.base_half_extents))
+        return not self._segment_hits_rects(point, point, reach)
 
-    def push_feasible(self, puck: NDArray[np.float64], angle: float) -> bool:
-        """Whether the robot can push the puck along `angle` (see `push_pose`).
+    def robot_clear_of_puck(
+        self, point: NDArray[np.float64], puck: NDArray[np.float64]
+    ) -> bool:
+        """Whether the robot's base at `point` keeps off the puck."""
+        reach = self.physics.robot_radius + self.physics.puck_radius
+        return float(np.linalg.norm(np.asarray(point) - puck)) >= reach
+
+    def push_feasible(
+        self,
+        puck: NDArray[np.float64],
+        angle: float,
+        stance: float | None = None,
+    ) -> bool:
+        """Whether the robot can push the puck along `angle`, from `stance` if given
+        (see `push_pose`).
 
         Whether the robot can drive to the push station is a separate question
         (`drive_distance`).
         """
-        return self.push_pose(puck, angle) is not None
+        return self.push_pose(puck, angle, stance) is not None
 
     # ------------------------------------------------------------------ driving
 
@@ -610,9 +871,37 @@ class PuckWorld:
         graph = csr_matrix((weights, (rows, cols)), shape=(n, n))
         return free, ids, graph
 
-    def nav_node_of(self, point: NDArray[np.float64]) -> int:
-        """Node of the nearest free grid point to `point`, or -1 if none is near."""
+    @cached_property
+    def _nav_centers(self) -> NDArray[np.float64]:
+        """Position of each grid node, in node order."""
+        free, _, _ = self._nav_grid
+        res = self.physics.nav_resolution
+        return (np.argwhere(free)[:, ::-1] + 0.5) * res
+
+    def _puck_blocked(
+        self, puck: NDArray[np.float64], from_node: int = -1
+    ) -> NDArray[np.bool_]:
+        """Nodes where the robot's base would touch the puck.
+
+        A robot already that close (`from_node`) may still back away: only nodes closer
+        to the puck than it are blocked then.
+        """
+        gaps = np.linalg.norm(self._nav_centers - puck, axis=1)
+        phys = self.physics
+        reach = phys.robot_radius + phys.puck_radius + phys.drive_clearance
+        if from_node >= 0:
+            reach = min(reach, float(gaps[from_node]) - 1e-9)
+        return gaps < reach
+
+    def nav_node_of(
+        self, point: NDArray[np.float64], puck: NDArray[np.float64] | None = None
+    ) -> int:
+        """Node of the nearest free grid point to `point`, or -1 if none is near.
+
+        With `puck`, nodes where the base would touch the puck are not free.
+        """
         free, ids, _ = self._nav_grid
+        blocked = self._puck_blocked(puck) if puck is not None else None
         res = self.physics.nav_resolution
         ny, nx = free.shape
         i0 = int(point[0] // res)
@@ -622,70 +911,134 @@ class PuckWorld:
             for i in range(max(i0 - 2, 0), min(i0 + 3, nx)):
                 if not free[j, i]:
                     continue
+                if blocked is not None and blocked[ids[j, i]]:
+                    continue
                 d = math.hypot((i + 0.5) * res - point[0], (j + 0.5) * res - point[1])
                 if d < best_d:
                     best, best_d = int(ids[j, i]), d
         return best
 
-    def _distances_from(self, node: int) -> NDArray[np.float64]:
-        if node not in self._nav_cache:
-            _, _, graph = self._nav_grid
-            self._nav_cache[node] = dijkstra(  # type: ignore[call-overload]
-                graph, directed=False, indices=node
-            )
-        return self._nav_cache[node]
-
-    def drive_distance(self, from_node: int, to: NDArray[np.float64]) -> float:
-        """Shortest driving distance from a grid node to point `to` (inf if
-        unreachable).
-
-        The puck is not treated as an obstacle.
-        """
-        to_node = self.nav_node_of(to)
-        if from_node < 0 or to_node < 0:
-            return math.inf
-        return float(self._distances_from(from_node)[to_node])
-
-    def drive_path(
-        self, start: NDArray[np.float64], goal: NDArray[np.float64]
-    ) -> list[NDArray[np.float64]]:
-        """Waypoints of a shortest drive from `start` to `goal` (empty if
-        unreachable)."""
-        free, _, graph = self._nav_grid
-        res = self.physics.nav_resolution
-        a, b = self.nav_node_of(start), self.nav_node_of(goal)
-        if a < 0 or b < 0:
-            return []
-        _, pred = dijkstra(  # type: ignore[call-overload]
-            graph, directed=False, indices=a, return_predecessors=True
+    def _shortest_from(
+        self, node: int, puck: NDArray[np.float64] | None = None
+    ) -> tuple[NDArray[np.float64], NDArray[np.int32]]:
+        """Distances and predecessors of shortest drives from `node`, around the
+        puck if given."""
+        _, _, graph = self._nav_grid
+        if puck is None:
+            if node not in self._nav_cache:
+                self._nav_cache[node] = dijkstra(  # type: ignore[call-overload]
+                    graph, directed=False, indices=node, return_predecessors=True
+                )
+            return self._nav_cache[node]
+        key = (node, round(float(puck[0]), 3), round(float(puck[1]), 3))
+        if key in self._nav_puck_cache:
+            self._nav_puck_cache.move_to_end(key)
+            return self._nav_puck_cache[key]
+        keep = np.nonzero(~self._puck_blocked(puck, node))[0]
+        sub = graph[keep][:, keep]
+        start = int(np.searchsorted(keep, node))
+        sub_dist, sub_pred = dijkstra(  # type: ignore[call-overload]
+            sub, directed=False, indices=start, return_predecessors=True
         )
+        n = graph.shape[0]
+        dist = np.full(n, math.inf)
+        dist[keep] = sub_dist
+        pred = np.full(n, -9999, dtype=np.int32)
+        pred[keep] = np.where(sub_pred >= 0, keep[np.maximum(sub_pred, 0)], -9999)
+        self._nav_puck_cache[key] = (dist, pred)
+        if len(self._nav_puck_cache) > 256:
+            self._nav_puck_cache.popitem(last=False)
+        return dist, pred
+
+    @staticmethod
+    def _path_nodes(pred: NDArray[np.int32], a: int, b: int) -> list[int]:
+        """Nodes of the shortest path from `a` to `b`, from `b` back to `a` (empty if
+        unreachable)."""
         if b != a and pred[b] < 0:
             return []
-        centers = np.argwhere(free)  # (j, i) per node, in node order
         nodes = [b]
         while nodes[-1] != a:
             nodes.append(int(pred[nodes[-1]]))
-        points = [
-            np.array([(centers[n][1] + 0.5) * res, (centers[n][0] + 0.5) * res])
-            for n in reversed(nodes)
-        ]
+        return nodes
+
+    def _shortest_to(
+        self, a: int, b: int, puck: NDArray[np.float64] | None
+    ) -> tuple[float, list[int]]:
+        """Length and nodes (from `b` back to `a`) of a shortest drive."""
+        dist, pred = self._shortest_from(a)
+        nodes = self._path_nodes(pred, a, b)
+        if puck is None or not nodes:
+            return float(dist[b]), nodes
+        # The drive that ignores the puck is the answer if it keeps clear of it.
+        if not self._puck_blocked(puck, a)[nodes].any():
+            return float(dist[b]), nodes
+        dist, pred = self._shortest_from(a, puck)
+        return float(dist[b]), self._path_nodes(pred, a, b)
+
+    def drive_distance(
+        self,
+        from_node: int,
+        to: NDArray[np.float64],
+        puck: NDArray[np.float64] | None = None,
+    ) -> float:
+        """Shortest driving distance from a grid node to point `to` (inf if
+        unreachable).
+
+        With `puck`, the robot drives around the puck instead of through it.
+        """
+        to_node = self.nav_node_of(to, puck)
+        if from_node < 0 or to_node < 0:
+            return math.inf
+        return self._shortest_to(from_node, to_node, puck)[0]
+
+    def drive_path(
+        self,
+        start: NDArray[np.float64],
+        goal: NDArray[np.float64],
+        puck: NDArray[np.float64] | None = None,
+    ) -> list[NDArray[np.float64]]:
+        """Waypoints of a shortest drive from `start` to `goal`, around the puck if
+        given (empty if unreachable)."""
+        a, b = self.nav_node_of(start), self.nav_node_of(goal, puck)
+        if a < 0 or b < 0:
+            return []
+        _, nodes = self._shortest_to(a, b, puck)
+        if not nodes:
+            return []
+        centers = self._nav_centers
+        points = [centers[n].copy() for n in reversed(nodes)]
         return [np.asarray(start, dtype=np.float64)] + points + [np.asarray(goal)]
+
+
+def parse_push_action(action, max_stance: float) -> Push:
+    """A push from an env action: (heading, speed) or (heading, speed, stance)."""
+    action = np.asarray(action, dtype=np.float64)
+    assert action.shape in ((2,), (3,)), f"Bad push action {action}"
+    stance = float(action[2]) if len(action) == 3 else None
+    assert stance is None or abs(stance) <= max_stance + 1e-9
+    return Push(float(action[0]), float(action[1]), stance)
 
 
 def sample_frictions(
     rng: np.random.Generator,
-    prior: tuple[tuple[float, float], ...] = DEFAULT_FRICTION_PRIOR,
+    prior: FrictionPrior | BoxFrictionPrior = DEFAULT_FRICTION_PRIOR,
 ) -> tuple[float, ...]:
-    """Draw one friction coefficient per surface from the uniform prior."""
-    return tuple(float(rng.uniform(lo, hi)) for lo, hi in prior)
+    """Draw one friction coefficient per surface from the prior."""
+    return tuple(float(f) for f in prior.sample(rng))
 
 
 class PushActionSpace(RobotActionSpace):
-    """One push: the puck's release heading and speed."""
+    """One push: the puck's release heading and speed, and the robot's stance.
 
-    def __init__(self, max_speed: float) -> None:
+    The envs also take a two-number action (heading, speed), and then pick the stance
+    themselves.
+    """
+
+    def __init__(self, max_speed: float, max_stance: float) -> None:
         super().__init__(
-            np.array([-np.pi, 0.0]), np.array([np.pi, max_speed]), dtype=np.float64
+            np.array([-np.pi, 0.0, -max_stance]),
+            np.array([np.pi, max_speed, max_stance]),
+            dtype=np.float64,
         )
 
     def create_markdown_description(self) -> str:
@@ -693,6 +1046,7 @@ class PushActionSpace(RobotActionSpace):
         features = [
             ("angle", "Release heading of the puck (rad, 0 is +x)"),
             ("speed", "Release speed of the puck (m/s)"),
+            ("stance", "Robot base heading relative to the push direction (rad)"),
         ]
         md = "| **Index** | **Feature** | **Description** | **Min** | **Max** |"
         md += "\n| --- | --- | --- | --- | --- |"

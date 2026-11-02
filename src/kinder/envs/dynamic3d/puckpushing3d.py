@@ -7,13 +7,15 @@ puck to the commanded speed along the commanded heading and lets go, and the puc
 until friction stops it, bouncing off the walls. Holes are red circles painted on the
 floor; the episode fails if the puck's center passes over one.
 
-PyBullet simulates the contacts (paddle on puck, puck on walls). Gravity is off and the
+PyBullet simulates the contacts (paddle on puck, puck on walls, and puck on the robot's
+base and the stopped paddle after the strike). Gravity is off and the
 puck floats at its resting height, while the floor's Coulomb friction is applied to its
 velocity from the patch under its center. This avoids Bullet's contacts catching on the
 edges between floor tiles, and matches the planners' analytic slide model.
 
-The robot base is teleported, as in the other Kinematic3D envs; during a strike it
-follows the paddle. The info dict reports the noisy release speed and stop position.
+The robot base is teleported, as in the other Kinematic3D envs, to a push station it
+reaches by driving around the walls and the puck; during a strike it follows the paddle,
+which then stops and stays square to the push. The info dict reports the noisy release speed and stop position.
 """
 
 from __future__ import annotations
@@ -27,7 +29,11 @@ from typing import Type as TypingType
 import numpy as np
 import pybullet as p
 from numpy.typing import NDArray
-from pybullet_helpers.geometry import Pose, SE2Pose, get_pose, set_pose
+from pybullet_helpers.geometry import Pose, SE2Pose, get_pose, multiply_poses, set_pose
+from pybullet_helpers.inverse_kinematics import (
+    InverseKinematicsError,
+    inverse_kinematics,
+)
 from pybullet_helpers.joint import JointPositions
 from relational_structs import Array, Object, ObjectCentricState
 from relational_structs.utils import create_state_from_dict
@@ -46,6 +52,8 @@ from kinder.envs.kinematic3d.object_types import (
 from kinder.envs.kinematic3d.utils import Kinematic3DObjectCentricState
 from kinder.envs.puckpushing_utils import (
     DEFAULT_FRICTION_PRIOR,
+    BoxFrictionPrior,
+    FrictionPrior,
     GOAL_RGB,
     GRAVITY,
     HOLE_RGB,
@@ -56,11 +64,21 @@ from kinder.envs.puckpushing_utils import (
     PuckPhysics,
     PuckWorld,
     PushActionSpace,
+    parse_push_action,
     sample_frictions,
 )
 
 # The paddle starts this far behind the puck so the two do not overlap.
 _PADDLE_GAP = 0.005
+# Where the gripper carries the paddle while driving, in the base frame: lifted clear of
+# the base (whose top is at 0.37 m) and of the puck.
+# 0.3 m ahead of the base center at 0.55 m it clears the arm and base by 11 cm, and the
+# straight-up-then-across route from any strike stance clears them by 4 cm.
+_CARRY_FORWARD = 0.3
+_CARRY_HEIGHT = 0.55
+# Links of the Robotiq gripper (and the frames between it and the wrist): they hold the
+# paddle, so they are the only robot parts the paddle does not collide with.
+_GRIPPER_LINK_WORDS = ("robotiq", "finger", "knuckle", "end_effector", "tool_frame", "inertia")
 
 
 @dataclass(frozen=True)
@@ -69,7 +87,7 @@ class PuckPushing3DEnvConfig(Kinematic3DEnvConfig, metaclass=FinalConfigMeta):
 
     map_name: str = "threeroutes"
     physics: PuckPhysics = PuckPhysics()
-    friction_prior: tuple[tuple[float, float], ...] = DEFAULT_FRICTION_PRIOR
+    friction_prior: FrictionPrior | BoxFrictionPrior = DEFAULT_FRICTION_PRIOR
 
     wall_height: float = 0.3
     paddle_thickness: float = 0.04
@@ -258,22 +276,53 @@ class ObjectCentricPuckPushing3DEnv(
             physicsClientId=client,
         )
 
-        # The paddle only touches the puck; the robot is clear of the puck once it
-        # lets go, and the walls are cleared by the feasibility check.
-        robot_bodies = [self.robot.base.robot_id, self.robot.arm.robot_id]
-        for body in robot_bodies + [self.end_effector_viz_id]:
-            for link in range(-1, p.getNumJoints(body, physicsClientId=client)):
-                for other in (self.puck_id, self.paddle_id):
-                    p.setCollisionFilterPair(
-                        body, other, link, -1, 0, physicsClientId=client
-                    )
-        for wall in self._walls.values():
+        # Everything collides as in the real world, except the paddle with the gripper
+        # that holds it (and the invisible end-effector marker with anything).
+        base_id = self.robot.base.robot_id
+        arm_id = self.robot.arm.robot_id
+        self._paddle_robot_links = [(base_id, -1)] + [
+            (base_id, link) for link in range(p.getNumJoints(base_id, physicsClientId=client))
+        ]
+        for link in range(-1, p.getNumJoints(arm_id, physicsClientId=client)):
+            name = (
+                p.getJointInfo(arm_id, link, physicsClientId=client)[12].decode()
+                if link >= 0
+                else "arm_base"
+            )
+            if any(word in name for word in _GRIPPER_LINK_WORDS):
+                p.setCollisionFilterPair(
+                    arm_id, self.paddle_id, link, -1, 0, physicsClientId=client
+                )
+            else:
+                self._paddle_robot_links.append((arm_id, link))
+        for other in (self.puck_id, self.paddle_id):
             p.setCollisionFilterPair(
-                wall, self.paddle_id, -1, -1, 0, physicsClientId=client
+                self.end_effector_viz_id, other, -1, -1, 0, physicsClientId=client
+            )
+        for link in range(p.getNumJoints(base_id, physicsClientId=client)):
+            # Like the walls: the puck's restitution, no friction.
+            p.changeDynamics(
+                base_id,
+                link,
+                restitution=1.0,
+                lateralFriction=0.0,
+                contactProcessingThreshold=0.0,
+                physicsClientId=client,
             )
 
+        # The gripper holds the paddle rigidly: this is the paddle's pose in the end
+        # effector's frame, taken from the initial arm pose with the paddle in front.
+        base = self.robot.get_base()
+        face = np.array([base.x, base.y]) + phys.paddle_offset * np.array(
+            [math.cos(base.rot), math.sin(base.rot)]
+        )
+        self._ee_to_paddle = multiply_poses(
+            self.robot.arm.get_end_effector_pose().invert(),
+            self._paddle_pose(face, base.rot),
+        )
+
         self._frictions: tuple[float, ...] = tuple(
-            (lo + hi) / 2 for lo, hi in config.friction_prior
+            float(f) for f in config.friction_prior.mean
         )
         self._outcome: str | None = None  # "goal", "hole" or None
         self._last_info: dict[str, Any] = {}
@@ -296,7 +345,7 @@ class ObjectCentricPuckPushing3DEnv(
     def _create_action_space(  # type: ignore[override]
         self, config: PuckPushing3DEnvConfig
     ) -> PushActionSpace:
-        return PushActionSpace(config.physics.max_speed)
+        return PushActionSpace(config.physics.max_speed, config.physics.max_stance)
 
     @property
     def state_cls(self) -> TypingType[Kinematic3DObjectCentricState]:
@@ -420,18 +469,70 @@ class ObjectCentricPuckPushing3DEnv(
         face: NDArray[np.float64] | None = None,
         angle: float | None = None,
     ) -> None:
-        """Put the paddle face at `face`, facing `angle`; by default in front of the
-        robot."""
+        """Move the arm so the paddle's face is at `face`, facing `angle`; by default in
+        front of the robot."""
         base = self.robot.get_base()
         if face is None:
             reach = self.config.physics.paddle_offset
             face = np.array([base.x, base.y]) + reach * np.array(
                 [math.cos(base.rot), math.sin(base.rot)]
             )
-        pose = self._paddle_pose(face, base.rot if angle is None else angle)
+        self._hold_paddle_at(self._paddle_pose(face, base.rot if angle is None else angle))
+
+    def _stow_paddle(self) -> None:
+        """Lift the paddle over the base, as while driving, so it clears the puck
+        wherever the base does."""
+        self._hold_paddle_at(self._carry_pose())
+
+    def _carry_pose(self) -> Pose:
+        """Where the gripper carries the paddle while driving."""
+        base = self.robot.get_base()
+        heading = np.array([math.cos(base.rot), math.sin(base.rot)])
+        xy = np.array([base.x, base.y]) + _CARRY_FORWARD * heading
+        orientation = p.getQuaternionFromEuler((0.0, 0.0, base.rot))
+        return Pose((xy[0], xy[1], _CARRY_HEIGHT), orientation)
+
+    def _hold_paddle_at(self, paddle_pose: Pose) -> bool:
+        """Solve the arm's IK for the paddle to be at `paddle_pose`, then put the
+        paddle in the gripper. If no solution exists, the arm stays where it is and
+        False is returned."""
+        arm = self.robot.arm
+        joints = arm.get_joint_positions()
+        target = multiply_poses(paddle_pose, self._ee_to_paddle.invert())
+        try:
+            inverse_kinematics(arm, target, validate=True, set_joints=True)
+            reached = True
+        except InverseKinematicsError:
+            arm.set_joints(joints)
+            reached = False
+        self._attach_paddle()
+        return reached
+
+    def paddle_robot_gap(self) -> float:
+        """Smallest distance (m) from the paddle to the robot's base or arm, gripper
+        excluded; negative if they overlap."""
+        gap = 1.0
+        for body, link in self._paddle_robot_links:
+            for point in p.getClosestPoints(
+                self.paddle_id, body, 1.0, -1, link, physicsClientId=self.physics_client_id
+            ):
+                gap = min(gap, point[8])
+        return gap
+
+    def _attach_paddle(self) -> None:
+        """Put the paddle where the gripper holds it, at rest."""
+        pose = multiply_poses(self.robot.arm.get_end_effector_pose(), self._ee_to_paddle)
         set_pose(self.paddle_id, pose, self.physics_client_id)
         p.resetBaseVelocity(
             self.paddle_id, (0, 0, 0), (0, 0, 0), physicsClientId=self.physics_client_id
+        )
+
+    def _set_paddle_restitution(self, restitution: float) -> None:
+        p.changeDynamics(
+            self.paddle_id,
+            -1,
+            restitution=restitution,
+            physicsClientId=self.physics_client_id,
         )
 
     def _set_paddle_puck_contact(self, enabled: bool) -> None:
@@ -459,7 +560,7 @@ class ObjectCentricPuckPushing3DEnv(
         obs, info = super().reset(seed=seed, options=options)
         if options is not None and "frictions" in options:
             frictions = tuple(float(f) for f in options["frictions"])
-            assert len(frictions) == len(self.config.friction_prior)
+            assert len(frictions) == self.config.friction_prior.num_surfaces
             self._frictions = frictions
         elif options is None or "init_state" not in options:
             self._frictions = sample_frictions(
@@ -474,12 +575,12 @@ class ObjectCentricPuckPushing3DEnv(
         self, action: Array
     ) -> tuple[PuckPushing3DObjectCentricState, float, bool, bool, dict]:
         assert self._outcome is None, "Episode is over; call reset()"
-        angle, speed = float(action[0]), float(action[1])
-        assert self.action_space.contains(np.array([angle, speed]))
+        push = parse_push_action(action, self.config.physics.max_stance)
+        angle, speed, stance = push.angle, push.speed, push.stance
         puck = self._puck_position()
         info: dict[str, Any] = {"push_feasible": False, "drive_distance": 0.0}
-        if self.world.push_feasible(puck, angle):
-            info.update(self._strike(puck, angle, speed))
+        if self.world.push_feasible(puck, angle, stance):
+            info.update(self._strike(puck, angle, speed, stance))
         else:
             info.update(
                 release_speed=0.0,
@@ -495,7 +596,13 @@ class ObjectCentricPuckPushing3DEnv(
         self._last_info = info
         return self._get_obs(), -1.0, self._outcome is not None, False, info
 
-    def _strike(self, puck: NDArray[np.float64], angle: float, speed: float) -> dict:
+    def _strike(
+        self,
+        puck: NDArray[np.float64],
+        angle: float,
+        speed: float,
+        stance: float | None = None,
+    ) -> dict:
         """Drive behind the puck, push it to speed with the paddle, let it slide."""
         config = self.config
         phys = config.physics
@@ -510,20 +617,22 @@ class ObjectCentricPuckPushing3DEnv(
 
         # The commanded push is feasible; a noisy heading may not be, and then the
         # robot stands as for the commanded one.
-        pose = self.world.push_pose(puck, actual_angle) or self.world.push_pose(
-            puck, angle
-        )
+        pose = self.world.push_pose(
+            puck, actual_angle, stance
+        ) or self.world.push_pose(puck, angle, stance)
         assert pose is not None
         station, heading = pose
         start = self.robot.get_base()
         drive = self.world.drive_distance(
-            self.world.nav_node_of(np.array([start.x, start.y])), station
+            self.world.nav_node_of(np.array([start.x, start.y])), station, puck
         )
         base_xy = station - _PADDLE_GAP * direction
         self.robot.set_base(SE2Pose(base_xy[0], base_xy[1], heading))
         face = puck - (phys.puck_radius + _PADDLE_GAP) * direction
         self._place_paddle(face, actual_angle)
         self._set_paddle_puck_contact(True)
+        # A dead paddle during the strike, so it does not bat the puck ahead.
+        self._set_paddle_restitution(0.0)
         paddle_start = np.array(get_pose(self.paddle_id, client).position[:2])
         base_from_paddle = base_xy - paddle_start
 
@@ -551,9 +660,10 @@ class ObjectCentricPuckPushing3DEnv(
                 fell = fell or self.world.over_hole(self._puck_position())
                 trajectory.append(self._puck_position())
             release_speed = float(np.linalg.norm(self._puck_velocity()))
-        # Let go: stop the paddle, and keep it out of the puck's way.
-        self._place_paddle()
-        self._set_paddle_puck_contact(False)
+        # Let go: the paddle stops where it is, square to the push, and the puck
+        # bounces off it like off a wall.
+        p.resetBaseVelocity(self.paddle_id, (0, 0, 0), (0, 0, 0), physicsClientId=client)
+        self._set_paddle_restitution(1.0)
         for _ in range(int(config.max_slide_seconds / dt)):
             if fell or np.linalg.norm(self._puck_velocity()) < config.stop_speed:
                 break
@@ -567,8 +677,6 @@ class ObjectCentricPuckPushing3DEnv(
         self._stop_puck()
         stop = self._puck_position()
         set_pose(self.puck_id, Pose((stop[0], stop[1], self.puck_z)), client)
-        self._place_paddle()
-        self._set_paddle_puck_contact(True)
         noisy_speed = release_speed + float(rng.normal(0.0, phys.speed_obs_noise))
         return {
             "push_feasible": True,
@@ -641,8 +749,8 @@ class PuckPushing3DEnv(ConstantObjectKinDEREnv):
         return """A 3D environment where a TidyBot pushes a puck through a floor maze to
                a goal with a paddle.
 
-               The floor is tiled with three surfaces (laminate, wood, felt), each with
-               a hidden sliding friction coefficient. Each action is one push: the robot
+               The floor is tiled with three surfaces (blue, tan, green), each with a
+               hidden sliding friction coefficient; which one is slippery is random. Each action is one push: the robot
                drives behind the puck and strikes it at the commanded heading and speed,
                with small execution noise. The puck slides until friction stops it,
                bouncing off walls. The episode fails if the puck's center passes over a

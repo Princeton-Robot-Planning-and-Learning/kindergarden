@@ -10,6 +10,7 @@ from dataclasses import replace
 from typing import Any
 
 import mujoco
+
 from kinder.envs.dynamic3d.envs import (
     ObjectCentricTidyBot3DEnv,
     TidyBot3DConfig,

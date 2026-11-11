@@ -1,14 +1,21 @@
 """Fragile-object damage uses physics contacts, not sampled pose heuristics."""
 
-import math
-
-import mujoco
-import pytest
-
 # MuJoCo exposes these functions through its native extension.
 # pylint: disable=no-member
 
-from kinder.envs.dynamic3d.fragile_tossing import DamageTracker, inside_mat
+import math
+import xml.etree.ElementTree as ET
+
+import mujoco
+import numpy as np
+import pytest
+
+from kinder.envs.dynamic3d.envs import ObjectCentricTidyBot3DEnv
+from kinder.envs.dynamic3d.fragile_tossing import (
+    DamageTracker,
+    ObjectCentricFragileTossing3DEnv,
+    inside_mat,
+)
 
 
 def test_mat_moves_rotates_and_includes_boundary():
@@ -92,15 +99,6 @@ def test_small_robot_lift_ends_placement_exemption():
 
 def test_heavy_bin_resists_push_and_remains_resettable(monkeypatch):
     """Only variant bins gain inertia; resets can still reposition free bodies."""
-    import xml.etree.ElementTree as ET
-
-    import numpy as np
-
-    from kinder.envs.dynamic3d.fragile_tossing import (
-        ObjectCentricFragileTossing3DEnv,
-        ObjectCentricTidyBot3DEnv,
-    )
-
     xml = """<mujoco><worldbody>
     <geom name="floor" type="plane" size="10 10 .1"/>
     <body name="bin_0" pos="0 0 .1"><freejoint/>
@@ -113,7 +111,7 @@ def test_heavy_bin_resists_push_and_remains_resettable(monkeypatch):
     env = object.__new__(ObjectCentricFragileTossing3DEnv)
     env.mat_size = 4
     env.bin_mass = 100
-    modified = env._create_scene_xml()
+    modified = env._create_scene_xml()  # pylint: disable=protected-access
     model = mujoco.MjModel.from_xml_string(modified)
     baseline = mujoco.MjModel.from_xml_string(xml)
     body = model.body("bin_0").id

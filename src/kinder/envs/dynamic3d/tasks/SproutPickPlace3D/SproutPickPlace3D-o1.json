@@ -1,0 +1,161 @@
+{
+    "description": "A 3D tabletop task where the Sprout humanoid stands at a low table and must pick up objects and place them at target locations on the table.",
+    "variant_description": "The variants require picking and placing different numbers of objects.",
+    "variant_specific_description": "Pick up one cube from the table and place it in the goal region on the table.",
+    "robots": {
+        "sprout": {
+            "robot": {}
+        }
+    },
+    "scene": "lab2",
+    "fixtures": {
+        "table": {
+            "table_1": {
+                "shape": "rectangle",
+                "height": 0.65,
+                "thickness": 0.04,
+                "length": 0.6,
+                "width": 0.8
+            }
+        }
+    },
+    "regions": {
+        "ground_table_init_region": {
+            "target": "ground",
+            "ranges": [
+                [
+                    0.55,
+                    0.0,
+                    0.55,
+                    0.0
+                ]
+            ],
+            "yaw_ranges": [
+                [
+                    0,
+                    0
+                ]
+            ]
+        },
+        "robot_init_region": {
+            "target": "ground",
+            "ranges": [
+                [
+                    -0.02,
+                    -0.02,
+                    0.02,
+                    0.02
+                ]
+            ],
+            "yaw_ranges": [
+                [
+                    0,
+                    0
+                ]
+            ]
+        },
+        "cube_init_region": {
+            "target": "table_1",
+            "ranges": [
+                [
+                    -0.25,
+                    -0.2,
+                    -0.15,
+                    -0.05
+                ]
+            ],
+            "rgba": [
+                1.0,
+                1.0,
+                0.0,
+                0.0
+            ],
+            "yaw_ranges": [
+                [
+                    0,
+                    0
+                ]
+            ]
+        },
+        "goal_region": {
+            "target": "table_1",
+            "ranges": [
+                [
+                    -0.25,
+                    0.05,
+                    -0.1,
+                    0.2
+                ]
+            ],
+            "rgba": [
+                0.0,
+                0.0,
+                1.0,
+                0.3
+            ],
+            "yaw_ranges": [
+                [
+                    0,
+                    0
+                ]
+            ]
+        }
+    },
+    "objects": {
+        "cube": {
+            "cube1": {
+                "size": 0.025,
+                "rgba": [
+                    0.5,
+                    0.1,
+                    0.1,
+                    1
+                ],
+                "mass": 0.05
+            }
+        }
+    },
+    "cameras": {
+        "task_view": {
+            "position": [
+                1.9,
+                -1.2,
+                1.7
+            ],
+            "lookat": [
+                0.5,
+                0.1,
+                0.75
+            ],
+            "fovy": 42,
+            "resolution": [
+                640,
+                480
+            ]
+        }
+    },
+    "initial_state": [
+        [
+            "on",
+            "table_1",
+            "ground_table_init_region"
+        ],
+        [
+            "on",
+            "robot",
+            "robot_init_region"
+        ],
+        [
+            "on",
+            "cube1",
+            "cube_init_region"
+        ]
+    ],
+    "goal_state": [
+        [
+            "on",
+            "cube1",
+            "goal_region"
+        ]
+    ]
+}

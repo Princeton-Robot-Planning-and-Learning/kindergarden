@@ -1,0 +1,152 @@
+{
+    "room_layout": "dynamo_room.xml",
+    "settle_drift_limit": 0.25,
+    "robot_ground_clearance": 0.9,
+    "description": "A 3D navigation-among-movable-objects task where the Sprout humanoid must walk to a goal region on the floor while several chair obstacles are placed in the workspace.",
+    "variant_description": "The variants differ in the number of obstacle chairs placed in the workspace.",
+    "variant_specific_description": "Walk to a goal region on the floor. One chair (5 kg) stands in the goal region.",
+    "robots": {
+        "sprout": {
+            "robot": {}
+        }
+    },
+    "scene": {
+        "simple": {
+            "position": [
+                0,
+                0,
+                0
+            ]
+        },
+        "mimiclabs-lab2": {
+            "position": [
+                0,
+                0,
+                0
+            ],
+            "wall_collision": true
+        }
+    },
+    "fixtures": {},
+    "regions": {
+        "ground_goal_region": {
+            "target": "ground",
+            "ranges": [
+                [
+                    0.8,
+                    -0.2,
+                    1.2,
+                    0.2
+                ]
+            ],
+            "rgba": [
+                0,
+                1,
+                0,
+                0.3
+            ]
+        }
+    },
+    "objects": {
+        "robocasafrlapartmentchair01": {
+            "obstacle_chair": {
+                "pos_z": 0.55,
+                "footprint": [
+                    0.7,
+                    0.8,
+                    0.8
+                ],
+                "euler": [
+                    90,
+                    0,
+                    0
+                ],
+                "mass": 5.0
+            }
+        }
+    },
+    "cameras": {
+        "agentview_1": {
+            "position": [
+                1,
+                1,
+                2
+            ],
+            "lookat": [
+                0.5,
+                0,
+                0
+            ],
+            "fovy": 45,
+            "resolution": [
+                640,
+                480
+            ]
+        },
+        "agentview_2": {
+            "position": [
+                1,
+                -1,
+                2
+            ],
+            "lookat": [
+                0.5,
+                0,
+                0
+            ],
+            "fovy": 45,
+            "resolution": [
+                640,
+                480
+            ]
+        },
+        "topdown": {
+            "position": [
+                0.5,
+                0,
+                2.5
+            ],
+            "lookat": [
+                0.5,
+                0,
+                0
+            ],
+            "fovy": 60,
+            "resolution": [
+                640,
+                480
+            ]
+        },
+        "task_view": {
+            "position": [
+                0.5,
+                0,
+                2.5
+            ],
+            "lookat": [
+                0.5,
+                0,
+                0
+            ],
+            "fovy": 60,
+            "resolution": [
+                640,
+                480
+            ]
+        }
+    },
+    "initial_state": [
+        [
+            "on",
+            "obstacle_chair",
+            "ground_goal_region"
+        ]
+    ],
+    "goal_state": [
+        [
+            "on",
+            "robot",
+            "ground_goal_region"
+        ]
+    ]
+}

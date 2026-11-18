@@ -120,6 +120,9 @@ module = [
     # Optional; see the prpl-kinematics extra.
     "prpl_kinematics.*",
     "spatialmath.*",
+    # Optional; see requirements/dynamic3d_warp.txt.
+    "mujoco_warp.*",
+    "warp.*",
 ]
 ignore_missing_imports = true
 

@@ -93,9 +93,19 @@ class RobotEnv(MujocoEnv, abc.ABC):
             self._update_attribute_references_recursively(child_elem)
 
     def _insert_robot_into_xml(
-        self, xml_string: str, models_dir: str, robot_xml_name: str, assets_dir: str
+        self,
+        xml_string: str,
+        models_dir: str,
+        robot_xml_name: str,
+        assets_dir: str,
+        robot_xml_string: str | None = None,
     ) -> str:
-        """Insert the robot model into the provided XML string."""
+        """Insert the robot model into the provided XML string.
+
+        The robot model is read from ``models_dir / robot_xml_name``, unless
+        ``robot_xml_string`` gives the model XML directly (for a robot whose XML is
+        edited in memory before it is inserted).
+        """
         # Parse the provided XML string
         input_tree = ET.ElementTree(ET.fromstring(xml_string))
         input_root = input_tree.getroot()
@@ -108,8 +118,11 @@ class RobotEnv(MujocoEnv, abc.ABC):
         # by creating duplicate asset directories. Probably
         # handle that in code through recursive include.
 
-        with open(robot_path, "r", encoding="utf-8") as f:
-            robot_content = f.read()
+        if robot_xml_string is not None:
+            robot_content = robot_xml_string
+        else:
+            with open(robot_path, "r", encoding="utf-8") as f:
+                robot_content = f.read()
 
         # Parse robot XML
         robot_tree = ET.ElementTree(ET.fromstring(robot_content))

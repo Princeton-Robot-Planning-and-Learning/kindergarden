@@ -56,6 +56,36 @@ Environments whose backend is missing are silently skipped at registration, so
 prpl_kinematics is installed. To install the backend *alone*, use
 `requirements/kinematic3d_v2.txt` with the two-step form above.
 
+#### The MuJoCo Warp backend and the Sprout humanoid
+
+The Sprout environments (`SproutPickPlace3D`, `SproutDynamo3D`) use the Fauna Sprout
+humanoid. Its model is not distributed with this package: copy the model files into
+`src/kinder/envs/dynamic3d/models/fauna_sprout/` (see the README in that folder).
+Without the files, the Sprout environments are skipped at registration.
+
+`Sprout3DBatchEnv` runs many copies of a Sprout task in parallel on the GPU with
+[MuJoCo Warp](https://github.com/google-deepmind/mujoco_warp). MuJoCo Warp needs a
+newer MuJoCo than the base install, so it has its own requirements file:
+
+```bash
+pip install --no-deps kindergarden
+pip install -r requirements/dynamic3d_warp.txt
+```
+
+```python
+from kinder.envs.dynamic3d.sprout_batch_env import Sprout3DBatchEnv
+
+env = Sprout3DBatchEnv(task_config_path, num_worlds=1024, seed=0)
+obs = env.reset()  # one row per world, on the GPU
+obs, reward, terminated, truncated, info = env.step(env.default_action())
+```
+
+The Sprout action is one position target for each of the 27 joints, at 50 Hz. The
+motor model, the command delay (5 to 20 physics steps by default), and the physics
+settings are those of the RL tasks that train the Sprout policies; see
+`src/kinder/envs/dynamic3d/robots/sprout_config.json`. Pass
+`command_delay_steps=(0, 0)` for no delay.
+
 ### From Source
 
 We strongly recommend [uv](https://docs.astral.sh/uv/getting-started/installation/), but other standard setups work too.

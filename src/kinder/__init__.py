@@ -493,6 +493,9 @@ def _register_dynamic3d() -> None:
     # Tasks with different scenes and object counts
     tasks_root = Path(__file__).parent / "envs" / "dynamic3d" / "tasks"
 
+    models_root = Path(__file__).parent / "envs" / "dynamic3d" / "models"
+    sprout_available = (models_root / "fauna_sprout" / "sprout.xml").exists()
+
     env_class_variants: dict[str, dict[str, list[str]]] = {}
     for task_item in tasks_root.iterdir():
         if task_item.is_dir():
@@ -509,6 +512,7 @@ def _register_dynamic3d() -> None:
                         "tidybot": "TidyBot3D",
                         "fr3": "Franka3D",
                         "rby1a": "RBY1A3D",
+                        "sprout": "Sprout3D",
                     }
                     try:
                         with open(task_config, "r", encoding="utf-8") as f:
@@ -525,6 +529,9 @@ def _register_dynamic3d() -> None:
                             f"non-empty 'robots' dict whose first key is one "
                             f"of {sorted(robot_env_classes)}."
                         ) from e
+                    if robot_key == "sprout" and not sprout_available:
+                        # The Sprout model is not distributed with the package.
+                        continue
                     task_cfg = "-".join(config_name.split("-")[1:])
                     variant_id = f"kinder/{folder_name}-{task_cfg}-v0"
                     entry_point = f"kinder.envs.dynamic3d.envs:{robot}Env"

@@ -1,0 +1,29 @@
+# Dependency set for the parallel (batch) dynamic3d environments on MuJoCo Warp,
+# for example kinder.envs.dynamic3d.sprout_batch_env.Sprout3DBatchEnv.
+#
+# MuJoCo Warp needs a newer MuJoCo than the `mujoco~=3.3.0` pin of the base install,
+# and a pip extra cannot loosen a base pin. Install the package without its
+# dependencies and then this file:
+#
+#     pip install --no-deps kindergarden
+#     pip install -r requirements/dynamic3d_warp.txt
+#
+# The other dynamic3d (MuJoCo) environments also run in this install, but their
+# trajectories differ from those on MuJoCo 3.3: recorded demos do not replay exactly.
+#
+# A CUDA GPU is recommended. MuJoCo Warp also runs on the CPU, but slowly.
+gymnasium
+matplotlib
+numpy
+Pillow
+dill
+shapely>=2.1.2
+scipy>=1.14.0
+relational_structs>=0.0.1
+prpl_utils>=0.0.1
+tomsgeoms2d>=0.0.1
+mujoco>=3.11.0
+mujoco-warp>=3.11.0
+warp-lang>=1.19.0
+opencv-python>=4.9.0
+gdown>=6.0.0

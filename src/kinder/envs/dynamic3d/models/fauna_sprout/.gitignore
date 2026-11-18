@@ -1,0 +1,4 @@
+# The Fauna Sprout model is not public. Keep the model files out of git.
+*
+!.gitignore
+!README.md

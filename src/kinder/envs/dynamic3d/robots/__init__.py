@@ -9,6 +9,10 @@ from kinder.envs.dynamic3d.robots.rby1a_robot_env import (
     RBY1ARobotActionSpace,
     RBY1ARobotEnv,
 )
+from kinder.envs.dynamic3d.robots.sprout_robot_env import (
+    SproutRobotActionSpace,
+    SproutRobotEnv,
+)
 from kinder.envs.dynamic3d.robots.tidybot_robot_env import (
     TidyBot3DRobotActionSpace,
     TidyBotRobotEnv,
@@ -20,6 +24,8 @@ __all__ = [
     "RobotEnv",
     "RBY1ARobotActionSpace",
     "RBY1ARobotEnv",
+    "SproutRobotActionSpace",
+    "SproutRobotEnv",
     "TidyBot3DRobotActionSpace",
     "TidyBotRobotEnv",
 ]

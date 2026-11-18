@@ -474,13 +474,21 @@ class ReplicaObject(RoboCasaObject):
 
             new_body.append(new_geom)
 
+        # Optional total mass. Without it, the mass comes from the density of the
+        # asset and the volume of its mesh, which makes furniture very heavy.
+        mass = self.options.get("mass", None)
+        if mass is not None:
+            new_geoms = new_body.findall("geom")
+            for new_geom in new_geoms:
+                new_geom.attrib.pop("density", None)
+                new_geom.set("mass", str(float(mass) / len(new_geoms)))
+
         return new_body
 
 
 # Dynamically create and register classes for each object directory
 def _create_robocasa_object_classes() -> None:
     """Scan the robocasa_objects directory and create classes for each object."""
-
     if not ROBOCASA_OBJECTS_DIR.exists():
         print(f"Warning: RoboCasa objects directory not found: {ROBOCASA_OBJECTS_DIR}")
         return

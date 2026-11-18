@@ -118,3 +118,26 @@ MujocoObjectTypeFeatures[MujocoRBY1ARobotObjectType] = [
     "pos_base_left",
     # TODO add more attributes  # pylint: disable=fixme
 ]
+
+# The Sprout humanoid: a floating base and 27 joints, in the joint order of the model.
+NUM_SPROUT_JOINT_FEATURES = 27
+MujocoSproutRobotObjectType = Type("mujoco_sprout_robot")
+MujocoObjectTypeFeatures[MujocoSproutRobotObjectType] = [
+    # Floating base position and orientation (quaternion).
+    "pos_base_x",
+    "pos_base_y",
+    "pos_base_z",
+    "pos_base_qw",
+    "pos_base_qx",
+    "pos_base_qy",
+    "pos_base_qz",
+    *[f"pos_joint{i}" for i in range(1, NUM_SPROUT_JOINT_FEATURES + 1)],
+    # Floating base linear and angular velocity.
+    "vel_base_x",
+    "vel_base_y",
+    "vel_base_z",
+    "vel_base_wx",
+    "vel_base_wy",
+    "vel_base_wz",
+    *[f"vel_joint{i}" for i in range(1, NUM_SPROUT_JOINT_FEATURES + 1)],
+]

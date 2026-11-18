@@ -24,6 +24,7 @@ from kinder.envs.dynamic3d.object_types import (
     MujocoFR3RobotObjectType,
     MujocoObjectTypeFeatures,
     MujocoRBY1ARobotObjectType,
+    MujocoSproutRobotObjectType,
     MujocoTidyBotRobotObjectType,
 )
 from kinder.envs.dynamic3d.objects import (
@@ -42,8 +43,14 @@ from kinder.envs.dynamic3d.robots import (
     FR3RobotEnv,
     RBY1ARobotActionSpace,
     RBY1ARobotEnv,
+    SproutRobotActionSpace,
+    SproutRobotEnv,
     TidyBot3DRobotActionSpace,
     TidyBotRobotEnv,
+)
+from kinder.envs.dynamic3d.robots.sprout_robot_env import (
+    NUM_SPROUT_JOINTS,
+    SPROUT_CONTROL_FREQUENCY,
 )
 from kinder.envs.dynamic3d.scene_loader import SceneLoader
 from kinder.envs.dynamic3d.tidybot_rewards import create_reward_calculator
@@ -150,6 +157,7 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
             "tidybot": TidyBotRobotEnv,
             "rby1a": RBY1ARobotEnv,
             "fr3": FR3RobotEnv,
+            "sprout": SproutRobotEnv,
         }[self.robot_type]
         # Robot-specific settings from the task config (e.g. mount_height)
         # are forwarded as keyword arguments.
@@ -895,7 +903,7 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
         action_shape = self.action_space.shape
         assert action_shape is not None, "Action space must have a shape"
         for _ in range(10):
-            self._robot_env.step(np.zeros(action_shape))
+            self._robot_env.step(self._get_settle_action())
 
         # Get object-centric observation
         self._current_state = self._get_object_centric_state()
@@ -916,6 +924,12 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
         self._reset_retries = 0
 
         return self._get_current_state(), {}
+
+    def _get_settle_action(self) -> Array:
+        """The action that holds the robot still while the scene settles in reset()."""
+        action_shape = self.action_space.shape
+        assert action_shape is not None, "Action space must have a shape"
+        return np.zeros(action_shape, dtype=np.float32)
 
     def _max_settle_drift(self) -> float:
         """Largest xy distance a ground object moved since it was placed."""
@@ -1284,6 +1298,7 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
         This method should be implemented by subclasses to provide robot-specific state
         data.
         """
+
     @abc.abstractmethod
     def _set_robot_state(self, state: ObjectCentricState) -> None:
         """Set the robot state in the simulation.
@@ -1358,9 +1373,7 @@ class ObjectCentricTidyBot3DEnv(ObjectCentricRobotEnv):
         """Create action space for TidyBot's control interface."""
         # gymnasium >= 1.4 types an unparameterised Box as floating|integer; this
         # space is always float32 (RobotActionSpace's default dtype).
-        return cast(
-            Space[Array], TidyBot3DRobotActionSpace(config.use_arm_velocities)
-        )
+        return cast(Space[Array], TidyBot3DRobotActionSpace(config.use_arm_velocities))
 
     def _get_object_centric_robot_data(self) -> dict[Object, dict[str, float]]:
         assert self.robot_type == "tidybot"
@@ -1461,8 +1474,7 @@ The robot can control:
 
     def _create_obs_markdown_description(self) -> str:
         """Create observation space description."""
-        return\
-               """Observation includes:
+        return """Observation includes:
 - Robot state: base pose, arm position/orientation, gripper state
 - Object states: positions and orientations of all objects
 - Camera images: RGB images from base and wrist cameras
@@ -1471,8 +1483,7 @@ The robot can control:
 
     def _create_action_markdown_description(self) -> str:
         """Create action space description."""
-        return\
-               """Actions control:
+        return """Actions control:
 - base_pose: [x, y, theta] - Mobile base position and orientation
 - arm_pos: [x, y, z] - End effector position in world coordinates
 - arm_quat: [x, y, z, w] - End effector orientation as quaternion
@@ -1496,8 +1507,7 @@ The robot can control:
                 "The episode terminates when all objects are placed at their "
                 "respective targets.\n"
             )
-        return\
-               """Reward function depends on the specific task:
+        return """Reward function depends on the specific task:
 - Object stacking: Reward for successfully stacking objects
 - Drawer/cabinet tasks: Reward for opening/closing and placing objects
 - General manipulation: Reward for successful pick-and-place operations
@@ -1507,8 +1517,7 @@ Currently returns a small negative reward (-0.01) per timestep to encourage expl
 
     def _create_references_markdown_description(self) -> str:
         """Create references description."""
-        return\
-               """TidyBot++: An Open-Source Holonomic Mobile Manipulator.
+        return """TidyBot++: An Open-Source Holonomic Mobile Manipulator.
 
                for Robot Learning
                - Jimmy Wu, William Chong, Robert Holmberg, Aaditya Prasad, Yihuai Gao,
@@ -1517,6 +1526,8 @@ Currently returns a small negative reward (-0.01) per timestep to encourage expl
 
                https://github.com/tidybot2/tidybot2
                """
+
+
 class ObjectCentricRBY1A3DEnv(ObjectCentricRobotEnv):
     """RBY1A-specific implementation of object-centric robot environment."""
 
@@ -1653,6 +1664,8 @@ Currently returns a small negative reward (-0.01) per timestep to encourage expl
     def _create_references_markdown_description(self) -> str:
         """Create references description."""
         return """TODO."""
+
+
 class ObjectCentricFranka3DEnv(ObjectCentricRobotEnv):
     """Franka FR3-specific implementation of object-centric robot environment."""
 
@@ -1747,8 +1760,7 @@ The robot can control:
 
     def _create_obs_markdown_description(self) -> str:
         """Create observation space description."""
-        return\
-               """Observation includes:
+        return """Observation includes:
 - Robot state: base mount pose, arm joint positions/velocities, gripper state
 - Object states: positions and orientations of all objects
 - Camera images: RGB images from scene cameras
@@ -1775,4 +1787,186 @@ The robot can control:
         return """Franka FR3: https://franka.de/products/franka-research-3
 Model: MuJoCo Menagerie (franka_fr3, robotiq_2f85 via TidyBot)
 https://github.com/google-deepmind/mujoco_menagerie
+"""
+
+
+class ObjectCentricSprout3DEnv(ObjectCentricRobotEnv):
+    """Sprout-specific implementation of object-centric robot environment.
+
+    The action is one absolute joint position target for each of the 27 joints, at 50
+    Hz.
+    """
+
+    def __init__(
+        self,
+        config: TidyBot3DConfig = TidyBot3DConfig(
+            control_frequency=SPROUT_CONTROL_FREQUENCY, act_delta=False
+        ),
+        command_delay_steps: tuple[int, int] | None = None,
+        command_delay_update_period: int | None = None,
+        **kwargs,
+    ) -> None:
+        """
+        Args:
+            config: Environment configuration.
+            command_delay_steps: Minimum and maximum command delay, in physics
+                steps; (0, 0) gives no delay. Default: the values of the RL tasks.
+            command_delay_update_period: Physics steps between new random delays.
+                Default: the value of the RL tasks.
+            **kwargs: Passed to ObjectCentricRobotEnv.
+        """
+        super().__init__(config, **kwargs)
+        assert isinstance(self._robot_env, SproutRobotEnv)
+        if command_delay_steps is not None:
+            self._robot_env.command_delay_steps = (
+                int(command_delay_steps[0]),
+                int(command_delay_steps[1]),
+            )
+        if command_delay_update_period is not None:
+            self._robot_env.command_delay_update_period = command_delay_update_period
+
+    def _create_action_space(  # type: ignore
+        self, config: TidyBot3DConfig
+    ) -> Space[Array]:
+        """Create action space for the Sprout's control interface."""
+        return cast(Space[Array], SproutRobotActionSpace())  # float32, as above
+
+    def _get_settle_action(self) -> Array:
+        """Hold the default standing pose (a zero action is not a still pose)."""
+        assert isinstance(self._robot_env, SproutRobotEnv)
+        if self.config.act_delta:
+            return np.zeros(NUM_SPROUT_JOINTS, dtype=np.float32)
+        return self._robot_env.model.default_joint_positions.astype(np.float32)
+
+    def sample_initial_qpos(self) -> NDArray[np.float64]:
+        """Sample new initial poses for the objects and the robot in the current model.
+
+        The model stays the same, so the fixtures keep the poses of the last reset().
+        Returns the generalized positions (qpos) of the new initial state. The parallel
+        Sprout environment uses this to give each world its own start.
+        """
+        assert self._robot_env.sim is not None, "Need to call reset() first"
+        assert isinstance(self._robot_env, SproutRobotEnv)
+        self._robot_env.sim.reset()
+        self._robot_env.reset_command_delay()
+        self._initialize_object_poses()
+        self._initialize_robot_pose()
+        self._robot_env.sim.forward()
+        self._current_state = self._get_object_centric_state()
+        return self._robot_env.sim.data.mj_data.qpos.copy()
+
+    def _get_object_centric_robot_data(self) -> dict[Object, dict[str, float]]:
+        assert self.robot_type == "sprout"
+        assert self._robot_env is not None, "Robot environment not initialized"
+        robot = Object(self.robot_name, MujocoSproutRobotObjectType)
+        qpos, qvel = self._robot_env.qpos, self._robot_env.qvel
+        base_pos_names = ["x", "y", "z", "qw", "qx", "qy", "qz"]
+        base_vel_names = ["x", "y", "z", "wx", "wy", "wz"]
+        state_dict = {}
+        state_dict[robot] = {
+            **{f"pos_base_{n}": qpos["base"][i] for i, n in enumerate(base_pos_names)},
+            **{
+                f"pos_joint{i + 1}": qpos["joints"][i] for i in range(NUM_SPROUT_JOINTS)
+            },
+            **{f"vel_base_{n}": qvel["base"][i] for i, n in enumerate(base_vel_names)},
+            **{
+                f"vel_joint{i + 1}": qvel["joints"][i] for i in range(NUM_SPROUT_JOINTS)
+            },
+        }
+        return state_dict
+
+    def _set_robot_state(self, state: ObjectCentricState) -> None:
+        """Set the robot state in the simulation."""
+        assert self._robot_env is not None, "Robot environment not initialized"
+
+        # Get robot by type instead of by name for flexibility
+        robots = state.get_objects(MujocoSproutRobotObjectType)
+        assert len(robots) == 1, f"Expected exactly 1 robot, got {len(robots)}"
+        robot_obj = list(robots)[0]
+
+        # The past targets of the command delay are not a part of the state.
+        assert isinstance(self._robot_env, SproutRobotEnv)
+        self._robot_env.clear_command_history()
+
+        qpos, qvel = self._robot_env.qpos, self._robot_env.qvel
+        qpos["base"][:] = [
+            state.get(robot_obj, f"pos_base_{n}")
+            for n in ["x", "y", "z", "qw", "qx", "qy", "qz"]
+        ]
+        qvel["base"][:] = [
+            state.get(robot_obj, f"vel_base_{n}")
+            for n in ["x", "y", "z", "wx", "wy", "wz"]
+        ]
+        qpos["joints"][:] = [
+            state.get(robot_obj, f"pos_joint{i + 1}") for i in range(NUM_SPROUT_JOINTS)
+        ]
+        qvel["joints"][:] = [
+            state.get(robot_obj, f"vel_joint{i + 1}") for i in range(NUM_SPROUT_JOINTS)
+        ]
+
+
+class Sprout3DEnv(ConstantObjectKinDEREnv):
+    """Sprout env with a constant number of objects."""
+
+    def _create_object_centric_env(self, *args, **kwargs) -> ObjectCentricSprout3DEnv:
+        return ObjectCentricSprout3DEnv(*args, **kwargs)
+
+    def _get_constant_object_names(
+        self, exemplar_state: ObjectCentricState
+    ) -> list[str]:
+        return [o.name for o in sorted(exemplar_state)]
+
+    def _create_env_markdown_description(self) -> str:
+        """Create environment description (policy-agnostic)."""
+        env = self._object_centric_env
+        assert isinstance(env, ObjectCentricSprout3DEnv)
+        intro = env.task_config.get(
+            "description",
+            "A 3D humanoid manipulation environment using the Fauna Sprout robot.",
+        )
+        return f"""{intro}
+
+The robot is a small humanoid (about 1.1 m tall, 25 kg) with a floating base, two legs,
+two arms with one-finger grippers, a waist joint, and a neck. It has no balance
+controller: the actions must keep it upright.
+
+The robot model is not distributed with this package. See
+`kinder/envs/dynamic3d/models/fauna_sprout/README.md`.
+"""
+
+    def _create_variant_markdown_description(self) -> str:
+        env = self._object_centric_env
+        assert isinstance(env, ObjectCentricSprout3DEnv)
+        return env.task_config.get(
+            "variant_description",
+            "This environment has variants that differ in the number of objects.",
+        )
+
+    def _create_variant_specific_description(self) -> str:
+        env = self._object_centric_env
+        assert isinstance(env, ObjectCentricSprout3DEnv)
+        return env.task_config.get("variant_specific_description", "")
+
+    def _create_obs_markdown_description(self) -> str:
+        """Create observation space description."""
+        return """Observation includes:
+- Robot state: floating base pose and velocity, joint positions and velocities
+- Object states: positions and orientations of all objects
+"""
+
+    def _create_action_markdown_description(self) -> str:
+        """Create action space description."""
+        return f"""Actions are position targets (rad) for the {NUM_SPROUT_JOINTS} joints,
+at {SPROUT_CONTROL_FREQUENCY} Hz. The DC motor model of the Sprout RL tasks converts
+the targets to joint torques at each physics step (0.002 s). The targets reach the motors after a random command
+delay (by default 5 to 20 physics steps, as in the RL tasks).
+"""
+
+    def _create_reward_markdown_description(self) -> str:
+        """Create reward description."""
+        return """The reward is -1 for each step until the goal is reached."""
+
+    def _create_references_markdown_description(self) -> str:
+        """Create references description."""
+        return """Fauna Robotics Sprout: https://faunarobotics.com/
 """

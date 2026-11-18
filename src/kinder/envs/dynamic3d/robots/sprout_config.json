@@ -1,0 +1,236 @@
+{
+  "_comment": "Parameters of the Fauna Sprout robot that the vendor XML does not have. These are the values of the RL tasks that train the Sprout policies. See robots/sprout_robot_env.py.",
+  "standing_height": 0.647,
+  "default_pose": {
+    "left_hip_pitch_joint": -0.0698,
+    "right_hip_pitch_joint": -0.0698,
+    "left_knee_joint": 0.2,
+    "right_knee_joint": 0.2,
+    "left_ankle_joint": -0.0349,
+    "right_ankle_joint": -0.0349,
+    "left_shoulder_pitch_joint": 0.0733,
+    "right_shoulder_pitch_joint": 0.0733,
+    "left_shoulder_roll_joint": -1.4207,
+    "right_shoulder_roll_joint": 1.4207,
+    "left_shoulder_yaw_joint": 0.2129,
+    "right_shoulder_yaw_joint": 0.2129,
+    "left_elbow_joint": -0.25,
+    "right_elbow_joint": 0.25
+  },
+  "damping": 1.0,
+  "command_delay": {
+    "min_steps": 5,
+    "max_steps": 20,
+    "update_period": 500
+  },
+  "motors": {
+    "48V-EC-A6408": {
+      "effort_limit": 30.0,
+      "saturation_effort": 128.2,
+      "velocity_limit": 15.4,
+      "armature": 0.0068
+    },
+    "48V-EC-A4310": {
+      "effort_limit": 24.0,
+      "saturation_effort": 105.12,
+      "velocity_limit": 19.04,
+      "armature": 0.0068
+    },
+    "48V-HTDW-5047-36": {
+      "effort_limit": 30.0,
+      "saturation_effort": 114.72,
+      "velocity_limit": 15.72,
+      "armature": 0.027
+    },
+    "48V-HTDW-4438-30": {
+      "effort_limit": 18.0,
+      "saturation_effort": 28.5,
+      "velocity_limit": 37.48,
+      "armature": 0.027
+    },
+    "48V-HTDW-3536-32": {
+      "effort_limit": 3.5,
+      "saturation_effort": 4.5,
+      "velocity_limit": 17.5,
+      "armature": 0.027
+    }
+  },
+  "actuator_groups": [
+    {
+      "motor": "48V-EC-A6408",
+      "stiffness": 32.5,
+      "joints": [
+        ".*_hip_pitch_joint",
+        ".*_hip_roll_joint",
+        ".*_knee_joint",
+        ".*_ankle_joint"
+      ]
+    },
+    {
+      "motor": "48V-EC-A4310",
+      "stiffness": 32.5,
+      "joints": [
+        ".*_hip_yaw_joint"
+      ]
+    },
+    {
+      "motor": "48V-EC-A4310",
+      "stiffness": 10.0,
+      "joints": [
+        "waist_yaw_joint",
+        ".*_shoulder_pitch_joint"
+      ]
+    },
+    {
+      "motor": "48V-HTDW-5047-36",
+      "stiffness": 10.0,
+      "joints": [
+        ".*_shoulder_roll_joint",
+        ".*_shoulder_yaw_joint",
+        ".*_elbow_joint"
+      ]
+    },
+    {
+      "motor": "48V-HTDW-4438-30",
+      "stiffness": 10.0,
+      "joints": [
+        "neck_yaw_joint",
+        ".*_wrist_roll_joint"
+      ]
+    },
+    {
+      "motor": "48V-HTDW-3536-32",
+      "stiffness": 10.0,
+      "joints": [
+        "neck_pitch_joint",
+        ".*_gripper_joint",
+        ".*_wrist_pitch_joint"
+      ]
+    }
+  ],
+  "gripper_sites": {
+    "left_gripper_tcp": {
+      "body": "left_gripper_lower_link",
+      "pos": [
+        0.0215,
+        0.1417,
+        -0.0152
+      ]
+    },
+    "right_gripper_tcp": {
+      "body": "right_gripper_lower_link",
+      "pos": [
+        -0.0215,
+        -0.1417,
+        -0.0152
+      ]
+    }
+  },
+  "jaw_pads": [
+    {
+      "link": "gripper_lower_link",
+      "name": "palm",
+      "half_size": [
+        0.0205,
+        0.0376,
+        0.0293
+      ],
+      "center": [
+        0.0215,
+        0.0124,
+        -0.0031
+      ],
+      "angle": 0.0
+    },
+    {
+      "link": "gripper_lower_link",
+      "name": "lower_jaw_slope",
+      "half_size": [
+        0.0203,
+        0.0125,
+        0.0321
+      ],
+      "center": [
+        0.0215,
+        0.0625,
+        -0.0096
+      ],
+      "angle": 0.0
+    },
+    {
+      "link": "gripper_lower_link",
+      "name": "lower_jaw",
+      "half_size": [
+        0.0158,
+        0.0333,
+        0.0153
+      ],
+      "center": [
+        0.0215,
+        0.1062,
+        -0.0301
+      ],
+      "angle": -0.122
+    },
+    {
+      "link": "gripper_upper_link",
+      "name": "knuckle",
+      "half_size": [
+        0.0355,
+        0.0214,
+        0.023
+      ],
+      "center": [
+        0.0215,
+        0.0006,
+        0.0017
+      ],
+      "angle": 0.0
+    },
+    {
+      "link": "gripper_upper_link",
+      "name": "upper_jaw_root",
+      "half_size": [
+        0.0336,
+        0.0165,
+        0.0174
+      ],
+      "center": [
+        0.0216,
+        0.0385,
+        0.0096
+      ],
+      "angle": 0.0
+    },
+    {
+      "link": "gripper_upper_link",
+      "name": "upper_jaw_middle",
+      "half_size": [
+        0.0287,
+        0.0207,
+        0.0132
+      ],
+      "center": [
+        0.0216,
+        0.0704,
+        0.0083
+      ],
+      "angle": -0.375
+    },
+    {
+      "link": "gripper_upper_link",
+      "name": "upper_jaw_tip",
+      "half_size": [
+        0.0268,
+        0.0071,
+        0.018
+      ],
+      "center": [
+        0.0215,
+        0.0892,
+        -0.0044
+      ],
+      "angle": 0.559
+    }
+  ]
+}

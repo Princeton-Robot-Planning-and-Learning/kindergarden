@@ -35,6 +35,8 @@ NUM_SPROUT_JOINTS = 27
 SPROUT_SIMULATION_TIMESTEP = 0.002  # (in seconds)
 SPROUT_CONTROL_FREQUENCY = 50  # (in Hz)
 SPROUT_SOLVER_ITERATIONS = 10
+# Control steps in reset() that let the objects settle (1 s, as for the other robots).
+SPROUT_SETTLE_STEPS = 50
 SPROUT_SOLVER_LS_ITERATIONS = 20
 
 # Prefix for the default classes of the Sprout XML ("visual", "collision", ...), so
@@ -514,6 +516,17 @@ class SproutRobotEnv(RobotEnv):
         self.qvel["joints"][:] = 0.0
         self.ctrl["joints"][:] = 0.0
         self.sim.forward()  # Update the simulation state
+
+    def hold_standing_pose(self, base_qpos: NDArray[np.float64]) -> None:
+        """Put the robot back into the default pose at the given base pose, at rest.
+
+        Used while the scene settles in reset(): the robot has no balance controller, so
+        it cannot stand still by itself.
+        """
+        self.qpos["base"][:] = base_qpos
+        self.qvel["base"][:] = 0.0
+        self.qpos["joints"][:] = self.model.default_joint_positions
+        self.qvel["joints"][:] = 0.0
 
     def reset_command_delay(self) -> None:
         """Start a new episode of the command delay: no delay until the first update.

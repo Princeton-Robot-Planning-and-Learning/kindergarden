@@ -34,6 +34,7 @@ from kinder.envs.dynamic3d.object_types import (
 )
 from kinder.envs.dynamic3d.robots.sprout_robot_env import (
     NUM_SPROUT_JOINTS,
+    SPROUT_SETTLE_STEPS,
     SproutRobotEnv,
 )
 
@@ -267,6 +268,27 @@ def _reset_kernel(
     delay_step[world] = 0
 
 
+@wp.kernel
+def _hold_robot_kernel(
+    start_qpos: wp.array2d(dtype=float),
+    base_qpos_adr: int,
+    base_qvel_adr: int,
+    joint_qpos_adr: int,
+    joint_qvel_adr: int,
+    qpos: wp.array2d(dtype=float),
+    qvel: wp.array2d(dtype=float),
+):
+    """Put the robot of each world back into its initial pose, at rest."""
+    world = wp.tid()
+    for i in range(7):
+        qpos[world, base_qpos_adr + i] = start_qpos[world, base_qpos_adr + i]
+    for i in range(6):
+        qvel[world, base_qvel_adr + i] = 0.0
+    for i in range(NUM_SPROUT_JOINTS):
+        qpos[world, joint_qpos_adr + i] = start_qpos[world, joint_qpos_adr + i]
+        qvel[world, joint_qvel_adr + i] = 0.0
+
+
 class Sprout3DBatchEnv:
     """Many parallel worlds of one Sprout task, on MuJoCo Warp.
 
@@ -297,7 +319,7 @@ class Sprout3DBatchEnv:
         seed: int | None = None,
         device: str | None = None,
         horizon: int = 1000,
-        num_settle_steps: int = 10,
+        num_settle_steps: int = SPROUT_SETTLE_STEPS,
         fallen_height: float = 0.3,
         nconmax: int | None = None,
         njmax: int | None = None,
@@ -313,9 +335,9 @@ class Sprout3DBatchEnv:
             device: Warp device, for example "cuda:0" or "cpu". Default: the
                 preferred Warp device.
             horizon: Number of steps after which a world is truncated.
-            num_settle_steps: Control steps (with the default pose as the target)
-                that let the scene settle before the initial states are stored.
-                This is the settle time of ``Sprout3DEnv.reset``.
+            num_settle_steps: Control steps that let the objects settle before the
+                initial states are stored. The robot is held in its standing pose
+                for this time, as in ``Sprout3DEnv.reset``.
             fallen_height: A world reports ``fallen`` when the torso is below this
                 height (in meters).
             nconmax: Contact buffer size per world. Default: from the scene.
@@ -366,17 +388,18 @@ class Sprout3DBatchEnv:
         )
 
         # Put the model and the data on the device. A buffer that is too small can
-        # stop the process, so the defaults leave a large margin over the settled
-        # scene (a robot that falls makes many contacts).
+        # stop the process, so the defaults leave a margin over the settled scene (a
+        # robot that falls makes more contacts). The GPU memory grows with
+        # num_worlds * njmax, so a large scene permits fewer worlds.
         self._model = mjw.put_model(self._mj_model)
         self._data = mjw.put_data(
             self._mj_model,
             self._mj_data,
             nworld=num_worlds,
             nconmax=(
-                nconmax if nconmax is not None else max(256, 4 * self._mj_data.ncon)
+                nconmax if nconmax is not None else max(256, 2 * self._mj_data.ncon)
             ),
-            njmax=njmax if njmax is not None else max(800, 4 * self._mj_data.nefc),
+            njmax=njmax if njmax is not None else max(800, 2 * self._mj_data.nefc),
         )
 
         def to_device(values: Any, dtype: Any) -> wp.array:
@@ -432,6 +455,20 @@ class Sprout3DBatchEnv:
         self.reset()
         for _ in range(num_settle_steps):
             self._launch_control_step()
+            # As in Sprout3DEnv.reset, the robot is held in its standing pose.
+            wp.launch(
+                _hold_robot_kernel,
+                dim=num_worlds,
+                inputs=[
+                    self._start_qpos,
+                    robot_env.base_qpos_adr,
+                    robot_env.base_qvel_adr,
+                    robot_env.joint_qpos_adr,
+                    robot_env.joint_qvel_adr,
+                ],
+                outputs=[self._data.qpos, self._data.qvel],
+                device=self.device,
+            )
         wp.copy(self._start_qpos, self._data.qpos)
         wp.copy(self._start_qvel, self._data.qvel)
         self.reset()

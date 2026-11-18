@@ -262,3 +262,34 @@ def test_balanced_goal_matches_single_env(tmp_path):
         env._robot_env.sim.forward()
         assert object_centric_env._check_goals() == terminated[world]
     env.close()
+
+
+@pytest.mark.parametrize(
+    "task",
+    [
+        "SproutShelf3D/SproutShelf3D-o8.json",
+        "SproutRearrange3D/SproutRearrange3D-o2-"
+        "put_the_boxed_drink_and_the_can_next_to_the_bowl.json",
+    ],
+)
+def test_other_task_families(task):
+    """The batch environment builds the larger tasks, and its states are settled."""
+    env = Sprout3DBatchEnv(str(TASKS_DIR / task), num_worlds=3, seed=0)
+    obs = env.reset().numpy().copy()
+    assert np.all(np.isfinite(obs))
+    for world in range(3):
+        assert env.observation_space.contains(obs[world])
+    # The robot stands at rest in the default pose, and the objects rest.
+    assert np.abs(obs[:, env._obs_qvel_column]).max() < 0.05
+    robot_env = env._robot_env
+    joints = env._data.qpos.numpy()[:, robot_env.joint_qpos_adr :][
+        :, :NUM_SPROUT_JOINTS
+    ]
+    assert np.allclose(joints, robot_env.model.default_joint_positions, atol=1e-5)
+    _, _, terminated, _, info = env.step(env.default_action())
+    assert not terminated.numpy().any()
+    assert not info["fallen"].numpy().any()
+    usage = env.buffer_use()
+    assert usage["contacts"] < usage["contacts_limit"]
+    assert usage["constraints"] < usage["constraints_limit"]
+    env.close()

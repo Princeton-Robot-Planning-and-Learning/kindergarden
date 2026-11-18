@@ -1,0 +1,172 @@
+{
+    "description": "A 3D task where the Sprout humanoid must rearrange objects into different spatial arrangements with respect to other objects.",
+    "variant_description": "Each variant requires the robot to put one or more objects on the left, right, front, behind, or next to another object.",
+    "variant_specific_description": "Place the boxed drink on the left side of the bowl on the kitchen counter.",
+    "robots": {
+        "sprout": {
+            "robot": {}
+        }
+    },
+    "scene": "lab2_kitchen_gray",
+    "regions": {
+        "robot_task_init_region": {
+            "target": "ground",
+            "ranges": [
+                [
+                    -0.12,
+                    -0.03,
+                    -0.08,
+                    0.03
+                ]
+            ],
+            "rgba": [
+                0.0,
+                1.0,
+                0.0,
+                0.0
+            ],
+            "yaw_ranges": [
+                [
+                    -5,
+                    5
+                ]
+            ]
+        },
+        "kitchen_island_shelf_2_bowl_region": {
+            "target": "kitchen_island",
+            "shelf": 2,
+            "ranges": [
+                [
+                    0.1,
+                    -0.3,
+                    0.3,
+                    -0.16
+                ]
+            ],
+            "rgba": [
+                1.0,
+                1.0,
+                0.0,
+                0.0
+            ],
+            "yaw_ranges": [
+                [
+                    0,
+                    0
+                ]
+            ]
+        },
+        "kitchen_island_shelf_2_boxed_drink_region": {
+            "target": "kitchen_island",
+            "shelf": 2,
+            "ranges": [
+                [
+                    -0.3,
+                    -0.3,
+                    -0.1,
+                    -0.16
+                ]
+            ],
+            "rgba": [
+                1.0,
+                1.0,
+                0.0,
+                0.0
+            ],
+            "yaw_ranges": [
+                [
+                    0,
+                    0
+                ]
+            ]
+        },
+        "bowl_0_region": {
+            "target": "bowl_0",
+            "ranges": [
+                [
+                    -0.05,
+                    -0.12,
+                    0.0,
+                    0.05,
+                    -0.05,
+                    0.04
+                ]
+            ],
+            "yaw_ranges": [
+                [
+                    0,
+                    360
+                ]
+            ],
+            "rgba": [
+                0.5,
+                0.5,
+                0.5,
+                0.0
+            ]
+        }
+    },
+    "objects": {
+        "robocasa_boxed_drink_0": {
+            "boxed_drink_0": {}
+        },
+        "robocasa_bowl_0": {
+            "bowl_0": {}
+        }
+    },
+    "cameras": {
+        "task_view": {
+            "position": [
+                -1.0,
+                -0.6,
+                2.4
+            ],
+            "lookat": [
+                0.3,
+                0.0,
+                0.7
+            ],
+            "fovy": 42,
+            "resolution": [
+                640,
+                480
+            ]
+        }
+    },
+    "initial_state": [
+        [
+            "on",
+            "boxed_drink_0",
+            "kitchen_island_shelf_2_boxed_drink_region"
+        ],
+        [
+            "on",
+            "bowl_0",
+            "kitchen_island_shelf_2_bowl_region"
+        ],
+        [
+            "on",
+            "robot",
+            "robot_task_init_region"
+        ]
+    ],
+    "goal_state": [
+        [
+            "on",
+            "boxed_drink_0",
+            "bowl_0_region"
+        ]
+    ],
+    "scene_overrides": {
+        "fixtures": {
+            "cupboard": {
+                "kitchen_island": {
+                    "shelf_heights": [
+                        0.25,
+                        0.37
+                    ]
+                }
+            }
+        }
+    }
+}

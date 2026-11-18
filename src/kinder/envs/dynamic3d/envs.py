@@ -51,6 +51,7 @@ from kinder.envs.dynamic3d.robots import (
 from kinder.envs.dynamic3d.robots.sprout_robot_env import (
     NUM_SPROUT_JOINTS,
     SPROUT_CONTROL_FREQUENCY,
+    SPROUT_SETTLE_STEPS,
 )
 from kinder.envs.dynamic3d.scene_loader import SceneLoader
 from kinder.envs.dynamic3d.tidybot_rewards import create_reward_calculator
@@ -129,6 +130,11 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
                 scene_config = json.load(f)
             # Merge scene_config into task_config recursively for nested dicts
             self._merge_configs(self.task_config, scene_config)
+            # A task can replace values of the shared scene, for example the height
+            # of a fixture for a robot with a different reach.
+            self._override_config(
+                self.task_config, self.task_config.pop("scene_overrides", {})
+            )
 
         # Apply scene configuration based on scene_bg parameter
         # scene_bg can be:
@@ -275,6 +281,20 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
             else:
                 # Key not in base_config, add it
                 base_config[key] = update_value
+
+    def _override_config(
+        self, base_config: dict[str, Any], override_config: dict[str, Any]
+    ) -> None:
+        """Recursively replace values of base_config with those of override_config.
+
+        Unlike _merge_configs, a list in override_config replaces the list in
+        base_config. Nested dictionaries are merged.
+        """
+        for key, value in override_config.items():
+            if isinstance(value, dict) and isinstance(base_config.get(key), dict):
+                self._override_config(base_config[key], value)
+            else:
+                base_config[key] = value
 
     def _apply_scene_bg(self, scene_bg: bool | str | None) -> None:
         """Apply scene background configuration based on scene_bg parameter.
@@ -900,10 +920,7 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
         self._robot_env.sim.initialize_dynamics()
 
         # step several times to get the initial state
-        action_shape = self.action_space.shape
-        assert action_shape is not None, "Action space must have a shape"
-        for _ in range(10):
-            self._robot_env.step(self._get_settle_action())
+        self._settle_scene()
 
         # Get object-centric observation
         self._current_state = self._get_object_centric_state()
@@ -924,6 +941,11 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
         self._reset_retries = 0
 
         return self._get_current_state(), {}
+
+    def _settle_scene(self) -> None:
+        """Step the simulation in reset() until the objects rest on their supports."""
+        for _ in range(10):
+            self._robot_env.step(self._get_settle_action())
 
     def _get_settle_action(self) -> Array:
         """The action that holds the robot still while the scene settles in reset()."""
@@ -1830,6 +1852,24 @@ class ObjectCentricSprout3DEnv(ObjectCentricRobotEnv):
     ) -> Space[Array]:
         """Create action space for the Sprout's control interface."""
         return cast(Space[Array], SproutRobotActionSpace())  # float32, as above
+
+    def _settle_scene(self) -> None:
+        """Let the objects settle while the robot is held in its standing pose.
+
+        The objects need about the same settle time as with the other robots (1 s).
+        Without a balance policy, the Sprout cannot stand still for that time, so its
+        pose is set again after each control step. After the reset, the robot is exactly
+        in the default standing pose, with no velocity.
+        """
+        robot_env = self._robot_env
+        assert isinstance(robot_env, SproutRobotEnv) and robot_env.sim is not None
+        base_qpos = robot_env.qpos["base"].copy()
+        for _ in range(SPROUT_SETTLE_STEPS):
+            robot_env.step(self._get_settle_action())
+            robot_env.hold_standing_pose(base_qpos)
+        robot_env.sim.forward()
+        # The episode of the command delay starts after the settle time.
+        robot_env.reset_command_delay()
 
     def _get_settle_action(self) -> Array:
         """Hold the default standing pose (a zero action is not a still pose)."""

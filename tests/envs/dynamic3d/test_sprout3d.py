@@ -22,7 +22,28 @@ needs_sprout_model = pytest.mark.skipif(
     not sprout_model_available(), reason="The Sprout model is not distributed"
 )
 
-SPROUT_ENV_IDS = ["kinder/SproutPickPlace3D-o1-v0", "kinder/SproutDynamo3D-o1-v0"]
+SPROUT_FAMILIES = {
+    "SproutDynamo3D": 1,
+    "SproutPickPlace3D": 1,
+    "SproutRearrange3D": 10,
+    "SproutShelf3D": 6,
+}
+
+
+def _sprout_env_ids() -> list[str]:
+    """All registered Sprout environments (none without the Sprout model)."""
+    kinder.register_all_environments()
+    return sorted(i for i in kinder.get_all_env_ids() if i.startswith("kinder/Sprout"))
+
+
+@needs_sprout_model
+def test_sprout_envs_are_registered():
+    """Each Sprout task family registers all its variants."""
+    env_ids = _sprout_env_ids()
+    for family, num_variants in SPROUT_FAMILIES.items():
+        variants = [i for i in env_ids if i.startswith(f"kinder/{family}-")]
+        assert len(variants) == num_variants, (family, variants)
+    assert len(env_ids) == sum(SPROUT_FAMILIES.values())
 
 
 def _motor_torque(target: float, position: float, velocity: float) -> float:
@@ -77,7 +98,7 @@ def test_sprout_model_parameters():
 
 
 @needs_sprout_model
-@pytest.mark.parametrize("env_id", SPROUT_ENV_IDS)
+@pytest.mark.parametrize("env_id", _sprout_env_ids())
 def test_sprout_env_reset_and_step(env_id):
     """The environment runs at 50 Hz with a 0.002 s timestep, and it is
     deterministic."""
@@ -91,9 +112,19 @@ def test_sprout_env_reset_and_step(env_id):
     assert robot_env.sim.model.mj_model.opt.timestep == SPROUT_SIMULATION_TIMESTEP
     assert robot_env.decimation == 10
 
-    # The robot stands in the default pose after reset.
+    # After reset, the robot stands in the default pose, at rest, and the goal does
+    # not hold. The objects rest on a support (they do not fall).
     standing_height = robot_env.model.standing_height
-    assert abs(robot_env.qpos["base"][2] - standing_height) < 0.05
+    assert np.isclose(robot_env.qpos["base"][2], standing_height)
+    assert np.allclose(
+        robot_env.qpos["joints"], robot_env.model.default_joint_positions
+    )
+    assert np.all(robot_env.qvel["joints"] == 0.0)
+    object_centric_env = env.unwrapped._object_centric_env
+    assert not object_centric_env._check_goals()
+    for mujoco_object in object_centric_env._objects:
+        linear_velocity, _ = robot_env.get_joint_vel(mujoco_object.joint_name)
+        assert np.abs(linear_velocity).max() < 0.05, mujoco_object.name
     time_before = robot_env.sim.data.mj_data.time
 
     hold = robot_env.model.default_joint_positions.astype(np.float32)

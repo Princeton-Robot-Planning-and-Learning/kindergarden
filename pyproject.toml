@@ -123,6 +123,8 @@ module = [
     # Optional; see requirements/dynamic3d_warp.txt.
     "mujoco_warp.*",
     "warp.*",
+    # Used by scripts/run_sprout_walk_policy.py only.
+    "onnxruntime.*",
 ]
 ignore_missing_imports = true
 

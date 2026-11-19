@@ -386,6 +386,11 @@ class Sprout3DBatchEnv:
         (self.obs_dim,) = self.observation_space.shape
         self.action_dim = NUM_SPROUT_JOINTS
 
+        # The contacts of the settled scene give the default buffer sizes. Read them
+        # now: the samples below put the objects above their supports.
+        settled_contacts = int(self._mj_data.ncon)
+        settled_constraints = int(self._mj_data.nefc)
+
         # Each world gets its own initial poses of the objects and the robot.
         initial_qpos = np.stack(
             [object_centric_env.sample_initial_qpos() for _ in range(num_worlds)]
@@ -401,9 +406,9 @@ class Sprout3DBatchEnv:
             self._mj_data,
             nworld=num_worlds,
             nconmax=(
-                nconmax if nconmax is not None else max(256, 2 * self._mj_data.ncon)
+                nconmax if nconmax is not None else max(256, 2 * settled_contacts)
             ),
-            njmax=njmax if njmax is not None else max(800, 2 * self._mj_data.nefc),
+            njmax=njmax if njmax is not None else max(800, 2 * settled_constraints),
         )
 
         def to_device(values: Any, dtype: Any) -> wp.array:

@@ -25,6 +25,7 @@ Example:
 import argparse
 import json
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import onnxruntime as ort
@@ -210,7 +211,7 @@ def check_task(
 
     Returns one report line and, with ``--video``, the video frames of world 0.
     """
-    video_kwargs = (
+    video_kwargs: dict[str, Any] = (
         {"scene_bg": True, "scene_render_camera": "task_view"} if args.video else {}
     )
     env = Sprout3DBatchEnv(

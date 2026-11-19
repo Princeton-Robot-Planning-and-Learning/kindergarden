@@ -23,10 +23,17 @@ needs_sprout_model = pytest.mark.skipif(
 )
 
 SPROUT_FAMILIES = {
+    "SproutBalanceBeam3D": 1,
+    "SproutConstrainedCupboard3D": 6,
     "SproutDynamo3D": 1,
     "SproutPickPlace3D": 1,
     "SproutRearrange3D": 10,
+    "SproutScoopPour3D": 6,
     "SproutShelf3D": 6,
+    "SproutSortClutteredBlocks3D": 4,
+    "SproutSweepIntoDrawer3D": 1,
+    "SproutSweepSimple3D": 6,
+    "SproutTossing3D": 2,
 }
 
 
@@ -125,6 +132,9 @@ def test_sprout_env_reset_and_step(env_id):
     for mujoco_object in object_centric_env._objects:
         linear_velocity, _ = robot_env.get_joint_vel(mujoco_object.joint_name)
         assert np.abs(linear_velocity).max() < 0.05, mujoco_object.name
+        # An object that the sampler could not place stays at the origin.
+        position, _ = robot_env.get_joint_pos_quat(mujoco_object.joint_name)
+        assert np.abs(position).max() > 0.02, mujoco_object.name
     time_before = robot_env.sim.data.mj_data.time
 
     hold = robot_env.model.default_joint_positions.astype(np.float32)

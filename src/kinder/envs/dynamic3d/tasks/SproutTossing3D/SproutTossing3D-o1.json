@@ -1,0 +1,251 @@
+{
+    "description": "A 3D task where an object that is initially on the floor must be transferred to the bin.",
+    "variant_description": "The variants require transferring different numbers of objects to the bin.",
+    "variant_specific_description": "Get one cube into the bin.",
+    "robots": {
+        "sprout": {
+            "robot": {}
+        }
+    },
+    "scene": "lab2",
+    "room_layout": "tossing_room.xml",
+    "regions": {
+        "bin_init_region": {
+            "target": "ground",
+            "ranges": [
+                [
+                    1.5,
+                    -0.8,
+                    1.9,
+                    0.8
+                ]
+            ],
+            "yaw_ranges": [
+                [
+                    0,
+                    0
+                ]
+            ]
+        },
+        "blocks_init_region": {
+            "target": "table_1",
+            "ranges": [
+                [
+                    -0.2,
+                    -0.2,
+                    -0.1,
+                    0.2
+                ]
+            ],
+            "yaw_ranges": [
+                [
+                    -45,
+                    45
+                ]
+            ]
+        },
+        "blocks_goal_region": {
+            "target": "bin_0",
+            "ranges": [
+                [
+                    -0.1,
+                    -0.1,
+                    0.0,
+                    0.1,
+                    0.1,
+                    0.1
+                ]
+            ],
+            "yaw_ranges": [
+                [
+                    0,
+                    0
+                ]
+            ],
+            "rgba": [
+                0.2,
+                0.6,
+                0.2,
+                0.4
+            ]
+        },
+        "barrier_init_region": {
+            "target": "ground",
+            "ranges": [
+                [
+                    1.1,
+                    0.0,
+                    0.1,
+                    1.1,
+                    0.0,
+                    0.1
+                ]
+            ],
+            "yaw_ranges": [
+                [
+                    0,
+                    0
+                ]
+            ]
+        },
+        "robot_init_region": {
+            "target": "ground",
+            "ranges": [
+                [
+                    -0.05,
+                    -0.05,
+                    0.05,
+                    0.05
+                ]
+            ],
+            "yaw_ranges": [
+                [
+                    -5,
+                    5
+                ]
+            ],
+            "rgba": [
+                0.2,
+                0.6,
+                0.2,
+                0.0
+            ]
+        },
+        "ground_table_init_region": {
+            "target": "ground",
+            "ranges": [
+                [
+                    0.5,
+                    0.0,
+                    0.0,
+                    0.5,
+                    0.0,
+                    0.0
+                ]
+            ],
+            "yaw_ranges": [
+                [
+                    0,
+                    0
+                ]
+            ]
+        }
+    },
+    "objects": {
+        "cube": {
+            "cube_0": {
+                "size": 0.025,
+                "rgba": [
+                    0.2,
+                    0.6,
+                    0.2,
+                    1
+                ],
+                "mass": 0.1
+            }
+        },
+        "bin": {
+            "bin_0": {
+                "length": 0.3,
+                "width": 0.3,
+                "height": 0.2,
+                "wall_thickness": 0.02,
+                "rgba": [
+                    0.8,
+                    0.8,
+                    0.0,
+                    1.0
+                ]
+            }
+        }
+    },
+    "fixtures": {
+        "fixedcuboid": {
+            "cuboid_barrier": {
+                "size": [
+                    0.03,
+                    5.0,
+                    0.1
+                ],
+                "rgba": [
+                    0.918,
+                    0.894,
+                    0.835,
+                    1.0
+                ],
+                "mass": 10.0,
+                "solref": [
+                    0.001,
+                    1
+                ],
+                "solimp": [
+                    0.99,
+                    0.99,
+                    0.001
+                ]
+            }
+        },
+        "table": {
+            "table_1": {
+                "shape": "rectangle",
+                "height": 0.65,
+                "thickness": 0.04,
+                "length": 0.5,
+                "width": 0.8
+            }
+        }
+    },
+    "cameras": {
+        "task_view": {
+            "position": [
+                -1.5,
+                -1.6,
+                2.0
+            ],
+            "lookat": [
+                1.0,
+                0.0,
+                0.4
+            ],
+            "fovy": 42,
+            "resolution": [
+                640,
+                480
+            ]
+        }
+    },
+    "initial_state": [
+        [
+            "on",
+            "table_1",
+            "ground_table_init_region"
+        ],
+        [
+            "on",
+            "robot",
+            "robot_init_region"
+        ],
+        [
+            "on",
+            "cube_0",
+            "blocks_init_region"
+        ],
+        [
+            "on",
+            "bin_0",
+            "bin_init_region"
+        ],
+        [
+            "on",
+            "cuboid_barrier",
+            "barrier_init_region"
+        ]
+    ],
+    "goal_state": [
+        [
+            "on",
+            "cube_0",
+            "blocks_goal_region"
+        ]
+    ]
+}

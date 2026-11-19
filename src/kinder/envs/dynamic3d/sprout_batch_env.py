@@ -303,6 +303,10 @@ class Sprout3DBatchEnv:
     The targets reach the motors after a random command delay, as in the RL tasks
     and in ``SproutRobotEnv``. Each world has its own delay.
 
+    MuJoCo Warp is not identical to CPU MuJoCo. A world and ``Sprout3DEnv`` drift
+    apart when the robot moves, and small objects that touch each other (a pile of
+    cubes) creep by a few millimeters per second, where they rest in CPU MuJoCo.
+
     Worlds do not reset by themselves. Call ``reset(mask)`` for the worlds that are
     done.
 

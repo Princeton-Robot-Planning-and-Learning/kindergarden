@@ -1,0 +1,258 @@
+{
+    "description": "A 3D task where the Sprout humanoid must balance multiple objects onto a balance beam.",
+    "variant_description": "This task has one variant with three objects to balance.",
+    "variant_specific_description": "Place three cubes onto a seesaw without tipping it past the balance threshold.",
+    "robots": {
+        "sprout": {
+            "robot": {}
+        }
+    },
+    "scene": "lab2",
+    "fixtures": {
+        "table": {
+            "table_1": {
+                "shape": "rectangle",
+                "height": 0.65,
+                "thickness": 0.04,
+                "length": 0.7,
+                "width": 1.0
+            }
+        }
+    },
+    "regions": {
+        "seesaw_init_region": {
+            "target": "table_1",
+            "ranges": [
+                [
+                    -0.14,
+                    0.2,
+                    -0.1,
+                    0.3
+                ]
+            ],
+            "yaw_ranges": [
+                [
+                    90,
+                    90
+                ]
+            ]
+        },
+        "beam_goal_region": {
+            "target": "seesaw_1",
+            "rgba": [
+                0.2,
+                0.6,
+                0.2,
+                0.4
+            ]
+        },
+        "blocks_init_region": {
+            "target": "table_1",
+            "ranges": [
+                [
+                    -0.28,
+                    -0.4,
+                    -0.18,
+                    -0.1
+                ]
+            ],
+            "yaw_ranges": [
+                [
+                    -45,
+                    45
+                ]
+            ]
+        },
+        "robot_init_region": {
+            "target": "ground",
+            "ranges": [
+                [
+                    -0.05,
+                    -0.05,
+                    0.05,
+                    0.05
+                ]
+            ],
+            "yaw_ranges": [
+                [
+                    -5,
+                    5
+                ]
+            ],
+            "rgba": [
+                0.2,
+                0.6,
+                0.2,
+                0.0
+            ]
+        },
+        "ground_table_init_region": {
+            "target": "ground",
+            "ranges": [
+                [
+                    0.6,
+                    0.0,
+                    0.0,
+                    0.6,
+                    0.0,
+                    0.0
+                ]
+            ],
+            "yaw_ranges": [
+                [
+                    0,
+                    0
+                ]
+            ]
+        }
+    },
+    "objects": {
+        "generated_seesaw": {
+            "seesaw_1": {
+                "beam_length": 0.36,
+                "beam_width": 0.07,
+                "beam_thickness": 0.01,
+                "beam_clearance": 0.0025,
+                "pivot_height": 0.04,
+                "pivot_width": 0.035,
+                "beam_rgba": [
+                    0.6,
+                    0.4,
+                    0.2,
+                    1
+                ],
+                "pivot_rgba": [
+                    0.3,
+                    0.3,
+                    0.3,
+                    1
+                ],
+                "beam_mass": 0.1,
+                "pivot_mass": 0.18,
+                "damping": 0.02,
+                "hinge_frictionloss": 0.03,
+                "hinge_stiffness": 1.2,
+                "hinge_range": [
+                    -0.7,
+                    0.7
+                ],
+                "beam_friction": [
+                    1.8,
+                    0.025,
+                    0.002
+                ],
+                "pivot_friction": [
+                    1.5,
+                    0.025,
+                    0.002
+                ]
+            }
+        },
+        "cube": {
+            "small_block_1": {
+                "size": 0.012,
+                "rgba": [
+                    0.2,
+                    0.6,
+                    0.2,
+                    1
+                ],
+                "mass": 0.05
+            },
+            "small_block_2": {
+                "size": 0.012,
+                "rgba": [
+                    0.2,
+                    0.6,
+                    0.2,
+                    1
+                ],
+                "mass": 0.05
+            },
+            "large_block": {
+                "size": 0.018,
+                "rgba": [
+                    0.6,
+                    0.2,
+                    0.2,
+                    1
+                ],
+                "mass": 0.1
+            }
+        }
+    },
+    "cameras": {
+        "task_view": {
+            "position": [
+                -0.9,
+                -1.2,
+                1.8
+            ],
+            "lookat": [
+                0.5,
+                0.0,
+                0.65
+            ],
+            "fovy": 42,
+            "resolution": [
+                640,
+                480
+            ]
+        }
+    },
+    "initial_state": [
+        [
+            "on",
+            "table_1",
+            "ground_table_init_region"
+        ],
+        [
+            "on",
+            "robot",
+            "robot_init_region"
+        ],
+        [
+            "on",
+            "seesaw_1",
+            "seesaw_init_region"
+        ],
+        [
+            "on",
+            "small_block_1",
+            "blocks_init_region"
+        ],
+        [
+            "on",
+            "small_block_2",
+            "blocks_init_region"
+        ],
+        [
+            "on",
+            "large_block",
+            "blocks_init_region"
+        ]
+    ],
+    "goal_state": [
+        "and",
+        [
+            "on",
+            "small_block_1",
+            "beam_goal_region"
+        ],
+        [
+            "on",
+            "small_block_2",
+            "beam_goal_region"
+        ],
+        [
+            "on",
+            "large_block",
+            "beam_goal_region"
+        ],
+        [
+            "balanced",
+            "seesaw_1",
+            5.0
+        ]
+    ]
+}

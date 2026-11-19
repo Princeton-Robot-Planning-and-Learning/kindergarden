@@ -58,8 +58,10 @@ prpl_kinematics is installed. To install the backend *alone*, use
 
 #### The MuJoCo Warp backend and the Sprout humanoid
 
-The Sprout environments (`SproutPickPlace3D`, `SproutDynamo3D`) use the Fauna Sprout
-humanoid. Its model is not distributed with this package: copy the model files into
+The Sprout environments (`SproutPickPlace3D`, `SproutShelf3D`, `SproutRearrange3D`, and
+the other `Sprout*3D` families) are the dynamic3d MuJoCo tasks with the Fauna Sprout
+humanoid. Their layouts are adapted to its size: objects start on low tables, and the
+support surfaces are higher. Pass `scene_bg=True` for the textured lab background. Its model is not distributed with this package: copy the model files into
 `src/kinder/envs/dynamic3d/models/fauna_sprout/` (see the README in that folder).
 Without the files, the Sprout environments are skipped at registration.
 

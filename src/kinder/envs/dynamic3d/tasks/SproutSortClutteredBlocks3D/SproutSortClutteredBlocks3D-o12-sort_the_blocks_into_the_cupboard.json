@@ -1,0 +1,660 @@
+{
+    "description": "A 3D task where the Sprout humanoid must sort a pile of objects into different receptacles based on their color. The objects may be initially in contact with each other.",
+    "variant_description": "The variants differ in the number of objects to sort and in the types of receptacles (a cupboard or bins).",
+    "variant_specific_description": "Sort 9 cubes and 3 cuboids by color into the matching shelves of a single cupboard.",
+    "robots": {
+        "sprout": {
+            "robot": {}
+        }
+    },
+    "scene": "lab2",
+    "fixtures": {
+        "cupboard": {
+            "cupboard_0": {
+                "length": 0.45,
+                "depth": 0.3,
+                "shelf_heights": [
+                    0.1,
+                    0.1,
+                    0.1,
+                    0.45
+                ],
+                "shelf_partitions": [
+                    [],
+                    [],
+                    [],
+                    [
+                        -0.075,
+                        0.075
+                    ]
+                ],
+                "side_and_back_open": false,
+                "rgba_cupboard_top_shelf": [
+                    0.714,
+                    0.69,
+                    0.624,
+                    1.0
+                ],
+                "rgba_cupboard_shelf": [
+                    0.714,
+                    0.69,
+                    0.624,
+                    1.0
+                ],
+                "rgba_cupboard_panel": [
+                    0.714,
+                    0.69,
+                    0.624,
+                    1.0
+                ],
+                "rgba_cupboard_leg": [
+                    0.714,
+                    0.69,
+                    0.624,
+                    1.0
+                ],
+                "rgba_cupboard_partition": [
+                    0.714,
+                    0.69,
+                    0.624,
+                    1.0
+                ],
+                "rgba_drawer_bottom": [
+                    0.714,
+                    0.69,
+                    0.624,
+                    1.0
+                ],
+                "rgba_drawer_wall": [
+                    0.714,
+                    0.69,
+                    0.624,
+                    1.0
+                ],
+                "rgba_drawer_face": [
+                    0.918,
+                    0.894,
+                    0.835,
+                    1.0
+                ],
+                "rgba_drawer_handle": [
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0
+                ]
+            }
+        },
+        "table": {
+            "stand_1": {
+                "shape": "rectangle",
+                "height": 0.5,
+                "thickness": 0.04,
+                "length": 0.4,
+                "width": 0.75
+            },
+            "table_left": {
+                "shape": "rectangle",
+                "height": 0.65,
+                "thickness": 0.04,
+                "length": 1.2,
+                "width": 0.6
+            },
+            "table_right": {
+                "shape": "rectangle",
+                "height": 0.65,
+                "thickness": 0.04,
+                "length": 1.2,
+                "width": 0.6
+            }
+        }
+    },
+    "regions": {
+        "cupboard_init_region": {
+            "target": "ground",
+            "ranges": [
+                [
+                    1.7,
+                    0.0,
+                    0.5,
+                    1.7,
+                    0.0,
+                    0.5
+                ]
+            ],
+            "yaw_ranges": [
+                [
+                    90,
+                    90
+                ]
+            ]
+        },
+        "robot_task_init_region": {
+            "target": "ground",
+            "ranges": [
+                [
+                    -0.1,
+                    -0.1,
+                    0.1,
+                    0.1
+                ]
+            ],
+            "yaw_ranges": [
+                [
+                    -5,
+                    5
+                ]
+            ]
+        },
+        "cupboard_0_shelf_0_red_goal": {
+            "target": "cupboard_0",
+            "shelf": 0,
+            "ranges": [
+                [
+                    -0.2,
+                    -0.13,
+                    0,
+                    0.2,
+                    0.13,
+                    0.02
+                ]
+            ],
+            "rgba": [
+                1.0,
+                0.0,
+                0.0,
+                0.3
+            ]
+        },
+        "cupboard_0_shelf_1_green_goal": {
+            "target": "cupboard_0",
+            "shelf": 1,
+            "ranges": [
+                [
+                    -0.2,
+                    -0.13,
+                    0.2,
+                    0.13
+                ]
+            ],
+            "rgba": [
+                0.0,
+                1.0,
+                0.0,
+                0.3
+            ]
+        },
+        "cupboard_0_shelf_2_blue_goal": {
+            "target": "cupboard_0",
+            "shelf": 2,
+            "ranges": [
+                [
+                    -0.2,
+                    -0.13,
+                    0.2,
+                    0.13
+                ]
+            ],
+            "rgba": [
+                0.0,
+                0.0,
+                1.0,
+                0.3
+            ]
+        },
+        "cupboard_0_shelf_3_red_partition_goal": {
+            "target": "cupboard_0",
+            "shelf": 3,
+            "partition": 0,
+            "ranges": [
+                [
+                    -0.05,
+                    -0.13,
+                    0.05,
+                    0.13
+                ]
+            ],
+            "rgba": [
+                1.0,
+                0.0,
+                0.0,
+                0.3
+            ]
+        },
+        "cupboard_0_shelf_3_green_partition_goal": {
+            "target": "cupboard_0",
+            "shelf": 3,
+            "partition": 1,
+            "ranges": [
+                [
+                    -0.05,
+                    -0.13,
+                    0.05,
+                    0.13
+                ]
+            ],
+            "rgba": [
+                0.0,
+                1.0,
+                0.0,
+                0.3
+            ]
+        },
+        "cupboard_0_shelf_3_blue_partition_goal": {
+            "target": "cupboard_0",
+            "shelf": 3,
+            "partition": 2,
+            "ranges": [
+                [
+                    -0.05,
+                    -0.13,
+                    0.05,
+                    0.13
+                ]
+            ],
+            "rgba": [
+                0.0,
+                0.0,
+                1.0,
+                0.3
+            ]
+        },
+        "ground_stand_init_region": {
+            "target": "ground",
+            "ranges": [
+                [
+                    1.7,
+                    0.0,
+                    0.0,
+                    1.7,
+                    0.0,
+                    0.0
+                ]
+            ],
+            "yaw_ranges": [
+                [
+                    0,
+                    0
+                ]
+            ]
+        },
+        "ground_table_left_init_region": {
+            "target": "ground",
+            "ranges": [
+                [
+                    0.8,
+                    0.9,
+                    0.0,
+                    0.8,
+                    0.9,
+                    0.0
+                ]
+            ],
+            "yaw_ranges": [
+                [
+                    0,
+                    0
+                ]
+            ]
+        },
+        "table_left_object_init_region": {
+            "target": "table_left",
+            "ranges": [
+                [
+                    -0.5,
+                    -0.2,
+                    0.5,
+                    0.2
+                ]
+            ],
+            "yaw_ranges": [
+                [
+                    80,
+                    100
+                ]
+            ]
+        },
+        "ground_table_right_init_region": {
+            "target": "ground",
+            "ranges": [
+                [
+                    0.8,
+                    -0.9,
+                    0.0,
+                    0.8,
+                    -0.9,
+                    0.0
+                ]
+            ],
+            "yaw_ranges": [
+                [
+                    0,
+                    0
+                ]
+            ]
+        },
+        "table_right_object_init_region": {
+            "target": "table_right",
+            "ranges": [
+                [
+                    -0.5,
+                    -0.2,
+                    0.5,
+                    0.2
+                ]
+            ],
+            "yaw_ranges": [
+                [
+                    80,
+                    100
+                ]
+            ]
+        }
+    },
+    "objects": {
+        "cuboid": {
+            "red_cuboid1": {
+                "size": [
+                    0.015,
+                    0.35,
+                    0.015
+                ],
+                "rgba": [
+                    0.5,
+                    0.1,
+                    0.1,
+                    1
+                ],
+                "mass": 0.1
+            },
+            "green_cuboid1": {
+                "size": [
+                    0.015,
+                    0.35,
+                    0.015
+                ],
+                "rgba": [
+                    0.1,
+                    0.5,
+                    0.1,
+                    1
+                ],
+                "mass": 0.1
+            },
+            "blue_cuboid1": {
+                "size": [
+                    0.015,
+                    0.35,
+                    0.015
+                ],
+                "rgba": [
+                    0.1,
+                    0.1,
+                    0.5,
+                    1
+                ],
+                "mass": 0.1
+            }
+        },
+        "cube": {
+            "red_cube1": {
+                "size": 0.02,
+                "rgba": [
+                    0.5,
+                    0.1,
+                    0.1,
+                    1
+                ],
+                "mass": 0.05
+            },
+            "red_cube2": {
+                "size": 0.02,
+                "rgba": [
+                    0.5,
+                    0.1,
+                    0.1,
+                    1
+                ],
+                "mass": 0.05
+            },
+            "red_cube3": {
+                "size": 0.02,
+                "rgba": [
+                    0.5,
+                    0.1,
+                    0.1,
+                    1
+                ],
+                "mass": 0.05
+            },
+            "green_cube1": {
+                "size": 0.02,
+                "rgba": [
+                    0.1,
+                    0.5,
+                    0.1,
+                    1
+                ],
+                "mass": 0.05
+            },
+            "green_cube2": {
+                "size": 0.02,
+                "rgba": [
+                    0.1,
+                    0.5,
+                    0.1,
+                    1
+                ],
+                "mass": 0.05
+            },
+            "green_cube3": {
+                "size": 0.02,
+                "rgba": [
+                    0.1,
+                    0.5,
+                    0.1,
+                    1
+                ],
+                "mass": 0.05
+            },
+            "blue_cube1": {
+                "size": 0.02,
+                "rgba": [
+                    0.1,
+                    0.1,
+                    0.5,
+                    1
+                ],
+                "mass": 0.05
+            },
+            "blue_cube2": {
+                "size": 0.02,
+                "rgba": [
+                    0.1,
+                    0.1,
+                    0.5,
+                    1
+                ],
+                "mass": 0.05
+            },
+            "blue_cube3": {
+                "size": 0.02,
+                "rgba": [
+                    0.1,
+                    0.1,
+                    0.5,
+                    1
+                ],
+                "mass": 0.05
+            }
+        }
+    },
+    "cameras": {
+        "task_view": {
+            "position": [
+                -1.6,
+                -1.8,
+                2.3
+            ],
+            "lookat": [
+                1.0,
+                0.0,
+                0.5
+            ],
+            "fovy": 42,
+            "resolution": [
+                640,
+                480
+            ]
+        }
+    },
+    "initial_state": [
+        [
+            "on",
+            "table_right",
+            "ground_table_right_init_region"
+        ],
+        [
+            "on",
+            "table_left",
+            "ground_table_left_init_region"
+        ],
+        [
+            "on",
+            "stand_1",
+            "ground_stand_init_region"
+        ],
+        [
+            "on",
+            "cupboard_0",
+            "cupboard_init_region"
+        ],
+        [
+            "in",
+            "red_cuboid1",
+            "table_left_object_init_region"
+        ],
+        [
+            "in",
+            "green_cuboid1",
+            "table_right_object_init_region"
+        ],
+        [
+            "in",
+            "blue_cuboid1",
+            "table_left_object_init_region"
+        ],
+        [
+            "in",
+            "red_cube1",
+            "table_right_object_init_region"
+        ],
+        [
+            "in",
+            "red_cube2",
+            "table_left_object_init_region"
+        ],
+        [
+            "in",
+            "red_cube3",
+            "table_right_object_init_region"
+        ],
+        [
+            "in",
+            "green_cube1",
+            "table_left_object_init_region"
+        ],
+        [
+            "in",
+            "green_cube2",
+            "table_right_object_init_region"
+        ],
+        [
+            "in",
+            "green_cube3",
+            "table_left_object_init_region"
+        ],
+        [
+            "in",
+            "blue_cube1",
+            "table_right_object_init_region"
+        ],
+        [
+            "in",
+            "blue_cube2",
+            "table_left_object_init_region"
+        ],
+        [
+            "in",
+            "blue_cube3",
+            "table_right_object_init_region"
+        ],
+        [
+            "on",
+            "robot",
+            "robot_task_init_region"
+        ]
+    ],
+    "goal_state": [
+        [
+            "on",
+            "red_cuboid1",
+            "cupboard_0_shelf_3_red_partition_goal"
+        ],
+        [
+            "on",
+            "green_cuboid1",
+            "cupboard_0_shelf_3_green_partition_goal"
+        ],
+        [
+            "on",
+            "blue_cuboid1",
+            "cupboard_0_shelf_3_blue_partition_goal"
+        ],
+        [
+            "on",
+            "red_cube1",
+            "cupboard_0_shelf_0_red_goal"
+        ],
+        [
+            "on",
+            "red_cube2",
+            "cupboard_0_shelf_0_red_goal"
+        ],
+        [
+            "on",
+            "red_cube3",
+            "cupboard_0_shelf_0_red_goal"
+        ],
+        [
+            "on",
+            "green_cube1",
+            "cupboard_0_shelf_1_green_goal"
+        ],
+        [
+            "on",
+            "green_cube2",
+            "cupboard_0_shelf_1_green_goal"
+        ],
+        [
+            "on",
+            "green_cube3",
+            "cupboard_0_shelf_1_green_goal"
+        ],
+        [
+            "on",
+            "blue_cube1",
+            "cupboard_0_shelf_2_blue_goal"
+        ],
+        [
+            "on",
+            "blue_cube2",
+            "cupboard_0_shelf_2_blue_goal"
+        ],
+        [
+            "on",
+            "blue_cube3",
+            "cupboard_0_shelf_2_blue_goal"
+        ]
+    ]
+}

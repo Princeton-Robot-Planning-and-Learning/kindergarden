@@ -9,8 +9,14 @@ The script is also a check of the scenarios. In each task, the robot stands, wal
 backward, walks forward again, and stands. The report gives the number of worlds
 where the robot fell, the distance that it walked, and the motion of the objects.
 
+With ``--video``, the script also writes one video with a tile for each task (world
+0, with the lab background). This needs the ``imageio`` and ``imageio-ffmpeg``
+packages.
+
 Example:
     python scripts/run_sprout_walk_policy.py --policy-dir <sdk>/onnx_motor_control/model
+    python scripts/run_sprout_walk_policy.py --policy-dir <dir> --video grid.mp4 \\
+        --tasks PickPlace3D-o1,Shelf3D-o4
 """
 
 # Warp functions have no type annotations.
@@ -23,6 +29,7 @@ from pathlib import Path
 import numpy as np
 import onnxruntime as ort
 import warp as wp
+from PIL import Image, ImageDraw
 
 import kinder
 from kinder.envs.dynamic3d.robots.sprout_robot_env import load_sprout_model
@@ -58,6 +65,9 @@ CONTROL_JOINTS = [
     "left_wrist_pitch_joint",
     "right_wrist_pitch_joint",
 ]
+TILE_SIZE = (480, 360)  # width and height of one task in the video
+VIDEO_FPS = 25  # one frame for each second control step
+
 # Velocity commands (m/s, m/s, rad/s) that the joystick axes -1 and 1 give.
 COMMAND_LIMITS = {"vx": (-0.5, 1.0), "vy": (-0.5, 0.5), "wz": (-1.25, 1.25)}
 
@@ -162,9 +172,52 @@ def robot_columns(env: Sprout3DBatchEnv) -> dict[str, list[int]]:
     }
 
 
-def check_task(task_path: Path, policy_dir: Path, args: argparse.Namespace) -> str:
-    """Run the stand and walk sequence in one task and return one report line."""
-    env = Sprout3DBatchEnv(str(task_path), num_worlds=args.num_worlds, seed=args.seed)
+def video_tile(image: np.ndarray, label: str) -> np.ndarray:
+    """Scale a rendered image to the tile size and write the label on it."""
+    tile = Image.fromarray(image).resize(TILE_SIZE)
+    draw = ImageDraw.Draw(tile)
+    draw.rectangle((0, 0, TILE_SIZE[0], 18), fill=(20, 20, 20))
+    draw.text((6, 3), label, fill=(255, 255, 255))
+    return np.asarray(tile)
+
+
+def write_grid_video(
+    path: Path, tiles: list[list[np.ndarray]], num_columns: int
+) -> None:
+    """Write one video with the frames of all tasks side by side."""
+    import imageio  # pylint: disable=import-outside-toplevel
+
+    num_rows = -(-len(tiles) // num_columns)
+    width, height = TILE_SIZE
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with imageio.get_writer(path, fps=VIDEO_FPS, macro_block_size=8) as writer:
+        for index in range(max(len(frames) for frames in tiles)):
+            grid = np.full((num_rows * height, num_columns * width, 3), 255, np.uint8)
+            for k, frames in enumerate(tiles):
+                row, column = divmod(k, num_columns)
+                frame = frames[min(index, len(frames) - 1)]
+                grid[
+                    row * height : (row + 1) * height,
+                    column * width : (column + 1) * width,
+                ] = frame
+            writer.append_data(grid)
+
+
+def check_task(
+    task_path: Path, policy_dir: Path, args: argparse.Namespace
+) -> tuple[str, list[np.ndarray]]:
+    """Run the stand and walk sequence in one task.
+
+    Returns one report line and, with ``--video``, the video frames of world 0.
+    """
+    video_kwargs = (
+        {"scene_bg": True, "scene_render_camera": "task_view"} if args.video else {}
+    )
+    env = Sprout3DBatchEnv(
+        str(task_path), num_worlds=args.num_worlds, seed=args.seed, **video_kwargs
+    )
+    label = task_path.stem.removeprefix("Sprout").replace("_", " ")[:60]
+    frames: list[np.ndarray] = []
     policy = WalkPolicy(policy_dir, args.num_worlds)
     columns = robot_columns(env)
     obs = env.reset().numpy()
@@ -181,7 +234,7 @@ def check_task(task_path: Path, policy_dir: Path, args: argparse.Namespace) -> s
     ]
     fallen = np.zeros(args.num_worlds, dtype=bool)
     for phase, command, seconds in phases:
-        for _ in range(int(round(seconds / env.step_dt))):
+        for step in range(int(round(seconds / env.step_dt))):
             action = policy(
                 obs[:, columns["quat"]],
                 obs[:, columns["gyro"]],
@@ -192,6 +245,8 @@ def check_task(task_path: Path, policy_dir: Path, args: argparse.Namespace) -> s
             obs_wp, _, _, _, info = env.step(action)
             obs = obs_wp.numpy()
             fallen |= info["fallen"].numpy()
+            if args.video and step % 2 == 0:
+                frames.append(video_tile(env.render(0), f"{label}: {phase}"))
         fallen_after[phase] = int(fallen.sum())
         if phase == "back":
             back_distance = np.linalg.norm(obs[:, columns["xy"]] - start_xy, axis=1)
@@ -204,7 +259,7 @@ def check_task(task_path: Path, policy_dir: Path, args: argparse.Namespace) -> s
     usage = env.buffer_use()
     env.close()
     upright = ~fallen
-    return (
+    line = (
         f"{task_path.stem.removeprefix('Sprout')[:44]:44} "
         f"fell: stand {fallen_after['stand']:2d} back {fallen_after['back']:2d} "
         f"forward {fallen_after['forward']:2d} stop {fallen_after['stop']:2d} "
@@ -215,6 +270,7 @@ def check_task(task_path: Path, policy_dir: Path, args: argparse.Namespace) -> s
         f"{gain_error:.1f} | constraints {usage['constraints']}/"
         f"{usage['constraints_limit']}"
     )
+    return line, frames
 
 
 def main() -> None:
@@ -229,15 +285,23 @@ def main() -> None:
     parser.add_argument("--speed", type=float, default=0.3, help="walk speed (m/s)")
     parser.add_argument("--stand-seconds", type=float, default=4.0)
     parser.add_argument("--walk-seconds", type=float, default=3.0)
+    parser.add_argument("--video", type=Path, help="write a grid video to this file")
+    parser.add_argument("--video-columns", type=int, default=4)
     args = parser.parse_args()
     wp.config.quiet = True
 
     tasks_dir = Path(kinder.__file__).parent / "envs" / "dynamic3d" / "tasks"
     keys = [k for k in args.tasks.split(",") if k]
+    tiles: list[list[np.ndarray]] = []
     for task_path in sorted(tasks_dir.glob("Sprout*/*.json")):
         if keys and not any(key in task_path.stem for key in keys):
             continue
-        print(check_task(task_path, args.policy_dir, args), flush=True)
+        line, frames = check_task(task_path, args.policy_dir, args)
+        print(line, flush=True)
+        tiles.append(frames)
+    if args.video and tiles:
+        write_grid_video(args.video, tiles, args.video_columns)
+        print(f"wrote {args.video}")
 
 
 if __name__ == "__main__":

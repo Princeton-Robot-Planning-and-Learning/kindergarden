@@ -11,6 +11,10 @@
 # The other dynamic3d (MuJoCo) environments also run in this install, but their
 # trajectories differ from those on MuJoCo 3.3: recorded demos do not replay exactly.
 #
+# The Sprout environments use MuJoCo 4 (tested on 4.0.1). MuJoCo 3.11 also works: it
+# is the version that mjlab 1.6 needs, for a comparison in one install. MuJoCo 4.0.0
+# is excluded because its Newton solver gives wrong results with sparse Jacobians.
+#
 # A CUDA GPU is recommended. MuJoCo Warp also runs on the CPU, but slowly.
 gymnasium
 matplotlib
@@ -22,8 +26,8 @@ scipy>=1.14.0
 relational_structs>=0.0.1
 prpl_utils>=0.0.1
 tomsgeoms2d>=0.0.1
-mujoco>=3.11.0
-mujoco-warp>=3.11.0
+mujoco>=3.11.0,!=4.0.0
+mujoco-warp>=3.11.0,!=4.0.0
 warp-lang>=1.19.0
 opencv-python>=4.9.0
 gdown>=6.0.0

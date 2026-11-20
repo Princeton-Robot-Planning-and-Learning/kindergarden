@@ -67,7 +67,8 @@ Without the files, the Sprout environments are skipped at registration.
 
 `Sprout3DBatchEnv` runs many copies of a Sprout task in parallel on the GPU with
 [MuJoCo Warp](https://github.com/google-deepmind/mujoco_warp). MuJoCo Warp needs a
-newer MuJoCo than the base install, so it has its own requirements file:
+newer MuJoCo than the base install (MuJoCo 4, tested on 4.0.1), so it has its own
+requirements file:
 
 ```bash
 pip install --no-deps kindergarden

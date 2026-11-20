@@ -289,8 +289,8 @@ def test_other_task_families(task):
     for world in range(3):
         assert env.observation_space.contains(obs[world])
     # The robot stands at rest in the default pose, and the objects do not travel.
-    # (In MuJoCo Warp, small objects that touch each other keep a small spin, so the
-    # angular velocities are not checked.)
+    # (An object can still fall from a pile after the settle time, as in CPU MuJoCo,
+    # so the angular velocities are not checked.)
     space = env.observation_space
     names = [
         feature
@@ -311,3 +311,25 @@ def test_other_task_families(task):
     assert usage["contacts"] < usage["contacts_limit"]
     assert usage["constraints"] < usage["constraints_limit"]
     env.close()
+
+
+def test_small_cubes_rest_in_bin():
+    """The small cubes of the scoop task rest in their bin after the reset.
+
+    With the general convex collider of MuJoCo Warp, a box on a flat surface has no
+    stiffness against tilt, and a part of these cubes sank through the bin.
+    """
+    task = "SproutScoopPour3D/SproutScoopPour3D-o10.json"
+    env = Sprout3DBatchEnv(str(TASKS_DIR / task), num_worlds=4, seed=0)
+    env.reset()
+    for world in range(4):
+        state = env.get_object_centric_state(world)
+        objects = {obj.name: obj for obj in state}
+        bin_z = state.get(objects["bin_yellow_0"], "z")
+        for name, obj in objects.items():
+            if not name.startswith("cube_"):
+                continue
+            # The floor of the bin is 0.02 m thick, and its walls are 0.07 m high.
+            assert 0.02 < state.get(obj, "z") - bin_z < 0.07
+            velocity = [state.get(obj, f"v{axis}") for axis in "xyz"]
+            assert np.abs(velocity).max() < 0.01

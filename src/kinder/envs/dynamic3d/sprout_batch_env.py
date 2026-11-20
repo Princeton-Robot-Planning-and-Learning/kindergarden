@@ -20,6 +20,7 @@ This module needs ``mujoco_warp``. See ``requirements/dynamic3d_warp.txt``.
 
 from typing import Any
 
+import mujoco
 import mujoco_warp as mjw
 import numpy as np
 import warp as wp
@@ -303,9 +304,9 @@ class Sprout3DBatchEnv:
     The targets reach the motors after a random command delay, as in the RL tasks
     and in ``SproutRobotEnv``. Each world has its own delay.
 
-    MuJoCo Warp is not identical to CPU MuJoCo. A world and ``Sprout3DEnv`` drift
-    apart when the robot moves, and small objects that touch each other (a pile of
-    cubes) creep by a few millimeters per second, where they rest in CPU MuJoCo.
+    MuJoCo Warp is not identical to CPU MuJoCo: a world and ``Sprout3DEnv`` drift
+    apart when the robot moves. Objects at rest agree, because the worlds use the
+    box collider of CPU MuJoCo (see the note at ``put_model``).
 
     Worlds do not reset by themselves. Call ``reset(mask)`` for the worlds that are
     done.
@@ -400,7 +401,17 @@ class Sprout3DBatchEnv:
         # stop the process, so the defaults leave a margin over the settled scene (a
         # robot that falls makes more contacts). The GPU memory grows with
         # num_worlds * njmax, so a large scene permits fewer worlds.
+        #
+        # For two boxes, MuJoCo Warp uses its general convex collider by default.
+        # That collider gives all contact points of a face the same depth, so a box
+        # on a flat surface has no stiffness against tilt: small cubes rock and sink
+        # into their support. This flag selects the box collider of CPU MuJoCo. It
+        # is set for put_model only, because in CPU MuJoCo it has a different effect.
+        native_ccd_off = int(mujoco.mjtDisableBit.mjDSBL_NATIVECCD)
+        disable_flags = self._mj_model.opt.disableflags
+        self._mj_model.opt.disableflags = disable_flags | native_ccd_off
         self._model = mjw.put_model(self._mj_model)
+        self._mj_model.opt.disableflags = disable_flags
         self._data = mjw.put_data(
             self._mj_model,
             self._mj_data,

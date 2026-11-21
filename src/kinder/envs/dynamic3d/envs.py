@@ -54,6 +54,10 @@ from kinder.envs.dynamic3d.robots.sprout_robot_env import (
     SPROUT_SETTLE_STEPS,
 )
 from kinder.envs.dynamic3d.scene_loader import SceneLoader
+from kinder.envs.dynamic3d.sprout_render import (
+    SproutFilamentRenderer,
+    filament_available,
+)
 from kinder.envs.dynamic3d.tidybot_rewards import create_reward_calculator
 from kinder.envs.dynamic3d.utils import (
     compute_camera_euler,
@@ -1496,7 +1500,8 @@ The robot can control:
 
     def _create_obs_markdown_description(self) -> str:
         """Create observation space description."""
-        return """Observation includes:
+        return\
+               """Observation includes:
 - Robot state: base pose, arm position/orientation, gripper state
 - Object states: positions and orientations of all objects
 - Camera images: RGB images from base and wrist cameras
@@ -1505,7 +1510,8 @@ The robot can control:
 
     def _create_action_markdown_description(self) -> str:
         """Create action space description."""
-        return """Actions control:
+        return\
+               """Actions control:
 - base_pose: [x, y, theta] - Mobile base position and orientation
 - arm_pos: [x, y, z] - End effector position in world coordinates
 - arm_quat: [x, y, z, w] - End effector orientation as quaternion
@@ -1529,7 +1535,8 @@ The robot can control:
                 "The episode terminates when all objects are placed at their "
                 "respective targets.\n"
             )
-        return """Reward function depends on the specific task:
+        return\
+               """Reward function depends on the specific task:
 - Object stacking: Reward for successfully stacking objects
 - Drawer/cabinet tasks: Reward for opening/closing and placing objects
 - General manipulation: Reward for successful pick-and-place operations
@@ -1539,7 +1546,8 @@ Currently returns a small negative reward (-0.01) per timestep to encourage expl
 
     def _create_references_markdown_description(self) -> str:
         """Create references description."""
-        return """TidyBot++: An Open-Source Holonomic Mobile Manipulator.
+        return\
+               """TidyBot++: An Open-Source Holonomic Mobile Manipulator.
 
                for Robot Learning
                - Jimmy Wu, William Chong, Robert Holmberg, Aaditya Prasad, Yihuai Gao,
@@ -1642,7 +1650,8 @@ The robot can control:
 
     def _create_obs_markdown_description(self) -> str:
         """Create observation space description."""
-        return """Observation includes:
+        return\
+               """Observation includes:
 - Robot state: base pose, arm position/orientation, gripper state
 - Object states: positions and orientations of all objects
 - Camera images: RGB images from base and wrist cameras
@@ -1651,7 +1660,8 @@ The robot can control:
 
     def _create_action_markdown_description(self) -> str:
         """Create action space description."""
-        return """Actions control:
+        return\
+               """Actions control:
 - base_pose: [x, y, theta] - Mobile base position and orientation
 - arm_pos: [x, y, z] - End effector position in world coordinates
 - arm_quat: [x, y, z, w] - End effector orientation as quaternion
@@ -1782,7 +1792,8 @@ The robot can control:
 
     def _create_obs_markdown_description(self) -> str:
         """Create observation space description."""
-        return """Observation includes:
+        return\
+               """Observation includes:
 - Robot state: base mount pose, arm joint positions/velocities, gripper state
 - Object states: positions and orientations of all objects
 - Camera images: RGB images from scene cameras
@@ -1790,7 +1801,8 @@ The robot can control:
 
     def _create_action_markdown_description(self) -> str:
         """Create action space description."""
-        return """Actions control:
+        return\
+               """Actions control:
 - arm_joints: 7 arm joint position targets (radians) or deltas
 - gripper_pos: [pos] - Gripper open/close position (0=open, 1=closed)
 """
@@ -1806,7 +1818,8 @@ The robot can control:
 
     def _create_references_markdown_description(self) -> str:
         """Create references description."""
-        return """Franka FR3: https://franka.de/products/franka-research-3
+        return\
+               """Franka FR3: https://franka.de/products/franka-research-3
 Model: MuJoCo Menagerie (franka_fr3, robotiq_2f85 via TidyBot)
 https://github.com/google-deepmind/mujoco_menagerie
 """
@@ -1826,6 +1839,7 @@ class ObjectCentricSprout3DEnv(ObjectCentricRobotEnv):
         ),
         command_delay_steps: tuple[int, int] | None = None,
         command_delay_update_period: int | None = None,
+        renderer: str = "filament",
         **kwargs,
     ) -> None:
         """
@@ -1835,8 +1849,16 @@ class ObjectCentricSprout3DEnv(ObjectCentricRobotEnv):
                 steps; (0, 0) gives no delay. Default: the values of the RL tasks.
             command_delay_update_period: Physics steps between new random delays.
                 Default: the value of the RL tasks.
+            renderer: The renderer of render(). "filament" is the physically-based
+                renderer of MuJoCo 4, with shadows (see sprout_render). "classic" is
+                the renderer of the other dynamic3d environments. With a MuJoCo
+                that does not have Filament, render() uses the classic renderer.
             **kwargs: Passed to ObjectCentricRobotEnv.
         """
+        assert renderer in ("filament", "classic"), f"Unknown renderer: {renderer}"
+        self._use_filament = renderer == "filament" and filament_available()
+        self._filament_renderer: SproutFilamentRenderer | None = None
+        self._filament_scene_xml: str | None = None
         super().__init__(config, **kwargs)
         assert isinstance(self._robot_env, SproutRobotEnv)
         if command_delay_steps is not None:
@@ -1852,6 +1874,32 @@ class ObjectCentricSprout3DEnv(ObjectCentricRobotEnv):
     ) -> Space[Array]:
         """Create action space for the Sprout's control interface."""
         return cast(Space[Array], SproutRobotActionSpace())  # float32, as above
+
+    def render(self) -> NDArray[np.uint8]:  # type: ignore
+        """Render the task camera, with the Filament renderer by default."""
+        if not self._use_filament or self.render_mode != "rgb_array":
+            return super().render()
+        robot_env = self._robot_env
+        assert isinstance(robot_env, SproutRobotEnv) and robot_env.sim is not None
+        # A reset makes a new scene, and the renderer needs a copy of that scene.
+        if self._filament_scene_xml is not robot_env.scene_xml:
+            self._filament_renderer = SproutFilamentRenderer(
+                robot_env.scene_xml, light_target=(*robot_env.qpos["base"][:2], 0.0)
+            )
+            self._filament_scene_xml = robot_env.scene_xml
+        assert self._filament_renderer is not None
+        return self._filament_renderer.render(
+            robot_env.sim.data.mj_data,
+            self._render_camera_name,
+            robot_env.camera_width,
+            robot_env.camera_height,
+        )
+
+    def close(self) -> None:
+        """Close the environment."""
+        if self._filament_renderer is not None:
+            self._filament_renderer.close()
+        super().close()
 
     def _settle_scene(self) -> None:
         """Let the objects settle while the robot is held in its standing pose.
@@ -1989,7 +2037,8 @@ The robot model is not distributed with this package. See
 
     def _create_obs_markdown_description(self) -> str:
         """Create observation space description."""
-        return """Observation includes:
+        return\
+               """Observation includes:
 - Robot state: floating base pose and velocity, joint positions and velocities
 - Object states: positions and orientations of all objects
 """
@@ -2004,9 +2053,11 @@ delay (by default 5 to 20 physics steps, as in the RL tasks).
 
     def _create_reward_markdown_description(self) -> str:
         """Create reward description."""
-        return """The reward is -1 for each step until the goal is reached."""
+        return\
+               """The reward is -1 for each step until the goal is reached."""
 
     def _create_references_markdown_description(self) -> str:
         """Create references description."""
-        return """Fauna Robotics Sprout: https://faunarobotics.com/
+        return\
+               """Fauna Robotics Sprout: https://faunarobotics.com/
 """

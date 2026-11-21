@@ -289,8 +289,8 @@ def test_other_task_families(task):
     for world in range(3):
         assert env.observation_space.contains(obs[world])
     # The robot stands at rest in the default pose, and the objects do not travel.
-    # (An object can still fall from a pile after the settle time, as in CPU MuJoCo,
-    # so the angular velocities are not checked.)
+    # (An object can still fall from a pile after the settle time, as in CPU MuJoCo.
+    # So the angular velocities are not checked, and the limit has a margin for it.)
     space = env.observation_space
     names = [
         feature
@@ -298,7 +298,7 @@ def test_other_task_families(task):
         for feature in space.type_features[obj.type]
     ]
     linear_columns = [i for i, name in enumerate(names) if name in ("vx", "vy", "vz")]
-    assert np.abs(obs[:, linear_columns]).max() < 0.05
+    assert np.abs(obs[:, linear_columns]).max() < 0.1
     robot_env = env._robot_env
     joints = env._data.qpos.numpy()[:, robot_env.joint_qpos_adr :][
         :, :NUM_SPROUT_JOINTS

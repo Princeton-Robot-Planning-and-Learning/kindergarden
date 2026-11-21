@@ -357,6 +357,8 @@ class SproutRobotEnv(RobotEnv):
         self.name = name
         self.act_delta = act_delta
         self.model = load_sprout_model()
+        # The XML of the present scene (see _create_sim).
+        self.scene_xml = ""
 
         # Number of physics steps in one control step.
         self.decimation = int(
@@ -398,6 +400,8 @@ class SproutRobotEnv(RobotEnv):
         """Create the simulation with the physics settings of the Sprout RL tasks."""
         super()._create_sim(xml_string, defer_dynamics=defer_dynamics)
         assert self.sim is not None
+        # The Filament renderer compiles its own copy of the scene (see sprout_render).
+        self.scene_xml = xml_string
         # pylint: disable=no-member
         opt = self.sim.model.mj_model.opt
         opt.timestep = SPROUT_SIMULATION_TIMESTEP

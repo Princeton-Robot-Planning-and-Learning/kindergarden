@@ -6,6 +6,7 @@ model files are not in ``kinder/envs/dynamic3d/models/fauna_sprout``.
 
 # pylint: disable=protected-access
 
+import mujoco
 import numpy as np
 import pytest
 
@@ -16,6 +17,10 @@ from kinder.envs.dynamic3d.robots.sprout_robot_env import (
     dc_motor_torque,
     load_sprout_model,
     sprout_model_available,
+)
+from kinder.envs.dynamic3d.sprout_render import (
+    filament_available,
+    make_render_xml,
 )
 
 needs_sprout_model = pytest.mark.skipif(
@@ -259,3 +264,61 @@ def test_sprout_dynamo_chair_mass():
         else:
             assert np.isclose(mass, expected_mass)
         env.close()
+
+
+def _image_difference(image1, image2) -> float:
+    """Mean absolute difference of two images, in color levels (0 to 255)."""
+    return float(np.abs(image1.astype(int) - image2.astype(int)).mean())
+
+
+@needs_sprout_model
+def test_sprout_render_default_and_classic():
+    """Render() gives an image with each renderer, and the default is Filament."""
+    kinder.register_all_environments()
+    env_id = "kinder/SproutShelf3D-o1-v0"
+    images = {}
+    for renderer in ("filament", "classic"):
+        env = kinder.make(
+            env_id, render_mode="rgb_array", scene_bg=True, renderer=renderer
+        )
+        env.reset(seed=0)
+        images[renderer] = env.render()
+        assert images[renderer].shape == (480, 640, 3)
+        assert images[renderer].dtype == np.uint8
+        if renderer == "filament":
+            # The default is the same as renderer="filament". Two environments can
+            # render in turns. (Filament images are not equal to the last bit.)
+            default_env = kinder.make(env_id, render_mode="rgb_array", scene_bg=True)
+            default_env.reset(seed=0)
+            assert _image_difference(default_env.render(), images[renderer]) < 1.0
+            assert _image_difference(env.render(), images[renderer]) < 1.0
+            default_env.close()
+            # A reset makes a new scene, and the image shows the new state.
+            env.reset(seed=1)
+            assert _image_difference(env.render(), images[renderer]) > 1.0
+        env.close()
+    # Without Filament (MuJoCo 3), the two renderers are the classic renderer.
+    difference = _image_difference(images["filament"], images["classic"])
+    assert (difference > 5.0) == filament_available()
+
+
+@needs_sprout_model
+@pytest.mark.skipif(not filament_available(), reason="Needs MuJoCo 4")
+def test_sprout_render_scene_copy():
+    """The render copy of a scene has the same bodies and joints as the scene."""
+    kinder.register_all_environments()
+    env = kinder.make("kinder/SproutSweepIntoDrawer3D-o5-v0", scene_bg=True)
+    env.reset(seed=0)
+    robot_env = env.unwrapped._object_centric_env._robot_env
+    model = robot_env.sim.model.mj_model
+    render_xml = make_render_xml(robot_env.scene_xml, light_target=(0.0, 0.0, 0.0))
+    # pylint: disable-next=no-member
+    render_model = mujoco.MjModel.from_xml_string(render_xml)
+    assert render_model.nq == model.nq
+    assert render_model.nbody == model.nbody
+    assert render_model.ngeom == model.ngeom
+    # One light casts shadows, and the invisible region markers are removed.
+    assert int(render_model.light_castshadow.sum()) == 1
+    assert render_model.nsite < model.nsite
+    assert np.all(render_model.site_rgba[:, 3] > 0)
+    env.close()

@@ -65,6 +65,11 @@ support surfaces are higher. Pass `scene_bg=True` for the textured lab backgroun
 `src/kinder/envs/dynamic3d/models/fauna_sprout/` (see the README in that folder).
 Without the files, the Sprout environments are skipped at registration.
 
+With MuJoCo 4, `render()` of the Sprout environments uses the Filament renderer:
+physically-based materials, soft shadows, and the declared colors of the scene. Pass
+`renderer="classic"` for the renderer of the other environments. With an older
+MuJoCo, `render()` uses the classic renderer.
+
 `Sprout3DBatchEnv` runs many copies of a Sprout task in parallel on the GPU with
 [MuJoCo Warp](https://github.com/google-deepmind/mujoco_warp). MuJoCo Warp needs a
 newer MuJoCo than the base install (MuJoCo 4, tested on 4.0.1), so it has its own

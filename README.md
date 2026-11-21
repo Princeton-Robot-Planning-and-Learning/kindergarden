@@ -58,6 +58,9 @@ prpl_kinematics is installed. To install the backend *alone*, use
 
 #### The MuJoCo Warp backend and the Sprout humanoid
 
+See [docs/sprout.md](docs/sprout.md) for the full page: installation, usage, the task
+list, videos of the robot in the tasks, the limits, and the open items.
+
 The Sprout environments (`SproutPickPlace3D`, `SproutShelf3D`, `SproutRearrange3D`, and
 the other `Sprout*3D` families) are the dynamic3d MuJoCo tasks with the Fauna Sprout
 humanoid. Their layouts are adapted to its size: objects start on low tables, and the
@@ -72,8 +75,8 @@ MuJoCo, `render()` uses the classic renderer.
 
 `Sprout3DBatchEnv` runs many copies of a Sprout task in parallel on the GPU with
 [MuJoCo Warp](https://github.com/google-deepmind/mujoco_warp). MuJoCo Warp needs a
-newer MuJoCo than the base install (MuJoCo 4, tested on 4.0.1), so it has its own
-requirements file:
+newer MuJoCo than the base install. We recommend MuJoCo 4 (tested on 4.0.1), with
+Python 3.11 or 3.12. It has its own requirements file:
 
 ```bash
 pip install --no-deps kindergarden

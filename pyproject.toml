@@ -126,6 +126,7 @@ module = [
     # Used by scripts/run_sprout_walk_policy.py only.
     "onnxruntime.*",
     "imageio.*",
+    "imageio_ffmpeg.*",
 ]
 ignore_missing_imports = true
 

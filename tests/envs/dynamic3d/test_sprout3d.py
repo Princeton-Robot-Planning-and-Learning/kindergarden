@@ -6,6 +6,10 @@ model files are not in ``kinder/envs/dynamic3d/models/fauna_sprout``.
 
 # pylint: disable=protected-access
 
+import importlib.util
+import json
+from pathlib import Path
+
 import mujoco
 import numpy as np
 import pytest
@@ -40,6 +44,25 @@ SPROUT_FAMILIES = {
     "SproutSweepSimple3D": 6,
     "SproutTossing3D": 2,
 }
+
+
+def test_sprout_task_files_agree_with_generator():
+    """The task files are the output of scripts/make_sprout_tasks.py.
+
+    This test does not need the Sprout model.
+    """
+    script = Path(__file__).parents[3] / "scripts" / "make_sprout_tasks.py"
+    spec = importlib.util.spec_from_file_location("make_sprout_tasks", script)
+    assert spec is not None and spec.loader is not None
+    generator = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(generator)
+    tasks = dict(generator.make_sprout_tasks())
+    assert len(tasks) == sum(SPROUT_FAMILIES.values())
+    for path, task in tasks.items():
+        assert json.loads(path.read_text(encoding="utf-8")) == task, path.name
+    # No other Sprout task file exists.
+    task_files = set(generator.TASKS_DIR.glob("Sprout*/*.json"))
+    assert task_files == set(tasks)
 
 
 def _sprout_env_ids() -> list[str]:

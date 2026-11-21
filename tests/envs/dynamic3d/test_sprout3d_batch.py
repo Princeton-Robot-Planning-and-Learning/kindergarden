@@ -333,3 +333,27 @@ def test_small_cubes_rest_in_bin():
             assert 0.02 < state.get(obj, "z") - bin_z < 0.07
             velocity = [state.get(obj, f"v{axis}") for axis in "xyz"]
             assert np.abs(velocity).max() < 0.01
+
+
+def test_rearrange_objects_start_upright():
+    """The objects of a rearrange task stand upright after the reset.
+
+    With a start height of up to 0.37 m above the island, the can fell on its side in
+    about 9% of the worlds.
+    """
+    task = (
+        "SproutRearrange3D/SproutRearrange3D-o2-"
+        "put_the_boxed_drink_and_the_can_next_to_the_bowl.json"
+    )
+    env = Sprout3DBatchEnv(str(TASKS_DIR / task), num_worlds=64, seed=0)
+    obs = env.reset().numpy()
+    space = env.observation_space
+    names = [
+        (obj.name, feature)
+        for obj in space.constant_objects
+        for feature in space.type_features[obj.type]
+    ]
+    for name in ("boxed_drink_0", "can_0", "bowl_0"):
+        # An upright object has a rotation about the vertical axis only.
+        tilt = [obs[:, names.index((name, axis))] for axis in ("qx", "qy")]
+        assert np.abs(tilt).max() < 0.05, name

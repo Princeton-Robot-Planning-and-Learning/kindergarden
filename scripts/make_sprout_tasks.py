@@ -191,8 +191,18 @@ def rearrange(task: Task) -> None:
     regions["robot_task_init_region"]["ranges"] = [[-0.12, -0.03, -0.08, 0.03]]
     for name, region in regions.items():
         if name.startswith("kitchen_island_shelf_2_"):
-            for ranges in region["ranges"]:
-                ranges[1], ranges[3] = -0.3, -0.16
+            # The start height is 6 to 8 cm above the island. With 4 numbers, an
+            # object starts up to 0.37 m above it (the height of the shelf level),
+            # and the can then falls on its side in about 9% of the resets.
+            region["ranges"] = [
+                [ranges[0], -0.3, 0.06, ranges[2], -0.16, 0.08]
+                for ranges in region["ranges"]
+            ]
+    # Some variants use the "in" predicate for these regions. "in" needs a region that
+    # is taller than the object, so they get "on", as the other variants.
+    for predicate in task["initial_state"]:
+        if predicate[2].startswith("kitchen_island_shelf_2_"):
+            predicate[0] = "on"
     set_camera(task, [-1.0, -0.6, 2.4], [0.3, 0.0, 0.7])
 
 

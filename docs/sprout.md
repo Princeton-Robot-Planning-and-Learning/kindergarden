@@ -53,7 +53,7 @@ Sprout environments have their own requirements file.
    Git ignores these files. Without `sprout.xml`, the Sprout environments are not
    registered, and the rest of Kinder works as before.
 4. For the textured lab scenes (`scene_bg=True`), Kinder downloads the scene assets
-   at the first use.
+   (about 2 GB) at the first use.
 5. Run the tests:
 
    ```bash
@@ -293,8 +293,8 @@ objects, goal regions, and buffer sizes for MuJoCo Warp).
   [Task attempts](#task-attempts-with-trained-policies).
 - **`SproutDynamo3D` has one variant.** The TidyBot family has three.
 - **Start states.** In tasks with piles of blocks or rods, an object can fall from the
-  pile after the settle time of the reset (1 s). In three `SproutRearrange3D-o1`
-  variants, the drink sometimes lies on its side at the start.
+  pile or slide slowly after the settle time of the reset (1 s). A settle time of 4 s
+  makes this less frequent, but it does not remove it.
 - **MuJoCo Warp is not identical to CPU MuJoCo.** A world of the batch environment and
   `Sprout3DEnv` drift apart when the robot moves. Objects at rest agree.
 - **Filament is tested on one machine** (Linux, NVIDIA GPU, no display). Use
@@ -308,8 +308,9 @@ objects, goal regions, and buffer sizes for MuJoCo Warp).
   or a public stand-in robot for the tests.
 - [ ] **Model distribution.** A private location for the model files, and a download
   script.
-- [ ] **Start state quality.** A longer settle time or a check at the reset, for the
-  tasks where objects still move after the reset.
+- [ ] **Start state quality.** A check at the reset that rejects a start state where
+  an object still moves, for the tasks with piles of blocks or rods. A longer settle
+  time is not sufficient.
 - [ ] **Attempts for the other 9 families**, in this order of effort:
   `SproutDynamo3D` (walk only), `SproutTossing3D`, `SproutRearrange3D`,
   `SproutBalanceBeam3D`, `SproutSortClutteredBlocks3D`, then the families that need

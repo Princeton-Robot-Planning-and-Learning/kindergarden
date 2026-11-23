@@ -946,6 +946,28 @@ class ObjectCentricRobotEnv(ObjectCentricDynamic3DRobotEnv[TidyBot3DConfig]):
 
         return self._get_current_state(), {}
 
+    def sample_initial_qpos(self) -> NDArray[np.float64]:
+        """Sample new initial poses for the objects and the robot in the current model.
+
+        The model stays the same, so the fixtures keep the poses of the last reset().
+        Returns the generalized positions (qpos) of the new initial state, before the
+        settle time. The batch environments use this to give each world its own start.
+        """
+        assert self._robot_env.sim is not None, "Need to call reset() first"
+        self._robot_env.sim.reset()
+        self._reset_robot_for_sample()
+        self._initialize_object_poses()
+        self._initialize_robot_pose()
+        self._robot_env.sim.forward()
+        self._current_state = self._get_object_centric_state()
+        return self._robot_env.sim.data.mj_data.qpos.copy()
+
+    def _reset_robot_for_sample(self) -> None:
+        """Put the robot into its start configuration, for sample_initial_qpos().
+
+        The simulation data is in its default state when this runs. Default: nothing.
+        """
+
     def _settle_scene(self) -> None:
         """Step the simulation in reset() until the objects rest on their supports."""
         for _ in range(10):
@@ -1419,6 +1441,11 @@ class ObjectCentricTidyBot3DEnv(ObjectCentricRobotEnv):
             **self._get_arm_and_gripper_vel_data(),
         }
         return state_dict
+
+    def _reset_robot_for_sample(self) -> None:
+        assert isinstance(self._robot_env, TidyBotRobotEnv)
+        # The same arm pose as in the reset of the robot.
+        self._robot_env._randomize_arm_pose()  # pylint: disable=protected-access
 
     def _set_robot_state(self, state: ObjectCentricState) -> None:
         """Set the robot state in the simulation."""
@@ -1926,22 +1953,9 @@ class ObjectCentricSprout3DEnv(ObjectCentricRobotEnv):
             return np.zeros(NUM_SPROUT_JOINTS, dtype=np.float32)
         return self._robot_env.model.default_joint_positions.astype(np.float32)
 
-    def sample_initial_qpos(self) -> NDArray[np.float64]:
-        """Sample new initial poses for the objects and the robot in the current model.
-
-        The model stays the same, so the fixtures keep the poses of the last reset().
-        Returns the generalized positions (qpos) of the new initial state. The parallel
-        Sprout environment uses this to give each world its own start.
-        """
-        assert self._robot_env.sim is not None, "Need to call reset() first"
+    def _reset_robot_for_sample(self) -> None:
         assert isinstance(self._robot_env, SproutRobotEnv)
-        self._robot_env.sim.reset()
         self._robot_env.reset_command_delay()
-        self._initialize_object_poses()
-        self._initialize_robot_pose()
-        self._robot_env.sim.forward()
-        self._current_state = self._get_object_centric_state()
-        return self._robot_env.sim.data.mj_data.qpos.copy()
 
     def _get_object_centric_robot_data(self) -> dict[Object, dict[str, float]]:
         assert self.robot_type == "sprout"

@@ -5,7 +5,7 @@ import os
 import sys
 import warnings
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 # Silence warnings from third-party packages
 warnings.filterwarnings("ignore", category=DeprecationWarning, module="kortex_api")
@@ -27,8 +27,14 @@ from kinder.wrappers import (  # pylint: disable=wrong-import-position,unused-im
     NoisyObservation,
 )
 
+if TYPE_CHECKING:
+    from kinder.envs.dynamic3d.batch_env import Dynamic3DBatchEnv
+
 # Registry of environment classes with their metadata
 ENV_CLASSES: dict[str, dict[str, Any]] = {}
+
+# The robot and the task file of each dynamic3d environment, for make_batch().
+_DYNAMIC3D_TASKS: dict[str, tuple[str, Path]] = {}
 
 
 def _check_deps(*modules: str) -> bool:
@@ -547,6 +553,7 @@ def _register_dynamic3d() -> None:
                         entry_point=entry_point,
                         kwargs=task_kwargs,
                     )
+                    _DYNAMIC3D_TASKS[variant_id] = (robot_key, task_config)
                     if folder_name not in env_class_variants:
                         env_class_variants[folder_name] = {}
                     if robot not in env_class_variants[folder_name]:
@@ -659,6 +666,57 @@ def make(*args, **kwargs) -> gymnasium.Env:
     if isinstance(env_id, str):
         _ensure_assets_for_env(env_id)
     return gymnasium.make(*args, **kwargs)
+
+
+def make_batch(env_id: str, num_worlds: int, **kwargs: Any) -> "Dynamic3DBatchEnv":
+    """Create the batch version of a registered dynamic3d environment.
+
+    ``make`` gives one world on the CPU, as a gymnasium environment. ``make_batch``
+    gives many worlds of the same task on the GPU, with MuJoCo Warp. It is for the
+    evaluation of a policy that computes the actions of all worlds at the same time.
+    See docs/batch_envs.md.
+
+    Args:
+        env_id: A dynamic3d environment with the TidyBot or the Sprout, for example
+            "kinder/Shelf3D-o1-v0".
+        num_worlds: Number of parallel worlds.
+        **kwargs: Passed to the batch environment class (for example ``seed``,
+            ``device``, and ``horizon``).
+
+    Example:
+        env = kinder.make_batch("kinder/Shelf3D-o1-v0", num_worlds=1024, seed=0)
+        obs = env.reset()
+        obs, reward, terminated, truncated, info = env.step(env.default_action())
+    """
+    if env_id not in _DYNAMIC3D_TASKS:
+        raise ValueError(
+            f"{env_id} has no batch version. Only the registered dynamic3d (MuJoCo) "
+            f"environments have one. Call register_all_environments() first."
+        )
+    _ensure_assets_for_env(env_id)
+    robot, task_config = _DYNAMIC3D_TASKS[env_id]
+    kwargs.setdefault("scene_render_camera", "task_view")
+
+    # The imports are here because the batch environments need mujoco_warp.
+    # pylint: disable=import-outside-toplevel
+    if not _check_deps("mujoco_warp"):
+        raise ImportError(
+            "kinder.make_batch needs MuJoCo Warp. Install "
+            "requirements/dynamic3d_warp.txt (see docs/batch_envs.md)."
+        )
+    if robot == "sprout":
+        from kinder.envs.dynamic3d.sprout_batch_env import Sprout3DBatchEnv
+
+        return Sprout3DBatchEnv(str(task_config), num_worlds, **kwargs)
+    if robot == "tidybot":
+        from kinder.envs.dynamic3d.envs import TidyBot3DConfig
+        from kinder.envs.dynamic3d.tidybot_batch_env import TidyBot3DBatchEnv
+
+        if task_config.parent.name == "Tossing3D":
+            # As in Tossing3DEnv: the action has velocity targets for the arm.
+            kwargs.setdefault("config", TidyBot3DConfig(use_arm_velocities=True))
+        return TidyBot3DBatchEnv(str(task_config), num_worlds, **kwargs)
+    raise NotImplementedError(f"There is no batch environment for the {robot} robot.")
 
 
 def get_all_env_ids() -> set[str]:

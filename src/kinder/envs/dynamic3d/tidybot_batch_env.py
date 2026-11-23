@@ -30,10 +30,14 @@ from kinder.envs.dynamic3d.robots.tidybot_robot_env import TidyBotRobotEnv
 
 # The physics time step of the batch environment, in seconds. ``TidyBot3DEnv`` uses
 # 0.0005 s, which is 200 physics steps for each control step (0.1 s). The batch
-# environment uses 0.002 s (50 physics steps), which is 4 times faster. In replays of
-# recorded demonstrations, 0.002 s gives the same success rate as 0.0005 s, and larger
-# steps give a lower rate (see docs/batch_envs.md). Pass ``physics_timestep=0.0005``
-# for the time step of ``TidyBot3DEnv``.
+# environment uses 0.002 s (50 physics steps), which is 4 times faster.
+#
+# 0.002 s is the largest step that keeps the contact stiffness of the gripper: the
+# gripper pads have a contact time constant of 0.004 s (solref in tidybot.xml), and
+# MuJoCo needs a time constant of at least two time steps. In replays of recorded
+# pick-and-place demonstrations, 0.002 s gives the same success rate as 0.0005 s,
+# and 0.004 s fails (see docs/batch_envs.md). Pass ``physics_timestep=0.0005`` for
+# the time step of ``TidyBot3DEnv``.
 TIDYBOT_BATCH_TIMESTEP = 0.002
 
 NUM_BASE_JOINTS = 3  # x, y, and yaw

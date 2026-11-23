@@ -1,5 +1,5 @@
-# Dependency set for the parallel (batch) dynamic3d environments on MuJoCo Warp,
-# for example kinder.envs.dynamic3d.sprout_batch_env.Sprout3DBatchEnv.
+# Dependency set for the parallel (batch) dynamic3d environments on MuJoCo Warp
+# (kinder.make_batch, Sprout3DBatchEnv, and TidyBot3DBatchEnv). See docs/batch_envs.md.
 #
 # MuJoCo Warp needs a newer MuJoCo than the `mujoco~=3.3.0` pin of the base install,
 # and a pip extra cannot loosen a base pin. Install the package without its

@@ -73,10 +73,14 @@ physically-based materials, soft shadows, and the declared colors of the scene. 
 `renderer="classic"` for the renderer of the other environments. With an older
 MuJoCo, `render()` uses the classic renderer.
 
-`Sprout3DBatchEnv` runs many copies of a Sprout task in parallel on the GPU with
-[MuJoCo Warp](https://github.com/google-deepmind/mujoco_warp). MuJoCo Warp needs a
-newer MuJoCo than the base install. We recommend MuJoCo 4 (tested on 4.0.1), with
-Python 3.11 or 3.12. It has its own requirements file:
+`kinder.make_batch` runs many copies of a dynamic3d task in parallel on the GPU with
+[MuJoCo Warp](https://github.com/google-deepmind/mujoco_warp), for the fast
+evaluation of a policy. It works for the tasks with the TidyBot and with the Sprout.
+See [docs/batch_envs.md](docs/batch_envs.md) for the full page: how to select between
+the CPU and the GPU, usage, speed, and limits.
+
+MuJoCo Warp needs a newer MuJoCo than the base install. We recommend MuJoCo 4 (tested
+on 4.0.1), with Python 3.11 or 3.12. It has its own requirements file:
 
 ```bash
 pip install --no-deps kindergarden
@@ -84,9 +88,11 @@ pip install -r requirements/dynamic3d_warp.txt
 ```
 
 ```python
-from kinder.envs.dynamic3d.sprout_batch_env import Sprout3DBatchEnv
+import kinder
 
-env = Sprout3DBatchEnv(task_config_path, num_worlds=1024, seed=0)
+kinder.register_all_environments()
+env = kinder.make("kinder/Shelf3D-o1-v0")  # CPU, one world, a Gymnasium environment
+env = kinder.make_batch("kinder/Shelf3D-o1-v0", num_worlds=1024, seed=0)  # GPU
 obs = env.reset()  # one row per world, on the GPU
 obs, reward, terminated, truncated, info = env.step(env.default_action())
 ```

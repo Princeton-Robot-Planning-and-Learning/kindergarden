@@ -99,7 +99,10 @@ env.close()
 
 `Sprout3DBatchEnv` is not a Gymnasium environment. It is a small class for batch
 evaluation: `reset` and `step` work on all worlds at the same time, and their arrays
-stay on the GPU.
+stay on the GPU. The TidyBot tasks have the same type of batch environment: see
+[batch_envs.md](batch_envs.md) for the page of all batch environments.
+`kinder.make_batch("kinder/SproutShelf3D-o4-v0", num_worlds=1024)` makes the same
+environment as the example below.
 
 ```python
 from pathlib import Path
